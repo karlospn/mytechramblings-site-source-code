@@ -27,5 +27,5 @@ jobs:
         with:
           personal_token: ${{ secrets.PERSONAL_TOKEN }}
           external_repository: karlospn/dotnetramblings
-          publish_branch: develop
+          publish_branch: master
           publish_dir: ./public
