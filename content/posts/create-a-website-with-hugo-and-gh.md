@@ -13,7 +13,7 @@ After doing a little bit of research about what options are available nowadays I
 # What's Hugo?
 
 Hugo is another static HTML and CSS website generator, it is written in Golang and it relies on markdown files.  
-I liked how few steps you need to perform to have a blog ready to go. 
+I like how few steps you need to do to have a site ready to rock. 
 
 You just need to:  
 
@@ -47,7 +47,7 @@ choco install hugo -confirm
 If you use another OS just check out the official docs about how to install it:   
 https://gohugo.io/getting-started/installing/
 
-After you install Hugo you can use it via command line, just type <i>hugo -help</i> to list all the options available.
+After you install Hugo you can use it via command line, just type _hugo -help_ to list all the options available.
 
 ## Create a new site
 
@@ -59,8 +59,9 @@ hugo new site dotnetramblings
 
 ## Add a theme
 
-Next step is to style our site. We choose an existing theme from the website: https://themes.gohugo.io/   
-I pick the **hello-friend** theme and add it as a submodule in the themes folder.
+Next step is to style our site.   
+We choose an existing theme from the website: https://themes.gohugo.io/    
+I pick the **hello-friend** theme and add it into the project as a submodule. You need to add it in the themes folder
 
 ```bash
 cd dotnetramblings
@@ -78,8 +79,7 @@ hugo server -D
 Go to GitHub and create a new repository.   
 In my case I'm going to create the repository **dotnetramblings**.   
 
-Once the repository is created you **HAVE** to modify the config.toml file found on the root directory of your site.    
-You need to update the baseUrl property to point to your github page. Like this: 
+Once the repository is created you **HAVE** to modify the config.toml file found on the root directory of your site. You need to update the baseUrl property to point to your github page. Like this: 
 
 ```toml
 baseurl = "https://myuser.github.io/dotnetramblings/"
@@ -93,12 +93,12 @@ After tweaking the theme we are going to build our site. We have to execute:
 hugo
 ```
 
-The output of the build will be in **./public/** directory. The public directory is what we are going to publish into GitHub.   
+The output of the build will be put in the **./public/** directory. The public directory is what we are going to publish into GitHub.   
 
 
 ## Push your code into GitHub
 
-It's time to upload the contents of the public directory into our GitHub repository.
+It's time to upload the contents of the **./public** directory into the GitHub repository.
 
 ```bash
 cd dotnetramblings/public
@@ -142,7 +142,7 @@ git commit -m "Add site files"
 git push --set-upstream origin master
 
 ```
-The last step is building a GitHub Action.   
+The last step is to build a GitHub Action.   
 The github action is going to grab the content from the **dotnetramblings_source** repository, build it using Hugo and push the output into the **dotnetramblings** repository.
 
 ```yaml
@@ -182,4 +182,4 @@ jobs:
 ```
 
 And we are good to go!  
-With less than 30 minutes we have a running website hosted in github pages and we are using a secondary github repository to automate the build and deploy of the source code.
+With less than 30 minutes we have a running static website hosted in GitHub Pages and also we are using a secondary github repository to automate the build and deploy of the source code.
