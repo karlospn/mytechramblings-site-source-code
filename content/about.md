@@ -6,4 +6,4 @@ draft: false
 
 
 Greetings!
-I'm a software engineer specialized in .NET and sometimes I like to write about some techie randoms things.  
+I'm a software engineer and sometimes I like to write about some techie randoms things.  
