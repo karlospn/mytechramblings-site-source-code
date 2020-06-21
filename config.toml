@@ -1,4 +1,4 @@
-baseurl = "https://karlospn.github.io/dotnetramblings/"
+baseurl = "https://www.mytechramblings.com/"
 languageCode = "en-us"
 theme = "hello-friend"
 paginate = 5
@@ -45,7 +45,7 @@ paginate = 5
 
     [languages.en.params.logo]
       logoText = "dotnet ramblings"
-      logoHomeLink = "https://karlospn.github.io/dotnetramblings/"
+      logoHomeLink = "https://www.mytechramblings.com/"
     # or
     #
     # path = "/img/your-example-logo.svg"
