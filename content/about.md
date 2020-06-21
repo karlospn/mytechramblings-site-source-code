@@ -5,4 +5,5 @@ draft: false
 ---
 
 
-Hello! I'm a software engineer specialized and sometimes I like to write about some randoms things.  
+Greetings!
+I'm a software engineer specialized in .NET and sometimes I like to write about some techie randoms things.  

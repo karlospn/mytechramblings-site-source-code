@@ -7,8 +7,8 @@ draft: false
 
 
 Do you want to start a blog and don't want to lose a lot of time setting everything up?  
-That was exactly my thought! I wanted to build a blog to write about my ramblings and I didn't want to spend long hours settings things up.  
-After doing a little bit of research about what options are available nowadays I found that Hugo could be a good fit.
+That was exactly my thought! I wanted to build a blog to write about my ramblings, but I didn't want to spend long hours settings things up.  
+After doing a little of research about what options are available nowadays I found that Hugo could be a good fit.
 
 # What's Hugo?
 
@@ -25,7 +25,7 @@ You just need to:
 
 And that's it! You are ready to go!
 
-There are a lot of options for hosting an static website but I chose GitHub Pages because it is free, easy to work with and I already have an existing account. 
+There are a lot of options for hosting a static website, but I chose GitHub Pages because it is free, easy to work with and I already have an existing account. 
 
 
 # Steps
@@ -47,7 +47,7 @@ choco install hugo -confirm
 If you use another OS just check out the official docs about how to install it:   
 https://gohugo.io/getting-started/installing/
 
-After you install Hugo you can use it via command line, just type _hugo -help_ to list all the options available.
+After you install Hugo, you can use it via the command line, just type _hugo -help_ to list all the options available.
 
 ## Create a new site
 
@@ -68,7 +68,7 @@ cd dotnetramblings
 git submodule add https://github.com/panr/hugo-theme-hello-friend.git themes/hello-friend
 ```
 
-If you want you can see how your website currently looks by typing:
+You can see how your website currently looks by typing:
 
 ```bash
 hugo server -D
@@ -87,7 +87,7 @@ baseurl = "https://myuser.github.io/dotnetramblings/"
 
 ## Build your site
 
-After tweaking the theme we are going to build our site. We have to execute: 
+After tweaking the theme, we are going to build our site. We have to execute: 
 
 ```bash
 hugo
