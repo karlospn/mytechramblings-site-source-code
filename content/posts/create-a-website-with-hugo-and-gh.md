@@ -107,7 +107,7 @@ git init
 git remote add origin https://github.com/myuser/dotnetramblings.git
 git add .
 git commit -m "Initial commit"
-git push
+git push --set-upstream origin master
 ```
 
 After pushing the code into gitHub you go into the repository settings and change the setting Settings > Options > GitHub pages > Source  to "master branch"
@@ -121,15 +121,20 @@ And that's it! You have a complete running website in less than 20 minutes.
 
 ## Finally automate everything
 
-Be aware that right now your source code is only on your local machine.  
-So I'm going to create another github repository and put the source code in there and then i'm going to build a github action to publish the site automatically.
+Be aware that right now your source code is only on your local machine, so the next steps are going to be:    
 
-I create the repository dotnetramblings_source, after that I create a .gitignore file in my dotnetramblings site and push everything there
+- Create another github repository and put the source code in there 
+- Create a github action to publish the site into the dotnetrambling repository
+
+First of all I create the repository dotnetramblings_source, after that I create a .gitignore file in my dotnetramblings site and push everything there.
 
 ```bash
 cd dotnetramblings
 echo "public/" >> .gitignore
 git init
 git remote add origin https://github.com/myuser/dotnetramblings_source.git
+git add .
+git commit -m "Add site files"
+git push --set-upstream origin master
 
 ```
