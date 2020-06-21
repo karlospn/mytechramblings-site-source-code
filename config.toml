@@ -27,8 +27,8 @@ paginate = 5
 
 [languages]
   [languages.en]
-    title = "dotnet ramblings"
-    subtitle = "A blog for writing my tech ramblings"
+    title = "my tech ramblings"
+    subtitle = "A blog for writing about my techie ramblings"
     keywords = ""
     copyright = ""
     menuMore = "Show more"
