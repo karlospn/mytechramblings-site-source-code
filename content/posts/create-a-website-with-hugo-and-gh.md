@@ -12,14 +12,13 @@ After doing a little of research about what options are available nowadays I fou
 
 # What's Hugo?
 
-Hugo is another static HTML and CSS website generator, it is written in Golang and it relies on markdown files.  
-I like how few steps you need to do to have a site ready to rock. 
+Hugo is a static HTML and CSS website generator, it is written in Golang and it relies on markdown files and I like how few steps you need to do to have a site ready to rock. 
 
 You just need to:  
 
-+ Create a new static site
++ Create a new static site using the Hugo CLI
 + Choose a theme from his website: https://themes.gohugo.io/
-+ Do some tinkering on how the theme is going to work in your website 
++ Do some minor tinkering on how the theme is going to work in your website 
 + Choose a hosting provider
 + Publish the content
 
@@ -61,7 +60,7 @@ hugo new site dotnetramblings
 
 Next step is to style our site.   
 We choose an existing theme from the website: https://themes.gohugo.io/    
-I pick the **hello-friend** theme and add it into the project as a submodule. You need to add it in the themes folder
+I pick the **hello-friend** theme and add it into the project as a submodule. You have to place the submodule in the themes folder.
 
 ```bash
 cd dotnetramblings
@@ -79,7 +78,7 @@ hugo server -D
 Go to GitHub and create a new repository.   
 In my case I'm going to create the repository **dotnetramblings**.   
 
-Once the repository is created you **HAVE** to modify the config.toml file found on the root directory of your site. You need to update the baseUrl property to point to your github page. Like this: 
+Once the repository is created you **HAVE** to modify the config.toml file found on the root directory of your site. You need to modify the baseUrl property to point to your GitHub Page. 
 
 ```toml
 baseurl = "https://myuser.github.io/dotnetramblings/"
@@ -87,7 +86,8 @@ baseurl = "https://myuser.github.io/dotnetramblings/"
 
 ## Build your site
 
-After tweaking the theme, we are going to build our site. We have to execute: 
+If you want you can tweak the theme options until you're satisfied with it, after that the next step is to build the site.  
+We execute: 
 
 ```bash
 hugo
@@ -125,12 +125,10 @@ So our final steps are going to be:
 
 - Create a second github repository: **dotnetramblings_source**
   -  The second repository is going to host the source code so every time we want to add a new post we will push the changes into that repository.     
-- Create a github action that grabs the content from **dotnetramblings_source**, builds it and publishes the output into the **dotnetramblings** repository.
+- After we push the changes a github action will grab the content from **dotnetramblings_source**, build it and publish the output into the **dotnetramblings** repository.
 
-
-First of all I'm creating a .gitignore file because I don't want to push the **./public** folder into GitHub. Remember that the **public** folder contains the output of the Hugo build.
-
-After I create the .gitignore file I push everything into the dotnetrambligs_source.
+First of all I'm creating a .gitignore file because I don't want to push the **./public** folder into GitHub. Remember that the **public** folder contains the output of the Hugo build.   
+After that I push everything into the **dotnetrambligs_source** repository.
 
 ```bash
 cd dotnetramblings
@@ -143,7 +141,7 @@ git push --set-upstream origin master
 
 ```
 The last step is to build a GitHub Action.   
-The github action is going to grab the content from the **dotnetramblings_source** repository, build it using Hugo and push the output into the **dotnetramblings** repository.
+The GitHub Action is going to grab the content from the **dotnetramblings_source** repository, build it using Hugo and push the output into the **dotnetramblings** repository.
 
 ```yaml
 
@@ -181,5 +179,6 @@ jobs:
 
 ```
 
-And we are good to go!  
-With less than 30 minutes we have a running static website hosted in GitHub Pages and also we are using a secondary github repository to automate the build and deploy of the source code.
+And we are good to go! With less than 30 minutes we have achieved:  
+- A running static website hosted with GitHub Pages on our main repository.
+- A secondary repository where we put all the site source code and a pipeline to compile and deploy the site source code into the main repository in an automatic way.
