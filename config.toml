@@ -58,3 +58,8 @@ googleAnalytics = "UA-170300931-1"
         identifier = "about"
         name = "About"
         url = "/about"
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
