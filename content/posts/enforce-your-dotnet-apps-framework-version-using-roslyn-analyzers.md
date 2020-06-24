@@ -1,7 +1,7 @@
 ---
 title: "Enforce the use of a specific .NET Core version using Roslyn"
 date: 2020-06-24T15:25:42+02:00
-tags: ["dotnet", ".NET", "roslyn", "analyzers", "c#"]
+tags: ["dotnet", ".NET", "roslyn", "analyzers", "csharp", ".NETCore"]
 draft: true
 ---
 
@@ -117,24 +117,34 @@ namespace ATC.Analyzers.Rules
 
 Let's describe what the analyzer does:
 
-- Obtains the attribute "TargetFrameworkAttribute" from the Compilation object.
+1 - Obtains the attribute "TargetFrameworkAttribute" from the Compilation object.
    
 > The TargetFramework attribute identifies the version of the .NET Framework that a particular assembly was compiled against.  
 The TargetFrameworkAttribute attribute can specify a FrameworkDisplayName property to provide a more descriptive .NET Framework version string that is suitable for displaying to clients of the assembly.   
 Source: https://msdn.microsoft.com/en-us/library/system.runtime.versioning.targetframeworkattribute(v=vs.110).aspx
   
-The attribute has the following format ".NETCoreApp,Version=vX.Y", where X.Y is the framework application version.  
-For example in a .NET Core 3.1 console application the value is : 
-_System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v3.1", FrameworkDisplayName = "")_
+The attribute has the following format ".NETCoreApp,Version=vX.Y", where X.Y is the framework version.  
+For example, on a .NET Core 3.1 console application the value will be: 
+_**System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v3.1", FrameworkDisplayName = "")**_
   
-- For every version we want to enforce we build the pattern .NETCoreApp,Version=vX.Y. In our case we are build 2 patterns: .NETCoreApp,Version=v2.1 and .NETCoreApp,Version=v3.1 patterns.
-- Check if the attribute value matches any of our patterns and if it doesn't, raise an error.
+2 - For every version we want to enforce we build the pattern .NETCoreApp,Version=vX.Y. In our case we are build 2 patterns: .NETCoreApp,Version=v2.1 and .NETCoreApp,Version=v3.1 patterns.  
+
+3 - Check if the attribute value matches any of our patterns and if it doesn't, raise an error.
   
 Let's test the analyzer. When we install the analyzer in a .NET Core 2.2 application we get the following error:
 
-![Framework error](/img/roslyn-framework-error.png)
+![Framework .Net Core 2.2 error](/img/roslyn-framework-error-netcore22.png)
 
-In our Roslyn Analyzer we are looking for the **TargetFrameworkAttribute** attribute and only raising an error if the value **.NETCoreApp,Version=vX.Y** does not match, but we could apply the same principle with a .NET Framework.  
-Instead of looking for the value **.NETCoreApp,Version=vX.Y** we could search for the value **.NETFramework,Version=vX.Y**
+When we install the analyzer in a .NET Core 2.0 app:
+
+![Framework .Net Core 2.0 error](/img/roslyn-framework-error-netcore20.PNG)
+
+When we install the analyzer in a .NET4.6.2 app:
+
+![Framework .Net Framewrok 4.6.2 error](/img/roslyn-framework-error-net462.PNG)
+
+
+In our Roslyn Analyzer we are looking for the **TargetFrameworkAttribute** attribute and only raising an error if the  **.NETCoreApp,Version=vX.Y** value does not match, but we could apply the same principle if we wanted to enforce a specific .NET Framework or .NET Standard version.  
+Instead of looking for the value **.NETCoreApp,Version=vX.Y** we could search for the value **.NETFramework,Version=vX.Y** or **.NETStandard,Version=vX.Y**
 
 
