@@ -127,9 +127,12 @@ The TargetFrameworkAttribute attribute can specify a FrameworkDisplayName proper
 Source: [MSDN](https://msdn.microsoft.com/en-us/library/system.runtime.versioning.targetframeworkattribute(v=vs.110).aspx)
   
 The attribute has the following format ".NETCoreApp,Version=vX.Y", where X.Y is the framework version.  
-For example, on a .NET Core 3.1 console application the value will be: 
-_**System.Runtime.Versioning.TargetFrameworkAttribute (".NETCoreApp,Version=v3.1", FrameworkDisplayName = "")**_
-  
+For example, on a .NET Core 3.1 console application the value will be:
+
+```csharp
+System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v3.1", FrameworkDisplayName = "")
+```
+
 2 - For every version we are allowing to use we build the pattern .NETCoreApp,Version=vX.Y. In our case we are building 2 patterns: .NETCoreApp,Version=v2.1 and .NETCoreApp,Version=v3.1 patterns.  
 
 3 - Check if the attribute value matches any of our patterns and if it doesn't, raise an error.
