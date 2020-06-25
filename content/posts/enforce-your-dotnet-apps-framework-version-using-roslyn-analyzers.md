@@ -128,7 +128,7 @@ Source: https://msdn.microsoft.com/en-us/library/system.runtime.versioning.targe
   
 The attribute has the following format ".NETCoreApp,Version=vX.Y", where X.Y is the framework version.  
 For example, on a .NET Core 3.1 console application the value will be: 
-_**System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v3.1", FrameworkDisplayName = "")**_
+_**System.Runtime.Versioning.TargetFrameworkAttribute (".NETCoreApp,Version=v3.1", FrameworkDisplayName = "")**_
   
 2 - For every version we are allowing to use we build the pattern .NETCoreApp,Version=vX.Y. In our case we are building 2 patterns: .NETCoreApp,Version=v2.1 and .NETCoreApp,Version=v3.1 patterns.  
 
@@ -144,7 +144,7 @@ When we install the analyzer in a .NET Core 2.0 app:
 
 When we install the analyzer in a .NET4.6.2 app:
 
-![Framework .Net Framewrok 4.6.2 error](/img/roslyn-framework-error-net462.png)
+![Framework .Net Framewrok 4.6.2 error](/img/roslyn-framework-error-net46.png)
 
 
 In our Roslyn Analyzer we are looking for the **TargetFrameworkAttribute** attribute and only raising an error if the  **.NETCoreApp,Version=vX.Y** value does not match, but we could apply the same principle if we wanted to enforce that only a specific .NET Framework version or .NET Standard version is used.  
