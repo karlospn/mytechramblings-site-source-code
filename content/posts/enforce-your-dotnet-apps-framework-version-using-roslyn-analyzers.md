@@ -7,9 +7,9 @@ draft: true
 
 In these past few years Microsoft has kept a steady flow of new .NET Core versions: .NETCore 1.0, 1.1, 2.0, 2.1, 2.2 and so on and so forth.   
 
-If you have hundreds of applications in your company it's almost impossible to keep them updated to the most recent version of the framework, so most probably you're going to end  having multiple versions running at the same time.   
+If you have hundreds of applications in your company it's almost impossible to keep them updated to the most recent version of the framework, so most probably you're going to end up having multiple versions running at the same time.   
 
-Another factor to consider if that only a few of those versions are long-time support (LTS). But what does it means exactly?  It means that only a few versions are supported for three years after the initial release.
+When trying to choose which versions are you going to support in your company a factor to consider is that only a few of those versions are long-time support (LTS). But what does it means exactly?  It means that only a few versions are supported for three years after the initial release.
 
 > If you want to know more about the .NET Core support policy click here: [.NET Core official support](https://dotnet.microsoft.com/platform/support/policy/dotnet-core)
 
@@ -26,12 +26,15 @@ Here is a table showing which .NET Core versions are LTS and when the support en
 | .NET Core 3.1     | 3.1.5(LTS) | December 3, 2022 |
 
 
-So if you are working in a company and you have to create a new .NET Core application and your company is working only with NET Core 2 you should ask yourself, what version do I use? .NET Core 2.1 is an LTS release, should I use that version? Or should a newer version like .NET Core 2.2? I'm going to migrate my app to .NET Core 3 in the near future?
+So imagine you are working in a company and you have to create a new .NET Core application and your company is mainly working with NET Core 2, maybe you should ask yourself, what version do I use? .NET Core 2.1 is a LTS release, should I use that version or should I use .NET Core 2.2 because it's the newest one?  
 
-The same question can be arised when moving to .NET Core 3, should I use .NET Core 3.1 or .Net Core 3.0? That one is easier to respond because in that case the LTS version is the newer one and every developer loves to use the latest tech possible.
+The same question can be arised when moving to .NET Core 3, should I migrate my old .NET Core 1.0 to .NET Core 3.0 or .Net Core 3.1? That one is easier to respond because in that case the LTS version is also the newer one and every developer loves to use the latest tech possible.
 
-To avoid people having these kind of questions we could ask ourselves, how can I reassure that everyone on my team is going to use the correct framework version when they have the need to create a new application?  
-An easy response to that qüestion could be: Using our own **Roslyn Analyzer**. 
+Another possible scenario is that maybe my company only uses .NET Core 2 and I should prevent that anybody uses .NET Core 3.x because I'm not sure if it's going to work as expected on production. Probably I should not allow anyone to create applications targeting .NET Core 1.0 and .NET Core 1.1 because the support ended a year ago.
+
+At the end of the day we could ask ourselves, how can I enforce that everyone on my team is using the correct framework version when they need to create a new application?  
+An easy solution to avoid having these kind of questions and to avoid people using a  framework version that could potentially be problematic when it ran on production 
+is to create our own **Roslyn Analyzer**.  
 
 >  For those unaware:
 >- Roslyn is the compiler platform for .NET. It consists of the compiler itself and a powerful set of APIs to interact with the compiler.  
@@ -144,7 +147,7 @@ When we install the analyzer in a .NET4.6.2 app:
 ![Framework .Net Framewrok 4.6.2 error](/img/roslyn-framework-error-net462.PNG)
 
 
-In our Roslyn Analyzer we are looking for the **TargetFrameworkAttribute** attribute and only raising an error if the  **.NETCoreApp,Version=vX.Y** value does not match, but we could apply the same principle if we wanted to enforce a specific .NET Framework or .NET Standard version.  
-Instead of looking for the value **.NETCoreApp,Version=vX.Y** we could search for the value **.NETFramework,Version=vX.Y** or **.NETStandard,Version=vX.Y**
+In our Roslyn Analyzer we are looking for the **TargetFrameworkAttribute** attribute and only raising an error if the  **.NETCoreApp,Version=vX.Y** value does not match, but we could apply the same principle if we wanted to enforce that only a specific .NET Framework version or .NET Standard version is used.  
+In those cases instead of looking for the value **.NETCoreApp,Version=vX.Y** we could search for the value **.NETFramework,Version=vX.Y** or **.NETStandard,Version=vX.Y**
 
 
