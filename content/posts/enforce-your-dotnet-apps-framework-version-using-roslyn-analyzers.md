@@ -124,7 +124,7 @@ Let's describe what the analyzer does:
    
 > The TargetFramework attribute identifies the version of the .NET Framework that a particular assembly was compiled against.  
 The TargetFrameworkAttribute attribute can specify a FrameworkDisplayName property to provide a more descriptive .NET Framework version string that is suitable for displaying to clients of the assembly.   
-Source: https://msdn.microsoft.com/en-us/library/system.runtime.versioning.targetframeworkattribute(v=vs.110).aspx
+Source: [MSDN](https://msdn.microsoft.com/en-us/library/system.runtime.versioning.targetframeworkattribute(v=vs.110).aspx)
   
 The attribute has the following format ".NETCoreApp,Version=vX.Y", where X.Y is the framework version.  
 For example, on a .NET Core 3.1 console application the value will be: 
