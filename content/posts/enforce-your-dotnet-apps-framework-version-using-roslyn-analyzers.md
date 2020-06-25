@@ -2,7 +2,7 @@
 title: "Enforce the use of a specific .NET Core version using Roslyn"
 date: 2020-06-24T15:25:42+02:00
 tags: ["dotnet", ".NET", "roslyn", "analyzers", "csharp", ".NETCore"]
-draft: true
+draft: false
 ---
 
 In these past few years Microsoft has kept a steady flow of new .NET Core versions: .NETCore 1.0, 1.1, 2.0, 2.1, 2.2 and so on and so forth.   
@@ -28,9 +28,9 @@ Here is a table showing which .NET Core versions are LTS and when the support en
 
 So imagine you are working in a company and you have to create a new .NET Core application and your company is mainly working with NET Core 2, maybe you should ask yourself, what version do I use? .NET Core 2.1 is a LTS release, should I use that version or should I use .NET Core 2.2 because it's the newest one?  
 
-The same question can be arised when moving to .NET Core 3, should I migrate my old .NET Core 1.0 to .NET Core 3.0 or .Net Core 3.1? That one is easier to respond because in that case the LTS version is also the newer one and every developer loves to use the latest tech possible.
+The same question can be arised when moving to .NET Core 3, should I migrate my old .NET Core 1.0 to .NET Core 3.0 or .NET Core 3.1? That one is easier to respond because in that case the LTS version is also the newer one and every developer loves to use the latest tech possible.
 
-Another possible scenario is that maybe my company only uses .NET Core 2 and I should prevent that anybody uses .NET Core 3.x because I'm not sure if it's going to work as expected on production. Probably I should not allow anyone to create applications targeting .NET Core 1.0 and .NET Core 1.1 because the support ended a year ago.
+Another possible scenario is that maybe my company only uses .NET Core 2 and I should prevent that anybody uses .NET Core 3.x because I'm not sure if it's going to work as expected on production. And also I should not allow anyone to create applications targeting .NET Core 1.0 and .NET Core 1.1 because the support ended a year ago.
 
 At the end of the day we could ask ourselves, how can I enforce that everyone on my team is using the correct framework version when they need to create a new application?  
 An easy solution to avoid having these kind of questions and to avoid people using a  framework version that could potentially be problematic when it ran on production 
@@ -42,7 +42,7 @@ is to create our own **Roslyn Analyzer**.
 > - Roslyn code analyzers can be installed per-project via a NuGet package.  
 
 One thing I always advise people is that if they have some time to spare they should try to build their own roslyn analyzers containing their own code rules, pack them in a nuget and enforce that every application they create have the nuget installed.  
-That's an easy way to reassure that every application enforces your company coding rules.
+That's an easy way to reassure that every application enforces your own company coding rules.
 
 Well, anyways, I could keep rambling about Roslyn for a long time, but let's focus on building a roslyn analyzer that validates the framework version of our application.
 
@@ -130,7 +130,7 @@ The attribute has the following format ".NETCoreApp,Version=vX.Y", where X.Y is 
 For example, on a .NET Core 3.1 console application the value will be: 
 _**System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v3.1", FrameworkDisplayName = "")**_
   
-2 - For every version we want to enforce we build the pattern .NETCoreApp,Version=vX.Y. In our case we are build 2 patterns: .NETCoreApp,Version=v2.1 and .NETCoreApp,Version=v3.1 patterns.  
+2 - For every version we are allowing to use we build the pattern .NETCoreApp,Version=vX.Y. In our case we are building 2 patterns: .NETCoreApp,Version=v2.1 and .NETCoreApp,Version=v3.1 patterns.  
 
 3 - Check if the attribute value matches any of our patterns and if it doesn't, raise an error.
   
