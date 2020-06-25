@@ -5,11 +5,11 @@ tags: ["dotnet", ".NET", "roslyn", "analyzers", "csharp", ".NETCore"]
 draft: false
 ---
 
-In these past few years Microsoft has kept a steady flow of new .NET Core versions: .NETCore 1.0, 1.1, 2.0, 2.1, 2.2 and so on and so forth.   
+In these past few years Microsoft has kept a steady flow of new .NET Core versions: .NET Core 1.0, 1.1, 2.0, 2.1, 2.2 and so on and so forth.   
 
-If you have hundreds of applications in your company it's almost impossible to keep them updated to the most recent version of the framework, so most probably you're going to end up having multiple versions running at the same time.   
+If you have hundreds of applications in your company, it's almost impossible to keep them updated to the most recent version of the framework, so most probably you're going to end up having multiple versions running at the same time.   
 
-When trying to choose which versions are you going to support in your company a factor to consider is that only a few of those versions are long-time support (LTS). But what does it means exactly?  It means that only a few versions are supported for three years after the initial release.
+When trying to choose which versions are you going to support in your company a factor to consider is that only a few of those versions are long-time support (LTS). But what does it mean exactly?  It means that only a few versions are supported for three years after the initial release.
 
 > If you want to know more about the .NET Core support policy click here: [.NET Core official support](https://dotnet.microsoft.com/platform/support/policy/dotnet-core)
 
@@ -26,14 +26,14 @@ Here is a table showing which .NET Core versions are LTS and when the support en
 | .NET Core 3.1     | 3.1.5(LTS) | December 3, 2022 |
 
 
-So imagine you are working in a company and you have to create a new .NET Core application and your company is mainly working with NET Core 2, maybe you should ask yourself, what version do I use? .NET Core 2.1 is a LTS release, should I use that version or should I use .NET Core 2.2 because it's the newest one?  
+So imagine you are working in a company, and you have to create a new .NET Core application and your company is mainly working with NET Core 2, maybe you should ask yourself, what version do I use? .NET Core 2.1 is a LTS release, should I use that version or should I use .NET Core 2.2 because it's the newest one?  
 
-The same question can be arised when moving to .NET Core 3, should I migrate my old .NET Core 1.0 to .NET Core 3.0 or .NET Core 3.1? That one is easier to respond because in that case the LTS version is also the newer one and every developer loves to use the latest tech possible.
+The same question can be arisen when moving to .NET Core 3, should I migrate my old .NET Core 1.0 to .NET Core 3.0 or .NET Core 3.1? That one is easier to respond because in that case the LTS version is also the newer one and every developer loves to use the latest tech possible.
 
 Another possible scenario is that maybe my company only uses .NET Core 2 and I should prevent that anybody uses .NET Core 3.x because I'm not sure if it's going to work as expected on production. And also I should not allow anyone to create applications targeting .NET Core 1.0 and .NET Core 1.1 because the support ended a year ago.
 
 At the end of the day we could ask ourselves, how can I enforce that everyone on my team is using the correct framework version when they need to create a new application?  
-An easy solution to avoid having these kind of questions and to avoid people using a  framework version that could potentially be problematic when it ran on production 
+An easy solution to avoid having these kinds of questions and to avoid people using a  framework version that could potentially be problematic when it ran on production 
 is to create our own **Roslyn Analyzer**.  
 
 >  For those unaware:
@@ -41,10 +41,10 @@ is to create our own **Roslyn Analyzer**.
 > - Roslyn code analyzers can inspect your C# code an enforce your own style, quality and maintainability rules. 
 > - Roslyn code analyzers can be installed per-project via a NuGet package.  
 
-One thing I always advise people is that if they have some time to spare they should try to build their own roslyn analyzers containing their own code rules, pack them in a nuget and enforce that every application they create have the nuget installed.  
+One thing I always advise people is that if they have some time to spare they should try to build their own Roslyn analyzers containing their own code rules, pack them in a nuget and enforce that every application they create have the nuget installed.  
 That's an easy way to reassure that every application enforces your own company coding rules.
 
-Well, anyways, I could keep rambling about Roslyn for a long time, but let's focus on building a roslyn analyzer that validates the framework version of our application.
+Well, anyways, I could keep rambling about Roslyn for a long time, but let's focus on building a Roslyn analyzer that validates the framework version of our application.
 
 The C# code would be something like this:
   
