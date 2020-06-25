@@ -140,11 +140,11 @@ Let's test the analyzer. When we install the analyzer in a .NET Core 2.2 applica
 
 When we install the analyzer in a .NET Core 2.0 app:
 
-![Framework .Net Core 2.0 error](/img/roslyn-framework-error-netcore20.PNG)
+![Framework .Net Core 2.0 error](/img/roslyn-framework-error-netcore20.png)
 
 When we install the analyzer in a .NET4.6.2 app:
 
-![Framework .Net Framewrok 4.6.2 error](/img/roslyn-framework-error-net462.PNG)
+![Framework .Net Framewrok 4.6.2 error](/img/roslyn-framework-error-net462.png)
 
 
 In our Roslyn Analyzer we are looking for the **TargetFrameworkAttribute** attribute and only raising an error if the  **.NETCoreApp,Version=vX.Y** value does not match, but we could apply the same principle if we wanted to enforce that only a specific .NET Framework version or .NET Standard version is used.  
