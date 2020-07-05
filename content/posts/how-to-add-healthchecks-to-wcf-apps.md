@@ -10,11 +10,11 @@ Nowadays no one on his right mind is going to create a WCF from scratch. It real
 If you are not old enough, probably you're asking yourself: _"What the hell is WCF?"_.   
 WCF stands for "Windows Communication Foundation", and if you want to know more about read the official Microsoft docs: [here](https://docs.microsoft.com/es-es/dotnet/framework/wcf/whats-wcf)
 
-If you wanted to build an application from scratch right now, you are going to build an app using .NET Core, it probably uses REST over HTTP or even GRPC and it also pretty likely that you are going to host it on a serverless function or in a container platform.    
+If you want to build a .NET application from scratch right now, most likely you are going to build an app using .NET Core, probably is going to use REST over HTTP or even GRPC and it is also pretty likely that you are going to host it in a container platform, a serverless function or a Paas platform like Azure App Services.   
 But let's be honest if you're working for an old enough company and a company that uses .NET as its main stack, it's pretty likely that you are going to stumble with a bunch of legacy applications and I'm pretty sure you are going to find some WCF applications among them.  
 These past few years I worked as a freelance quite few times and I know as a fact that a lot of .NET shops are still running WCFs nowadays.
 
-What I wanted to talk in these post is how easy is to add a healthcheck endpoint in a WCF application, and how you can use it in case you want to do move the application into the Cloud in the near future.
+What I wanted to talk in these post is how easy is to add a healthcheck endpoint in a WCF application, and how you can use it in case you want to move the application into the Cloud in the near future.
 
 > With the expansion of cloud computing and also with the huge adoption of Kubernetes almost everyone knows what a healthcheck endpoint is and why is good to have one in your application, so I'm gonna skip that part.
 
