@@ -1,8 +1,8 @@
 ---
 title: "Why and how you should add a healthcheck endpoint to your Wcf legacy applications"
-date: 2020-06-29T21:30:06+02:00
+date: 2020-07-04T17:30:06+02:00
 tags: ["dotnet", ".NET", "wcf", "legacy", "csharp", "azure", "appservices"]
-draft: true
+draft: false
 ---
 
 Nowadays no one on his right mind is going to create a WCF from scratch. It really makes no sense to do it. It's a deprecated technology, it does not work with .NET Core, only works on Windows OS and personally I found the configuration confusing as hell, every time I need to modify an existing one I have to spend a good amount of time trying to figure out what everything means.
@@ -11,7 +11,7 @@ If you are not old enough, probably you're asking yourself: _"What the hell is W
 WCF stands for "Windows Communication Foundation", and if you want to know more about read the official Microsoft docs: [here](https://docs.microsoft.com/es-es/dotnet/framework/wcf/whats-wcf)
 
 If you want to build a .NET application from scratch right now, most likely you are going to build an app using .NET Core, probably is going to use REST over HTTP or even GRPC and it is also pretty likely that you are going to host it in a container platform, a serverless function or a Paas platform like Azure App Services.   
-But let's be honest if you're working for an old enough company and a company that uses .NET as its main stack, it's pretty likely that you are going to stumble with a bunch of legacy applications and I'm pretty sure you are going to find some WCF applications among them.  
+But let's be honest if you're working for an old enough company and a company that uses .NET as its main stack, it's pretty likely that you are going to stumble with a bunch of legacy applications in some lost server and I'm pretty sure you are going to find some WCF applications among them.  
 These past few years I worked as a freelance quite few times and I know as a fact that a lot of .NET shops are still running WCFs nowadays.
 
 What I wanted to talk in these post is how easy is to add a healthcheck endpoint in a WCF application, and how you can use it in case you want to move the application into the Cloud in the near future.
