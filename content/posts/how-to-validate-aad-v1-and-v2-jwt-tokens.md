@@ -1,6 +1,7 @@
 ---
 title: "How to Validate AAD V1 and V2 Jwt Tokens"
 date: 2020-07-13T21:34:20+02:00
+tags: ["csharp", "azure", "directory", "aad", "jwt"]
 draft: true
 ---
 
