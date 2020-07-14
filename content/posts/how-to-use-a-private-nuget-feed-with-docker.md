@@ -2,29 +2,29 @@
 title: "How to Restore a Nuget from an Azure DevOps Private Feed within Docker"
 date: 2020-07-14T18:12:41+02:00
 tags: ["csharp", "docker", "nuget", "containers", "windows"]
-draft: true
+draft: false
 ---
 
-Let's go for a quick one this time. 
+Let's go for a quick post this time. 
 
-If you try to create a Docker image from an app that uses a nuget hosted in a private Azure DevOps feed I'm pretty confident that some of these errors are going to sound pretty familiar to you:  
+You are trying to create a Docker image from an app, that application is using some custom Nugets.  
+Those Nugets are hosted in your private Azure DevOps Feed.   
+I'm pretty confident that some of these errors are going to sound pretty familiar to you when you try to build the image:  
 
 ```bash
 /src/MyConsoleApplication.csproj : error NU1101: Unable to find package MyOwn.EmailService. No packages exist with this id in source(s): nuget.org
   Failed to restore /src/MyConsoleApplication.csproj (in 2.37 sec).
-
 ```
 
 ```bash
 C:\Program Files\dotnet\sdk\3.1.301\NuGet.targets(128,5): error : Unable to load the service index for source https://pkgs.dev.azure.com/cpn/_packaging/my-very-private-feed/nuget/v3/index.json. [C:\src\MyConsoleApplication.csproj]
-
 ```
 
 ```bash
 C:\Program Files\dotnet\sdk\3.1.301\NuGet.targets(128,5): error :   Response status code does not indicate success: 401 (Unauthorized). [C:\src\MyConsoleApplication.csproj]
 ```
 
-That's a pretty common pain point when trying to create a Docker image from an app that uses a private Azure DevOps Feed.
+That's a pretty common pain point when trying to create a Docker image that uses a private Azure DevOps Feed.
 
 To solve this problem there are two possible solutions: 
 - Place a NuGet.Config file inside your application and use it when creating the image.
@@ -49,10 +49,9 @@ Let's show somes examples, but first of all let's set everything up.
 
 ```
 
-2- I pushed a Nuget named **"MyOwn.EmailService"** into my private Azure DevOps Feed
+2- I pushed a custom Nuget named **"MyOwn.EmailService"** into my private Azure DevOps Feed.
 
 3- I created a .NETCore 3.1 console app that is using the nuget **"MyOwn.EmailService"**
-
 
 ```xml
 
@@ -97,7 +96,7 @@ ENTRYPOINT ["dotnet", "MyConsoleApplication.dll"]
 
 ```
 
-And when I try to create the image it fails miserably with a 401 error. Let's fix it.
+And when I try to built the image it fails miserably with a 401 error. Let's fix it.
 
 
 ## Scenario 1 : Using a NuGet.Config
@@ -157,12 +156,19 @@ And it works flawlessly.
 ## Scenario 2: Using the Artifacts Credential Provider
 ---
 
-The Azure Artifacts Credentials provider eases the acquisition of credentials needed to restore NuGet packages as part of your .NET development workflow.  
+The Azure Artifacts Credentials provider is an executable that eases the acquisition of credentials needed to restore NuGet packages.  
 You can read more about it [here](https://github.com/microsoft/artifacts-credprovider)
 
+In that scenario we are going to use a bash script to install the credential provider, and also we are going to specify some environment variables for the provider to work. 
+
+We need to specify:
+- NUGET_CREDENTIALPROVIDER_SESSIONTOKENCACHE_ENABLED: Controls whether or not the session token is saved to disk. If false, the Credential Provider will prompt for auth every time.
+- VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: A JSON that contains an array of service endpoints, usernames and access tokens. 
+The provider authenticates against all the providers found inside the array, so if you want you can have multiple private feeds.
+
+Also In the _"dotnet restore"_ step we need to specify our private feed. If we don't specify it  the credential provider will try to restore the nugets using only the default feed.
 
 The Dockerfile looks like this:
-
 
 ```docker
 
@@ -195,14 +201,6 @@ COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "MyConsoleApplication.dll"]
 
 ```
-
-In that scenario we are using a bash script to install the credential provider, and  also need to specify some environment variables for the provider to work. 
-
-- NUGET_CREDENTIALPROVIDER_SESSIONTOKENCACHE_ENABLED: Controls whether or not the session token is saved to disk. If false, the Credential Provider will prompt for auth every time.
-- VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: A JSON that contains an array of service endpoints, usernames and access tokens to authenticate. 
-
-Also In the _"dotnet restore"_ step we need to specify our private feed. If we don't specify it  the credential provider will try to restore the nugets using only the default feed.
-
 
 
 ## Windows Containers
@@ -242,11 +240,11 @@ COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "MyConsoleApplication.dll"]
 
 ```
-I works without any hitch.
+It works without any hitch.
 
 ### Scenario 2: Using the Artifacts Credential Provider
 
-That scenario is a real pain!  
+That scenario is the real pain!  
 
 We are running on windows containers so we cannot use the bash script to install the provider, instead of using the bash script we are going to use another script written in Powershell.   
 That's not a problem at all because the nanoserver image comes with Powershell Core already installed.  
@@ -296,7 +294,5 @@ ENTRYPOINT ["dotnet", "MyConsoleApplication.dll"]
 
 ```
 
-At the end of the day, I prefer to use the Credential Provider instead of the Nuget.Config because it one less file to manage in my repository. 
- 
-Also if you are a men with poor luck and stumble with a project that uses Windows Containers you can also use both scenarios.  
- Probably you're going to lose some time tinkering around if you want to use the credential provider with a windows container but at nonetheless it works.
+At the end of the day, it doesn't matter if you're working with windows or linux containers you can use both scenarios indiscriminately.  
+I personally prefer to use the Credential Provider instead of the Nuget.Config because it one less file to manage in my repository. 
