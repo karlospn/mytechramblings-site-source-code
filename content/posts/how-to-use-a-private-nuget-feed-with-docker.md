@@ -1,15 +1,14 @@
 ---
 title: "How to Restore a Nuget from an Azure DevOps Private Feed within Docker"
-date: 2020-07-14T18:12:41+02:00
+date: 2020-07-14T19:12:41+02:00
 tags: ["csharp", "docker", "nuget", "containers", "windows"]
 draft: false
 ---
 
 Let's go for a quick post this time. 
 
-You are trying to create a Docker image from an app, that application is using some custom Nugets.  
-Those Nugets are hosted in your private Azure DevOps Feed.   
-I'm pretty confident that some of these errors are going to sound pretty familiar to you when you try to build the image:  
+Imagine you're trying to create a Docker image from an application and it is using some custom nugets. Those custom nugets are hosted in your private Azure DevOps Feed.
+And when you try to build the image you get one of the following errors:
 
 ```bash
 /src/MyConsoleApplication.csproj : error NU1101: Unable to find package MyOwn.EmailService. No packages exist with this id in source(s): nuget.org
@@ -30,12 +29,14 @@ To solve this problem there are two possible solutions:
 - Place a NuGet.Config file inside your application and use it when creating the image.
 - Use the Azure Artifacts Credentials Provider
 
-The first option is the older one and used to be the way to do it. 
+The first option is the older one and used to be the way to do it.  
 The second one is the most recent one and in my opinion a better way to do it.
 
-Let's show somes examples, but first of all let's set everything up.
+I'm going to show you how you can fix it using both Linux and Windows Containers. But first I'm going to set everything up on the Azure Devops end.
 
-1- I create a private Azure DevOps Feed:
+I did the following steps on my Azure DevOps account:
+
+1- Create a private Azure DevOps Feed named _**"my-very-private-feed"**_
 
 
 ```xml
@@ -49,9 +50,9 @@ Let's show somes examples, but first of all let's set everything up.
 
 ```
 
-2- I pushed a custom Nuget named **"MyOwn.EmailService"** into my private Azure DevOps Feed.
+2- Push a custom Nuget named _**"MyOwn.EmailService"**_ into my the Azure DevOps feed.
 
-3- I created a .NETCore 3.1 console app that is using the nuget **"MyOwn.EmailService"**
+3- Create a .NETCore 3.1 console app that uses the _**"MyOwn.EmailService"**_ nuget
 
 ```xml
 
@@ -70,7 +71,7 @@ Let's show somes examples, but first of all let's set everything up.
 
 ```
 
-4 - I built a DockerFile
+4 - Create a DockerFile for the app
 
 ```docker
 
@@ -96,7 +97,8 @@ ENTRYPOINT ["dotnet", "MyConsoleApplication.dll"]
 
 ```
 
-And when I try to built the image it fails miserably with a 401 error. Let's fix it.
+And when everything is set it up if I try to built the image it fails miserably with a 401 error...    
+Let's see how to fix it.
 
 
 ## Scenario 1 : Using a NuGet.Config
@@ -150,7 +152,7 @@ ENTRYPOINT ["dotnet", "MyConsoleApplication.dll"]
 
 ```
 
-And it works flawlessly.
+And it everything works flawlessly.
 
 
 ## Scenario 2: Using the Artifacts Credential Provider
@@ -161,7 +163,7 @@ You can read more about it [here](https://github.com/microsoft/artifacts-credpro
 
 In that scenario we are going to use a bash script to install the credential provider, and also we are going to specify some environment variables for the provider to work. 
 
-We need to specify:
+We need the following variables:
 - NUGET_CREDENTIALPROVIDER_SESSIONTOKENCACHE_ENABLED: Controls whether or not the session token is saved to disk. If false, the Credential Provider will prompt for auth every time.
 - VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: A JSON that contains an array of service endpoints, usernames and access tokens. 
 The provider authenticates against all the providers found inside the array, so if you want you can have multiple private feeds.
@@ -215,7 +217,7 @@ Let's try to replicate the same scenarios but these time using Windows Container
 ### Scenario 1 : Using the Nuget.Config with a nanoserver image
 ---
 
-The only difference is that I'm using a windows nanoserver image instead of a linux image.
+The only difference with the Linux scenario is that I'm using a windows nanoserver image
 
 ```docker
 FROM mcr.microsoft.com/dotnet/core/runtime:3.1-nanoserver-1903 AS base
@@ -246,10 +248,10 @@ It works without any hitch.
 
 That scenario is the real pain!  
 
-We are running on windows containers so we cannot use the bash script to install the provider, instead of using the bash script we are going to use another script written in Powershell.   
+We are running on windows containers, so we cannot use the bash script to install the provider, instead of using the bash script we are going to use another script written in Powershell.   
 That's not a problem at all because the nanoserver image comes with Powershell Core already installed.  
  
-The problem is that the credential provider installer doesn't play nice with the nanoserver image. The solution is to install the credentials provider in a **windows server core** image and copy the output into the nanoserver image...   
+The real problem is that the credential provider installer doesn't play nice with the nanoserver image. The solution is to install the credentials provider in a **windows server core** image and copy the folder where the credential provider is installed into the nanoserver image. 
 
 ```docker
 
@@ -294,5 +296,6 @@ ENTRYPOINT ["dotnet", "MyConsoleApplication.dll"]
 
 ```
 
-At the end of the day, it doesn't matter if you're working with windows or linux containers you can use both scenarios indiscriminately.  
-I personally prefer to use the Credential Provider instead of the Nuget.Config because it one less file to manage in my repository. 
+At the end of the day, it doesn't matter if you're working with windows or linux containers you can use both solutions indiscriminately.   
+Using the credentials provider solution with Windows container is more painful because of these weird bug, but I'm pretty confident that Microsoft is going to fix it in a near future.   
+I used during many years the NuGet.Config solution but nowadays I prefer to use the Credential Provider because it one less file to manage in my repository. 
