@@ -276,12 +276,12 @@ I have found the same problem that I mention in the step 3: I cannot grant admin
 ![frontend-spa-grant-admin-consent](/img/aad-spa-grant-admin-consent.png)
 
 And there is another issue that bugs me, the issue is that if you're using the Azure Portal to register an SPA you can specify that the application type is "SPA" and use the grant type auth code flow with PKCE, but that option is missing here, so I'm forced to use and implicit flow.   
-It seems that's someone else opened an issue about it in Github (https://github.com/terraform-providers/terraform-provider-azuread/issues/286)
+It seems that someone else opened an issue about it in Github (https://github.com/terraform-providers/terraform-provider-azuread/issues/286)
 
 But anyway, let's test it.
 
-I'm going to begin an implicit flow and login into the AAD as **Jane**. 
-Remember from the step 1 that I have **manually** assigned to Jane a Reader role in the Payment API.   
+I'm going to begin an implicit flow and login into the AAD as **Jane**.   
+Remember from the step 2 that I have **manually** assigned a Reader role in the Payment API to Jane.   
 The fastest way to begin an implicit flow is by building the URI by myself.
 
 
