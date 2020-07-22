@@ -1,5 +1,5 @@
 ---
-title: "Trying to automate AAD App Registration using Terraform"
+title: "Trying to automate Azure Active Directory App Registration process using Terraform"
 date: 2020-07-21T21:22:44+02:00
 tags: ["azure", "terraform", "AAD"]
 draft: true
@@ -9,7 +9,7 @@ Today I want to try to use Terraform to automate the app registration process in
 
 If you want to secure an application Azure Active Directory is a really good option, but I don't want to configure my application on AAD manually, what I really want is to add a step in my CI / CD pipeline that does that for me, and for that purpose Terraform might be a good option.   
 
-Terraform already has an official Azure Active Directory provider written by Microsoft itself (https://www.terraform.io/docs/providers/azuread/index.html) so in today's post I'm going to focus on trying it out.
+Terraform already has an official Azure Active Directory provider written by Microsoft itself (https://www.terraform.io/docs/providers/azuread/index.html), so in today's post I'm going to focus on trying it out. 
 
 I'm going to build a pretty common and straightforward scenario using the Terraform provider. The scenario is the following one:
 
@@ -18,14 +18,14 @@ I'm going to build a pretty common and straightforward scenario using the Terraf
   - It has 2 application roles: **Reader** and **Admin**
 
 - **Booking API**: 
-  - Consumes the Payment API using a Client Credentials flow
-    - Obtains an access_token from the AAD token endpoint and uses it to attain access to the Payment API
-  - The Booking API app uses a Client Credentials flow so it has no use for scopes, but instead  it has assigned the Reader Role in the Payment API.
+  - Consumes the Payment API using a Client Credentials flow.
+    - Obtains an access_token from the AAD token endpoint and uses it to attain access to the Payment API.
+  - It has the Payment API Reader Role assigned.
 
 - **FrontEnd SPA**:
   - It's a _"Single Page Application"_ written in some crazy Javascript framework.
-    - Uses an implicit flow to obtain an access_token and id_token and uses the access_token to attain access to the Payment API
-  - The FrontEnd SPA app has permission only to ask for the payment.read scope
+    - Uses an implicit flow to obtain an access_token and id_token and uses the access_token to attain access to the Payment API.
+  - The FrontEnd SPA app has permission only to ask for the payment.read scope.
 
 - **Users**:
   - I have created  **2 users** in my AAD: **John** and **Jane**
@@ -40,18 +40,18 @@ Let's start building it, I need to register 3 apps. But first of all I need to c
 ---
 
 The first step is to configure the AzureAD Provider.   
-To authenticate against my AAD I'm going to create a new Application and a Service Principal and use its client id and client secret.   
+To authenticate against my AAD I'm going to create a new Application and a Service Principal and use its client id and a client secret.   
 There are other options available to authenticate against the AAD using the provider, you can read it here :https://www.terraform.io/docs/providers/azuread/guides/service_principal_client_secret.html
 
-Basically what I need to do is to create a _"master app"_ in my AAD, a "master app" is nothing more than an app with permissions to create another apps. Here is a detailed walkthrought about how to do it: https://www.terraform.io/docs/providers/azuread/guides/service_principal_configuration.html  
+Basically what I'm going to do is create a _"master app"_ in my AAD, a "master app" is nothing more than an app with permissions to create another apps. Here is a detailed walkthrough about how to do it: https://www.terraform.io/docs/providers/azuread/guides/service_principal_configuration.html  
 
 The first weird thing that you're going to find while creating the "master app" is the fact that the provider uses the **Legacy Azure Active Directory API (Azure Active Directory Graph)** instead of the newer MS Graph API.   
 That's a bad sign to begin with, it means that all the most recent features probably are not doable with the provider.   
-But let's going forward, that's the final look after registering in AAD the master app and giving it the proper permissions:
+But let's going forward, that's the final look after registering in my AAD the master app and giving it the proper permissions:
 
 ![master-app-config](/img/tf-aad-master-app.png)
 
-Now we can configure the Terraform provider using the master app client_id and client_secret
+Now we can configure the Terraform provider using the master app client_id and client_secret.
 
 ```yaml
 
@@ -71,12 +71,9 @@ provider "azuread" {
 Next step is to create the payment API using Terraform.
 The payment API has the following configuration:
 
-  - It exposes 2 scopes : payment.write and payment.read
-  - It has 2 application roles: Reader and Writer
-    - I have  2 users in my AAD: Jane and Mary
-      - Jane has a Reader role in the Payment API app
-      - Mary has an Admin role in the Payment API app
-
+  - It exposes 2 scopes : payment.write and payment.read.
+  - It has 2 application roles: Reader and Writer.
+  
 ```yaml
 
 resource "azuread_application" "payments_api" {
@@ -110,10 +107,10 @@ resource "azuread_application" "payments_api" {
         "User",
         "Application",
         ]
-        description  = "Can read and write payments"
+        description  = "Can read and make payments"
         display_name = "Admin"
         is_enabled   = true
-        value        = "Writer"
+        value        = "Admin"
     }
 
     app_role {
@@ -132,29 +129,31 @@ resource "azuread_application" "payments_api" {
 resource "azuread_service_principal" "payment_sp" {
   application_id               = azuread_application.payments_api.application_id
   app_role_assignment_required = false
-  tags = [ "payment"]
+  tags = [ "payment", "api"]
 }
+
 ```
 
-It's really easy to do it but there are some issues.   
+It's a pretty straightforward config file but I have encountered some issues while building it.   
 
-The first problem is:   
+The first issue:
+   
 I can create the application roles but **there is NO way to assign users or groups to those roles**.   
-I can go into the  _"Enterprise applications"_ blade in the Azure Active Directory Portal and  assign users and groups manually to the Reader and Writer role but that's a bummer...
+I can go into the  _"Enterprise applications"_ blade in the Azure Active Directory Portal, select my payment app and  assign users and groups manually, but that's a bummer...
 
-Poking around Github (https://github.com/terraform-providers/terraform-provider-azuread) I found that it's an already know issue  ( https://github.com/terraform-providers/terraform-provider-azuread/issues/230) and the issue is because the provider is using the old AAD api...
+Poking around Github (https://github.com/terraform-providers/terraform-provider-azuread) I found that it's an already know issue  ( https://github.com/terraform-providers/terraform-provider-azuread/issues/230) and it seems that the issue is because the provider is using the legacy AAD api...
 
-The other problem I found is that not all the Manifest attributes are present in the provider.   
-For example, I usually change the _"accessTokenAcceptedVersion"_ attribute so the token endpoint only generates tokens in V2 format _(I'm going to talk about that weird behaviour in some other rambling...)_ but I cannot do it with the provider, I have to change it again manually...
+The other issue I found is that not all the Manifest attributes are present.   
+For example, I like to change the _"accessTokenAcceptedVersion"_ attribute so the token endpoint only generates tokens in the V2 format _(I will talk about that nonsensical behaviour in a future post...)_ but I cannot do it with the provider, I have to change it manually again...
 
 
 ## Step 3: Register the Booking API
 ---
 
 The Booking API has the following configuration:
-  - Consumes the Payment API using a Client Credentials flow
-    - Obtains an access_token from AAD and uses it to attain access to the Payment API
-  - The booking API has the Payment API Reader Role assigned
+  - Consumes the Payment API using a Client Credentials flow.
+    - Obtains an access_token from AAD and uses it to attain access to the Payment API.
+  - The Booking API has the Payment API Reader Role assigned.
 
 ```yaml
 
@@ -178,7 +177,7 @@ resource "azuread_application" "booking_api" {
 resource "azuread_service_principal" "booking_sp" {
   application_id               = azuread_application.booking_api.application_id
   app_role_assignment_required = false
-  tags = [ "payment"]
+  tags = [ "payment", "api"]
 }
 
 resource "azuread_application_password" "booking_api_pwd" {
@@ -190,13 +189,13 @@ resource "azuread_application_password" "booking_api_pwd" {
 
 ```
 
-Apart from creating the application I'm also creating a client secret to test the client credentials flow. Nonetheless there is one issue I found in the process. The issue is that I cannot grant consent to use the role in an automatically way, so I need to do it manually...
+Apart from creating the application I'm also creating a client secret to test the client credentials flow. Nonetheless there is another issue I found in the process.   
+The issue is that I cannot grant consent to use the role in an automatically way, so I need to do it manually...
 
 ![booking-app-grant-admin-consent](/img/aad-api-grant-admin-consent.png)
 
 
-
-After that, let's test it and see if it works:
+After doing that, let's test it and see if it works. I'm going to request an access token using the Booking API client id and client secret.
 
 ```bash
 
@@ -233,7 +232,7 @@ And it returns an access_token with the following attributes:
 }
 ```
 
-So far so good, the issuer and the audience are both correct and it also contains the Reader appRole 
+So far so good, the issuer and the audience are both correct and it also contains the Reader application Role.
 
 
 ## Step 4: Register the FrontEnd SPA
@@ -252,8 +251,9 @@ resource "azuread_application" "frontend_spa" {
     oauth2_allow_implicit_flow = true
     type                       = "webapp/api"
     reply_urls                 = ["http://localhost:4200"]
-    logout_url                 = "http://localhost:4200/logout"
+    logout_url                 = "https://localhost:4200/logout"
     public_client              = true
+
     required_resource_access {
         resource_app_id = azuread_application.payments_api.application_id
         resource_access {
@@ -267,22 +267,22 @@ resource "azuread_application" "frontend_spa" {
 resource "azuread_service_principal" "frontend_spa" {
   application_id               = azuread_application.frontend_spa.application_id
   app_role_assignment_required = false
-  tags = [ "payment"]
+  tags = [ "frontend", "spa"]
 }
-
 ```
 
 I have found the same problem that I mention in the step 3: I cannot grant admin content to use the payment API scopes in a programmatic way.
 
 ![frontend-spa-grant-admin-consent](/img/aad-spa-grant-admin-consent.png)
 
-There is another issue that bugs me, the issue is that if you're using the Azure Portal to register an SPA you can specify that the application type is "SPA" and use the grant type auth code flow with PKCE, but that option is missing here, so I'm forced to use and implicit flow instead of an auth code flow with PKCE. It seems that's an someone also opened an issue in the provider Github (https://github.com/terraform-providers/terraform-provider-azuread/issues/286)
+And there is another issue that bugs me, the issue is that if you're using the Azure Portal to register an SPA you can specify that the application type is "SPA" and use the grant type auth code flow with PKCE, but that option is missing here, so I'm forced to use and implicit flow.   
+It seems that's someone else opened an issue about it in Github (https://github.com/terraform-providers/terraform-provider-azuread/issues/286)
 
-But anyway, let's test.
+But anyway, let's test it.
 
-I'm going to begin an implicit flow and login into the AAD as Jane. 
-Remember from the step 1 that Jane has assigned a Reader role in the Payment API.
-The fastest way to begin an implicit flow is by building the uri by myself.
+I'm going to begin an implicit flow and login into the AAD as **Jane**. 
+Remember from the step 1 that I have **manually** assigned to Jane a Reader role in the Payment API.   
+The fastest way to begin an implicit flow is by building the URI by myself.
 
 
 ```bash
@@ -297,12 +297,9 @@ https://login.microsoftonline.com/8a0671e2-3a30-4d30-9cb9-ad709b9c744a/oauth2/v2
 
 ```
 
-And it returns an access_token and a id_token with the following attributes:
+And it returns an access_token with the following attributes:
 
-
-For the access_token: 
 ```json
-
 {
    "aud": "api://payment",
    "iss": "https://sts.windows.net/8a0671e2-3a30-4d30-9cb9-ad709b9c744a/",
@@ -334,20 +331,21 @@ For the access_token:
 }
 ```
 
-Everything look alright: issuer, audience, scopes, name, role
-
+Everything looks alright: issuer, audience, scopes, upn, roles.
 
 
 ## Conclusion
 ---
 
-I tried to build a pretty common scenario and as you can see it is pretty straightforward to register an app on AAD using Terraform, if you have already a knowledge about how AAD works it's going to be easy work switching to Terraform. But also be aware that some features are missing, just tinkering with the provider for a very brief period of time I have already found some missing features:
+I tried to build a pretty common scenario and as you can see it's pretty straightforward to register an app on AAD using Terraform. If you already have a knowledge about how AAD works it's going to be easy work switching to Terraform.   
+But be aware that some features are missing, just tinkering with the provider for a very brief period of time I have already found some missing features:
 
-- You cannot assign users or roles into an existing app
+- You cannot assign users or groups into an app
 - You cannot grant admin consent programatically
-- Missing grant type auth code flow with PKCE
+- It's missing the grant type auth code flow with PKCE
 
-I'm confident that those issues can be resolved using Powershell or the AZ CLI and building some kind of script that fills in those missing steps, but I don't want to manage both files.   
+Those issues can be resolved using Powershell or the AZ CLI and building some kind of script that fills in those missing steps, but I don't want to manage both files.    
+
 I'm also surprised that the provider is using the Legacy Azure Active Directory API (Azure Active Directory Graph) instead of the newer MS Graph API, that raises some doubts about the adoption of the new features that are only possible using the newer Graph API, so be aware of it.
 
 
