@@ -2,7 +2,7 @@
 title: "Trying to automate Azure Active Directory App Registration process using Terraform"
 date: 2020-07-21T21:22:44+02:00
 tags: ["azure", "terraform", "AAD"]
-draft: true
+draft: false
 ---
 
 Today I want to try to use Terraform to automate the app registration process in Azure Active Directory.
