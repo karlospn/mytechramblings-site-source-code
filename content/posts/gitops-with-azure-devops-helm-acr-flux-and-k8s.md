@@ -22,7 +22,7 @@ I'm going to use the following components:
 - **Azure ACR** as my container registry and also as my helm chart repository.
 - **Kubernetes** on-premise for hosting the applications.
 - **Helm** to pack the application Kubernetes files.
-- **Flux** and the **Helm-Operator** to deploy the applications in an automatic way into the cluster.
+- **Flux** and **Helm-Operator** to deploy the applications in an automatic way into the cluster.
   
 That's a diagram of how the components are going to interact.
 
@@ -31,21 +31,17 @@ That's a diagram of how the components are going to interact.
 
 Let me explain a little bit about how it is going to work:
 
-1- The **Developer** creates a new application an pushes the code into an Azure DevOps repository. 
+1- The **developer** creates a new application an pushes the source code into an Azure DevOps repository. 
 
-2- The **code pushed** triggers an Azure Pipeline that creates a container image and also a helm chart and pushes everything into an existing Azure Container Registry.  
+2- The **code pushed** triggers an Azure Pipeline that creates a container image and a Helm chart and pushes everything into an existing Azure Container Registry.  
 
 3- The **DevOps Team** has a **centralized repository** where they maintain a declarative description of all the components deployed into the Kubernetes cluster.    
 
-4- The **DevOps Team** pushes a new file into the **centralized repository**, that file contains the description of the new application that the developer has created on step 1.  
-**Flux** is keeping watch for changes in the centralized repository and when it sees a new file, it picks them up and it deploys the new application using the helm chart that we created in step 2.  
+4- The **DevOps Team** pushes a new file into the **centralized repository**, that file contains the description of the new application that the **developer** has created on **step 1**.  
+**Flux** is keeping watch for changes in the centralized repository and when it sees a new file, it picks it up and deploys the new application using the Helm chart that we created in **step 2.**
 
-_**In my example I'm using 2 different actors: a developer and a devOps teams, but there are a lot of viable combinations possible, just to enumerate a few:_ 
-- _It could be the same person that does all the steps by himself, you might not need two actors._
-- _It could that the developer creates the application, the automatic pipeline creates the container and the helm chart and when it finishes it triggers an automatic process that creates or updates the configuration file on the centralized repository._
-
-
-Anyways, let's start building that scenario
+_**In my example I'm using 2 different actors: a developer and a devops team, but there are tons of viable combinations possible, for example:_    
+_It could be the same person that does all the steps by himself, you might not need two actors. Or maybe you want even more actors because somebody needs to test and validate the image after being pushed into ACR_
 
 
 ## Step 0 - Initial setup
@@ -53,25 +49,22 @@ Anyways, let's start building that scenario
 
 1- On my Azure DevOps account I'm just going to create:   
 
-- A new Team Project called "**Provisioning**", and inside it I will create:
-  - An Git repository named **"AppA"**: 
-    - That's where the application source code is going to be. 
-  - A Git repository named **"Manifests"**: 
-    - That's the centralized repository that Flux is going to monitor.
-- An Azure Service connection with permissions to push a docker image and  a helm chart into ACR.
+- A new Team Project called _"**Provisioning**"_ and inside I will create:
+  - A Git repository named _**"AppA"**_: 
+    - That's where the **application source code** is going to be. 
+  - A Git repository named _**"Manifests"**_: 
+    - That's the **centralized repository** that Flux is going to monitor.
+- An Azure Service connection with permissions to push and pulll images from ACR.
 
-2 - Create an Azure Container Registry. 
+2 - On my Azure subscription I'm going to create an Azure Container Registry called "_**acrgitopsdev**_"
 
 
 ## Step 1 - Creating an application
 ---
 
-It's going to be a .NET Core 3.1 WebAPI.  The application per se it's not important, it could be anything.  
-
-There are a couple of things I want to remark: 
+It's going to be a .NET Core 3.1 WebAPI.  The application per se it's not important. But there are a couple of things I want to remark: 
 - The app needs to have a _DockerFile_, because I'm using Kubernetes and Kubernetes likes containers...
-- The app also needs to have a _/chart_ folder. That folder is going to contain all the Kubernetes definition files that the application needs to run.   
-I need that folder because I'm going to pack all the Kubernetes files into a Helm Chart and use it afterwards to deploy the application inside the cluster.
+- The app also needs to have a _/chart_ folder. That folder is going to contain all the Kubernetes definition files that the application needs. 
 
 An example of the application structure would be something like this:
 
@@ -115,13 +108,13 @@ An example of the application structure would be something like this:
 
 As I pointed out the app contains a Dockerfile and also a _/chart_ folder.
 
-After seeing that you could argue that maybe I should not place the Kubernetes files / Chart files within the application code and maybe I should place it directly in the centralized repository, and that's totally legit but I prefer to have the application code and the application kubernetes definitions all in the same place.
+After seeing that you could argue that maybe I should not place the Kubernetes files / Chart files within the application code and maybe I should place it directly in the centralized repository, and that's totally legit, but I prefer to have the application code and the application kubernetes definitions all in the same place.
 
 
-## Step 2 - Build the Azure Pipeline to create the docker image and helm chart
+## Step 2 - Building an Azure Pipeline that creates the docker image and helm chart
 ---
 
-We are going to build an Azure Pipeline that is going to do those 4 steps:
+We're going to build an Azure Pipeline that is going to do those 4 steps:
 
 - Build the docker image
 - Push the docker image into an existing ACR
@@ -197,46 +190,45 @@ steps:
 
 Helm 3 needs the environment variable "HELM_EXPERIMENTAL_OCI: 1" defined or it won't work, so just put it there...
 
-I'm using the Azure Pipeline BuildId to tag the docker image and also to set the Helm Chart version so the developer doesn't need to maintain an strict control about which version is which.
-That's a simple Helm versioning strategy. Using a 1-1 versioning just keep the chart version in sync with your actual application.   
-This approach makes version bumping very easy (you bump everything up) and also allows you to quickly track what application version is deployed on your cluster (same as chart version).  
+I'm using the Azure Pipeline **BuildId** to tag the docker image and also to set the Helm Chart version.   
+That's a simple Helm versioning strategy, using a 1-1 versioning just keeps the chart version in sync with the application. That approach makes version bumping very easy (you bump everything up) and also allows you to quickly track what application version is deployed on your cluster (same as chart version).   
 If you're interested in helm versioning strategies you can read it more here: https://codefresh.io/docs/docs/new-helm/helm-best-practices/
 
-Let me detail a little bit what are the steps I'm doing inside the pipeline:
+Let me detail a little bit what are the steps that I'm doing inside the pipeline:
 
-- Login to an Azure Container Registry.
-- Build and push the image into the ACR, I'm doing both things which just one command using the AZ CLI: _az acr build_. 
+- Login into ACR.
+- Build and push the image into ACR. I'm doing both things with just a single command: _az acr build_. 
 - Install Helm 3. 
 - Replace tokens. 
-- Create the Helm Chart from the application _/chart_ folder using the Helm CLI.
+- Create the Helm Chart from the _/chart_ folder using the Helm CLI.
 - Push the Helm Chart into ACR using the AZ CLI.
 
 
 > _Why I'm using the Replace Tokens task in my pipeline?_ (https://marketplace.visualstudio.com/items?itemName=qetza.replacetokens)   
-> That's because in the Kubernetes Deployment file I defined the image i'm using like this: 
+> That's because in the Kubernetes Deployment YAML file I defined the image i'm using like this: 
 ```yaml
     containers:
     - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:#{tag}#" 
 ```
-> As I previously said I'm using the Azure Pipelines BuildId as my image tag and I only know the value after the pipeline has started, that's why I'm using the replace tokens task. Basically I'm replacing the _#{tag}#_ placeholder with the correct value while the Azure Pipeline is running.
+> As I previously said I'm using the Azure Pipelines **BuildId** as my image tag and I only know the value **after the pipeline has started**, so I'm using the replace tokens task to replace the _#{tag}#_ placeholder with the BuildId while the Azure Pipeline is running. 
 
 
-## Step 3 - Install Flux and the Helm Operator
+## Step 3 - Installing Flux and the Helm Operator
 ---
 
 What is Flux? Flux is a tool that automatically ensures that the state of your Kubernetes cluster matches the configuration you’ve supplied in Git. It uses an operator in the cluster to trigger deployments inside Kubernetes, which means that you don’t need a separate continuous delivery tool.  
 
 What is the Helm Operator?  The Helm Operator is a Kubernetes operator, allowing one to declaratively manage Helm chart releases. Combined with Flux this can be utilized to automate helm charts releases in a GitOps manner.
 
-_You can read more about Flux and Helm Operator here: https://docs.fluxcd.io/en/1.20.0/_
+You can read more about Flux and the Helm Operator here: https://docs.fluxcd.io/en/1.20.0/
 
 That's how it works:
 
 ![flux-helm-diagram](/img/fluxcd-helm-operator-diagram.png)
 
 
-Let's enumerate the steps to install both Flux and the Helm Operator into the Kubernetes cluster.
+I'm going to enumerate the steps required to install both Flux and the Helm Operator into the Kubernetes cluster.
 
 1 - Create the Flux namespace:
 
@@ -262,22 +254,21 @@ kubectl apply -f https://raw.githubusercontent.com/fluxcd/helm-operator/master/d
 helm upgrade -i flux fluxcd/flux --set git.url=git@ssh.dev.azure.com:v3/cpn/Provisioning/Manifests  --set registry.acr.enabled=true --namespace flux
 ```
 - The **git.url** attribute needs to be the **Azure DevOps Repository URL** that we want Flux to monitor. Flux is going to connect to the Git repo through **SSH**.   
-In our example that would be our **centralized repository.**
 
-- The **registry.acr.enabled** attribute is needed because we are using images hosted in ACR.
+- The **registry.acr.enabled** attribute is needed because we are using ACR as our image registry.
 
 5 - Giving Flux read and write access to the Azure DevOps repository
 
-In the previous step we have configured Flux to monitor a concrete Azure DevOps git repository.
-Now we need to give Flux access to the git repository.   
-To facilitate that you will need to add an SSH key into your Azure DevOps account.
-This is pretty straight-forward as Flux generates a SSH key and logs the public key at startup. Find the SSH public key by running:
+In the previous step we told Flux which Azure DevOps git repository should monitor. Now we need to give Flux access to the git repository.   
+This is pretty straight-forward as Flux generates a SSH key at startup.   
 
-asdasd
+To get the SSH public key generated by Flux you need to run:
+```bash
+kubectl -n flux logs deployment/flux | grep identity.pub | cut -d '"' -f2
+```
+And in order to sync Flux with your Git repository you need to add the key as an SSH public key in your Azure DevOps account settings.
 
-In order to sync your cluster state with git you need to copy the public key and add it as an SSH key in your Azure DevOps account.
-
-<FOTO>
+![Azure DevOps flux SSH key](/img/flux-ados-ssh.png)
 
 6 - Install the Flux Operator
 
@@ -300,17 +291,13 @@ helm upgrade -i helm-operator fluxcd/helm-operator --set git.ssh.secretName=flux
 ```
 
 > You can do all those steps manually or create an Azure Pipelines to orchestrate all those commands.   
-To be honest it's really easy to build the pipeline once you know all the commands you need to execute, that's why for now i'm not going to waste time doing it.
+To be honest, it's really easy to build the pipeline once you know all the commands you need to execute, so i'm not going to waste time doing it.
 
 
-## Step 4 - Create the application config file
+## Step 4 - Creating the application config file
 ---
 
-Right now we have: 
-- The application Helm Chart hosted in ACR
-- Flux monitoring a repository named Manifests in the Provisioning project.
-
-The last step is to create the application config file and push it into the "Manifests" repository and see if Flux is capable of deploying our application in our Kubernetes cluster.
+The last step is to create the application config file, push it into the "**Manifests**" repository and see if Flux is capable of deploying our application in our Kubernetes cluster.
 
 
 ```yaml
@@ -323,27 +310,74 @@ spec:
   chart:
     repository: https://acrgitopsdev.azurecr.io/helm/v1/repo/
     name: appawebapi
-    version: "158.0.0"
+    version: 158.0.0
   values:
     imagePullSecrets:
       - name: acr-gitdevops
 
 ```
 
-In the most basic file the only thing I need to specify in the config file is the Chart repository URL, the Chart name and the Chart version I want to deploy.
-There're some more options available to tinker with it, if you're interested you can read about it here: https://docs.fluxcd.io/projects/helm-operator/en/1.0.0-rc9/references/helmrelease-custom-resource.html
+The only thing you need to specify in the  file is the Chart repository URL, the Chart name and the Chart version I want to deploy.   
+There are more options available when creating the config file, if you're interested you can read about it here: https://docs.fluxcd.io/projects/helm-operator/en/1.0.0-rc9/references/helmrelease-custom-resource.html
 
-In my case I'm defining also a secret and that's because Kubernetes uses an image pull secret to store information needed to authenticate to the container registry. **If you're using AKS you don't need to do it.**   
+In my case I need to define a secret and that's because Kubernetes uses an image pull secret to store information needed to authenticate to the container registry. **If you're using AKS you don't need to do it.**   
 If you want to read more about it: https://docs.microsoft.com/es-es/azure/container-registry/container-registry-auth-kubernetes
 
-And that's it! We're done!
+And that's it, we are done! Flux has deployed the app into our cluster.   
+Let's test it a little bit. If we change the chart version and commit the file again:
+
+```yaml
+
+apiVersion: helm.fluxcd.io/v1
+kind: HelmRelease
+metadata:
+  name: appa
+spec:
+  chart:
+    repository: https://acrgitopsdev.azurecr.io/helm/v1/repo/
+    name: appawebapi
+    version: 160.0.0
+  values:
+    imagePullSecrets:
+      - name: acr-gitdevops
+
+```
+
+Flux automatically picks the change (with a 5 minutes delay) and replaces the pod with the new version.
+
+If we create a new application, create a new config file and push it into the repository, like this:
+
+
+```yaml
+
+apiVersion: helm.fluxcd.io/v1
+kind: HelmRelease
+metadata:
+  name: appb
+spec:
+  chart:
+    repository: https://acrgitopsdev.azurecr.io/helm/v1/repo/
+    name: appbwebapi
+    version: 164.0.0
+  values:
+    imagePullSecrets:
+      - name: acr-gitdevops
+```
+
+Flux automatically picks the change (with a 5 minutes delay) and creates the pod with the new application.
+
+So it's working pretty good!
 
 
 ## Conclusion
 ---
 
-As I said before what I have built is more a proof of concept than a production ready GitOps process.
-But I have achieve what I wanted to build with ease.
-With the GitOps flow we have built every application created is containerized and pushed into ACR using Azure Pipelines and then we have a centralized repository where we define what applications we want to deploy into our Kubernetes cluster.
-Helm and Flux are our main tools to automatically deploy and keep the configuration in-sync with the apps deployed in the kubernetes cluster.
+There are a lot of cool features that you can do with Flux that I haven't tested yet, for example you can configure Flux to update the config files by itself when you push a new version of the application into ACR.   
+
+Keep in mind that not only the application files should go into that centralized repository. **Everything** you deploy inside the cluster should be put it there.     
+For example, if you're deploying a fluentd daemonset or an nginx ingress controller just put the files in there at let Flux deploy it for you. Also if you don't want to use Helm Charts to deploy you can deploy plain kubernetes files and use tools like **Kustomize**.    
+The main point I'm trying to make here is that if you want to use a GitOps approach the centralized repository needs be the **single source of truth** for all the code that goes into the cluster.
+
+Also take that example with a grain of salt, it is nothing more than a proof of concept I wanted to build. It's not a production ready GitOps process.  
+
 
