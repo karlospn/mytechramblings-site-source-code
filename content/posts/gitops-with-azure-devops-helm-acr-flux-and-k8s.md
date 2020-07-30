@@ -6,7 +6,7 @@ draft: true
 ---
 
 
-GitOps is a term introduced by WeaveWorks a couple years ago (https://www.weave.works/blog/gitops-operations-by-pull-request)
+GitOps is a term introduced by WeaveWorks a few years ago (https://www.weave.works/blog/gitops-operations-by-pull-request)
 
 GitOps is a way of implementing Continuous Deployment. The core idea of GitOps is having a Git repository that always contains declarative descriptions of the infrastructure currently desired in the production environment and an automated process to make the production environment match the described state in the repository.   
 If you want to deploy a new application or update an existing one, you only need to update the repository - the automated process handles everything else.
@@ -18,10 +18,10 @@ In these post I want to build a practical example of GitOps, it's not going to b
 
 I'm going to use the following components:
 
-- **Azure DevOps** as my VCS (Version control system) 
+- **Azure DevOps** as my VCS (version control system) 
 - **Azure ACR** as my container registry and also as my helm chart repository.
 - **Kubernetes** on-premise for hosting the applications.
-- **Helm** to pack the application Kubernetes files.
+- **Helm** to manage the application kubernetes files.
 - **Flux** and **Helm-Operator** to deploy the applications in an automatic way into the cluster.
   
 That's a diagram of how the components are going to interact.
@@ -29,7 +29,7 @@ That's a diagram of how the components are going to interact.
 ![diagram](/img/gitops-ci.png)
 
 
-Let me explain a little bit about how it is going to work:
+Let me explain a little bit about the workflow:
 
 1- The **developer** creates a new application an pushes the source code into an Azure DevOps repository. 
 
@@ -41,7 +41,7 @@ Let me explain a little bit about how it is going to work:
 **Flux** is keeping watch for changes in the centralized repository and when it sees a new file, it picks it up and deploys the new application using the Helm chart that we created in **step 2.**
 
 _**In my example I'm using 2 different actors: a developer and a devops team, but there are tons of viable combinations possible, for example:_    
-_It could be the same person that does all the steps by himself, you might not need two actors. Or maybe you want even more actors because somebody needs to test and validate the image after being pushed into ACR_
+_You might not need two actors, it could be the same actor that does all the steps by himself. Or maybe you want even more actors because somebody needs to test and validate the image after being pushed into ACR._
 
 
 ## Step 0 - Initial setup
@@ -49,12 +49,11 @@ _It could be the same person that does all the steps by himself, you might not n
 
 1- On my Azure DevOps account I'm just going to create:   
 
-- A new Team Project called _"**Provisioning**"_ and inside I will create:
-  - A Git repository named _**"AppA"**_: 
-    - That's where the **application source code** is going to be. 
-  - A Git repository named _**"Manifests"**_: 
-    - That's the **centralized repository** that Flux is going to monitor.
-- An Azure Service connection with permissions to push and pulll images from ACR.
+- An Azure Service connection with permissions to push and pulll images from ACR. 
+- An Azure DevOps Git repository named _**"AppA"**_: 
+  - That's where the **application source code** is going to be. 
+- An Azure DevOps Git repository named _**"Manifests"**_: 
+  - That's the **centralized repository** that Flux is going to monitor.
 
 2 - On my Azure subscription I'm going to create an Azure Container Registry called "_**acrgitopsdev**_"
 
@@ -62,7 +61,7 @@ _It could be the same person that does all the steps by himself, you might not n
 ## Step 1 - Creating an application
 ---
 
-It's going to be a .NET Core 3.1 WebAPI.  The application per se it's not important. But there are a couple of things I want to remark: 
+It's going to be a .NET Core 3.1 WebAPI.  The application per se it's not important, and that's why I'm not going to explain how to build it. But there are a couple of things I want to remark: 
 - The app needs to have a _DockerFile_, because I'm using Kubernetes and Kubernetes likes containers...
 - The app also needs to have a _/chart_ folder. That folder is going to contain all the Kubernetes definition files that the application needs. 
 
@@ -111,7 +110,7 @@ As I pointed out the app contains a Dockerfile and also a _/chart_ folder.
 After seeing that you could argue that maybe I should not place the Kubernetes files / Chart files within the application code and maybe I should place it directly in the centralized repository, and that's totally legit, but I prefer to have the application code and the application kubernetes definitions all in the same place.
 
 
-## Step 2 - Building an Azure Pipeline that creates the docker image and helm chart
+## Step 2 - Building an Azure Pipeline
 ---
 
 We're going to build an Azure Pipeline that is going to do those 4 steps:
@@ -317,7 +316,7 @@ spec:
 
 ```
 
-The only thing you need to specify in the  file is the Chart repository URL, the Chart name and the Chart version I want to deploy.   
+The only thing you need to specify in the  file is the Chart repository URL, the Chart name and the Chart version to deploy.   
 There are more options available when creating the config file, if you're interested you can read about it here: https://docs.fluxcd.io/projects/helm-operator/en/1.0.0-rc9/references/helmrelease-custom-resource.html
 
 In my case I need to define a secret and that's because Kubernetes uses an image pull secret to store information needed to authenticate to the container registry. **If you're using AKS you don't need to do it.**   
@@ -343,9 +342,9 @@ spec:
 
 ```
 
-Flux automatically picks the change (with a 5 minutes delay) and replaces the pod with the new version.
+Flux automatically picks the change (with a 5 minutes delay) and replaces the application with the old version with the new one.
 
-If we create a new application, create a new config file and push it into the repository, like this:
+Next we create a new application and push a new config file into the centralized repository, like this:
 
 
 ```yaml
@@ -364,9 +363,9 @@ spec:
       - name: acr-gitdevops
 ```
 
-Flux automatically picks the change (with a 5 minutes delay) and creates the pod with the new application.
+Flux automatically picks the change (with a 5 minutes delay) and deploy the new application.   
 
-So it's working pretty good!
+So overall our process is working quite well, any new or modified config file we push inside our centralized repository it is going to be reflected in the Kubernetes cluster. 
 
 
 ## Conclusion
