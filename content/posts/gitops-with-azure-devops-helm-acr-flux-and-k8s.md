@@ -1,5 +1,5 @@
 ---
-title: "A practical example of GitOps using Azure DevOps, Azure ACR, Helm, Flux and Kubernetes"
+title: "A practical example of GitOps using Azure DevOps, Azure Container Registry, Helm, Flux and Kubernetes"
 date: 2020-07-29T22:10:21+02:00
 tags: ["azure", "acr", "kubernetes", "gitops", "helm"]
 draft: false
@@ -19,7 +19,7 @@ In these post I want to build a practical example of GitOps, it's not going to b
 I'm going to use the following components:
 
 - **Azure DevOps** as my VCS (version control system) 
-- **Azure ACR** as my container registry and also as my helm chart repository.
+- **Azure Container Registry** as my container registry and also as my helm chart repository.
 - **Kubernetes** on-premise for hosting the applications.
 - **Helm** to manage the application kubernetes files.
 - **Flux** and **Helm-Operator** to deploy the applications in an automatic way into the cluster.
