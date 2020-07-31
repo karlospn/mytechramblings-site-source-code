@@ -2,7 +2,7 @@
 title: "A practical example of GitOps using Azure DevOps, Azure ACR, Helm, Flux and Kubernetes"
 date: 2020-07-29T22:10:21+02:00
 tags: ["azure", "acr", "kubernetes", "gitops", "helm"]
-draft: true
+draft: false
 ---
 
 
@@ -29,7 +29,7 @@ That's a diagram of how the components are going to interact.
 ![diagram](/img/gitops-ci.png)
 
 
-Let me explain a little bit about the workflow:
+Let me explain a little bit about how the workflow works:
 
 1- The **developer** creates a new application an pushes the source code into an Azure DevOps repository. 
 
@@ -43,6 +43,7 @@ Let me explain a little bit about the workflow:
 _**In my example I'm using 2 different actors: a developer and a devops team, but there are tons of viable combinations possible, for example:_    
 _You might not need two actors, it could be the same actor that does all the steps by himself. Or maybe you want even more actors because somebody needs to test and validate the image after being pushed into ACR._
 
+Anyways, let's begin building the workflow.
 
 ## Step 0 - Initial setup
 ---
