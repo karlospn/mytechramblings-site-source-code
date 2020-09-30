@@ -1,8 +1,8 @@
 ---
 title: "Provisioning resources on AWS using AWS CDK and Azure DevOps Pipelines"
-date: 2020-09-26T17:04:21+02:00
-tags: ["aws","cdk", "azure", "ci", "cd"]
-draft: true
+date: 2020-09-30T10:02:21+02:00
+tags: ["aws","cdk", "azure", "devops"]
+draft: false
 ---
 
 # Introduction
