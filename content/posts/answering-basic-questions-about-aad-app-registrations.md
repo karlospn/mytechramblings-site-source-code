@@ -2,7 +2,7 @@
 title: "Answering some basic questions about registering applications on Azure Active Directory"
 date: 2020-10-14T10:00:50+02:00
 tags: ["azure","aad", "msal", "adal"]
-draft: true
+draft: false
 ---
 
 These past years I worked with a few companies that uses Azure Active Directory to perform authentication and authorization on their line-of-business (LOB) applications and from time to time I get questions about how to register apps on AAD.   
