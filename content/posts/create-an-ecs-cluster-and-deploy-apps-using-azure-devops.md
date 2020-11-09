@@ -1,5 +1,5 @@
 ---
-title: "How to create an AWS ECS Fargate cluster and deploy apps using Azure DevOps"
+title: "An opinionated approach about how to create an AWS ECS Fargate cluster and deploy apps on it using Azure DevOps Pipelines"
 date: 2020-11-08T18:11:18+01:00
 tags: ["aws", "ecr", "ecs", "containers", "devops", "cdk"]
 draft: true
@@ -47,7 +47,12 @@ When I started building that solution I sat down and write 3 clear objectives I 
 - The **application** must be deployed using **another Azure DevOps pipeline**.
 - **Decouple the creation, deployment and lifecycle of the infrastructure files from the application source code.**
 
-I ended up building 3 different separate pipelines, let me explain it a little bit about the purpose of every pipeline and how everything works together.
+I ended up building 3 different separate pipelines:
+- A pipeline to create a dummy application.
+- A pipeline to create the infrastructure to AWS
+- A pipeline to deploy the application.   
+  
+Let me explain a little bit about the purpose of every pipeline and how everything works together.
 
 # 1. Create and deploy a _"dummy"_ application 
 
@@ -61,15 +66,70 @@ That's the first pipeline:
 ![push-dummy-image-to-ecr](/img/push-dummy-image-to-ecr.png)
 
 It's just a very simple pipeline: build the container image and push it into an ECR repository.
-Also that pipeline will only **run ONCE** and that's it.  
 
-And why is it going to run just once? Because I'm using that image as a stepping stone so I can create all my infrastructure without needing to reference a real application.   
-Once the image is pushed into a generic ECR repository I can reuse it for all the applications that I decide to spun up inside my ECS cluster.
+- That pipeline will only **run ONCE** and that's it.    
+  
+And why is it going to run just once? Because I'm using that image as a stepping stone so I can create all my infrastructure without needing to reference a real container image.   
+Once the image is pushed into a generic ECR repository I can reuse it for all the applications that I decide to spun up inside my ECS cluster. 
+
+So that's the first pipeline you are going to ran but you can ran it whenever you want as long as it is the first one.
+
+As I said it's a very simple pipeline, take a look:
+
+```yaml
+trigger:
+  branches:
+    include:
+    - master
+  paths:
+    include:
+    - '*'
+    exclude:
+    - 'azure-pipelines.yml'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - name: AWS_ACCOUNT_ID
+    value: 1234567789927
+  - name: APP_NAME
+    value: dummy
+  - name: DOCKERFILE_PATH
+    value: Dummy.WebApi/Dockerfile
+  - name: AWS_REGION
+    value : eu-west-1
+  - name: TAG
+    value: $(Build.BuildId)
+
+stages:
+- stage: 'BuildAndPushToECR'
+  jobs:
+  - job: 'Build'
+    steps:    
+    - script: |
+        echo Starting docker build
+        echo docker build -t $(APP_NAME):$(TAG) -f $(System.DefaultWorkingDirectory)/$(DOCKERFILE_PATH) .
+        docker build -t $(APP_NAME):$(TAG) -f $(System.DefaultWorkingDirectory)/$(DOCKERFILE_PATH) .
+      displayName: 'Run docker build' 
+
+   - task: ECRPushImage@1
+      displayName:  Push image to Dev ECR
+      inputs:
+        awsCredentials: 'AWS ECR Dev'
+        regionName: '$(AWS_REGION)'
+        imageSource: 'imagename'
+        sourceImageName: '$(APP_NAME)'
+        sourceImageTag: '$(TAG)'
+        repositoryName: '$(APP_NAME)'
+        pushTag: '$(TAG)'
+
+```
 
 # 2. Create and deploy the infrastructure needed on AWS
 
 I decided to use AWS CDK to create the infrastructure.   
-I'm not going to show the CDK code that I have developed because it's pretty straightforward, the only thing worth mentioning is that every ECS Task Definition is created referencing the _"dummy image"_ I have created in the previous step. 
+I'm not going to show the CDK code that I have developed, because it's a pretty straightforward one. The only thing worth mentioning is that the ECS Task Definition is created referencing the _"dummy"_ image I have built in the previous step. 
 
 ```csharp
     private const string DUMMY_IMAGE = "arn:aws:ecr:eu-west-1:1234567789927:repository/dummy";
@@ -117,18 +177,20 @@ The pipeline is quite simple as I'm just executing the CDK app.
 
 ![cdk-deploy](/img/cdk-deploy.png)
 
+I'm not going to show you the pipeline to deploy a CDK app because I already talked about it in a previous post.   
 If you want to know how to build an Azure DevOps pipeline that deploys an AWS CDK app you can read my previous post: https://www.mytechramblings.com/posts/provisioning-aws-resources-using-cdk-azure-devops/
+
 
 # 3. Deploy the application
 
-The last step is to build the pipeline that deploys the application.
+The last pipeline is the one in charge of building and deploying the application.
 
 ![ecs-update](/img/ecs-update.png)
 
 - The "Continuous Integration" (CI) creates the docker image, uses the Build Id variable to tag it and finally  pushes the image into the AWS ECR repository.   
 - The "Continous Deployment" (CD) creates a new revision of the ECS Task Definition that points to the image we have just uploaded and updates the ECS Service to use newly created Task Definition.
 
-To create the new revision of the ECS Task Definition we can do it by ourselves via scripting and the result will be something like this:
+The tricky point of this pipeline is when trying to create a new task definition and update the service. We can do it by ourselves via scripting and the result will be something like this:
 
 ```bash
 #!/bin/bash
@@ -149,18 +211,18 @@ aws ecs update-service --cluster ${ECS_CLUSTER} \
 
 ```
 
-Or we can use the Fargate CLI : https://github.com/awslabs/fargatecli   
+And you just need to add an AWS Shell Task in your pipeline (https://docs.aws.amazon.com/vsts/latest/userguide/awsshell.html) with the former script or we can use the Fargate CLI : https://github.com/awslabs/fargatecli   
 
 The fargate CLI is an unofficial command-line interface but nonetheless it allows me to streamline the deployment of containers to an existing AWS Fargate cluster.
 
-You can update the Task Definition image attribute simply by running the following command:
+You can update the Task Definition image attribute and restart the ECS Service simply by running the following command:
 
 ```bash
 fargate service  deploy ${ECS_SERVICE_NAME} --image ${ECR_REPOSITORY_ARN}:${Build.BuildId}--cluster ${CLUSTER_ARN} --region ${AWS_DEFAULT_REGION}
 ```
 
-I decided to use the Fargate CLI instead of the bash script, I download the CLI and place it in a separate repository.   
-The result pipeline looks like this:
+For simplicity I decided to ran with the Fargate CLI instead of the bash script, I place the CLI inside Azure Devops on a separate Git repository.   
+This pipeline looks a little more complex, so let me show the end result:
 
 ```yaml
 trigger:
@@ -189,17 +251,19 @@ variables:
   - name: APP_NAME
     value: chat-app
   - name: DOCKERFILE_PATH
-    value: /Chat.WebApi/Dockerfile
+    value: Chat.WebApi/Dockerfile
   - name: AWS_REGION
     value : eu-west-1
-  - name: CLUSTER_ARN
+  - name: FARGATE_CLUSTER_ARN
     value: arn:aws:ecs:$(AWS_REGION):$(AWS_ACCOUNT_ID):cluster/product-dev-cluster
   - name: SERVICE_NAME
     value: chat-app-dev-ecs-svc   
-  - name: DOCKER_REPOSITORY
+  - name: ECR_REPOSITORY
     value: $(AWS_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(APP_NAME)
   - name: FARGATE_CLI_PATH
-    value: /ECSToolset/fargate-cli/linux64
+    value: ECSToolset/fargate-cli/linux64
+  - name: TAG
+    value: $(Build.BuildId)
 
 stages:
 - stage: 'BuildAndPushToECR'
@@ -209,8 +273,8 @@ stages:
     - checkout: self  
     - script: |
         echo Starting docker build
-        echo  docker build -t $(APP_NAME):$(Build.BuildId) -f $(System.DefaultWorkingDirectory)$(DOCKERFILE_PATH) .
-        docker build -t $(APP_NAME):$(Build.BuildId) -f $(System.DefaultWorkingDirectory)$(DOCKERFILE_PATH) .
+        echo  docker build -t $(APP_NAME):$(TAG) -f $(System.DefaultWorkingDirectory)/$(DOCKERFILE_PATH) .
+        docker build -t $(APP_NAME):$(TAG) -f $(System.DefaultWorkingDirectory)/$(DOCKERFILE_PATH) .
       displayName: 'Run docker build'  
    - task: ECRPushImage@1
       displayName:  Push image to ECR
@@ -219,9 +283,9 @@ stages:
         regionName: '$(AWS_REGION)'
         imageSource: 'imagename'
         sourceImageName: '$(APP_NAME)'
-        sourceImageTag: '$(Build.BuildId)'
+        sourceImageTag: '$(TAG)'
         repositoryName: '$(APP_NAME)'
-        pushTag: '$(Build.BuildId)'
+        pushTag: '$(TAG)'
 - stage : 'DeployToECSFargateCluster'
   jobs:
   - job:      
@@ -230,12 +294,14 @@ stages:
       - checkout: self     
       - task: AWSShellScript@1
         inputs:
-          awsCredentials: 'AWS ECR'
-          regionName: 'eu-west-1'
+          awsCredentials: 'AWS Fargate Dev'
+          regionName: '$(AWS_REGION)'
           scriptType: 'inline'
           inlineScript: |
             cd $(System.DefaultWorkingDirectory)/$(FARGATE_CLI_PATH)
-            ./fargate service  deploy $(SERVICE_NAME) --image $(DOCKER_REPOSITORY):$(Build.BuildId) --cluster $(CLUSTER_ARN) --region $(AWS_REGION)
+            ./fargate service deploy $(SERVICE_NAME) --image $(ECR_REPOSITORY):$(TAG) --cluster $(FARGATE_CLUSTER_ARN) --region $(AWS_REGION)
         displayName: 'Update Task Definition'
 
 ```
+
+As I showed you I ended up with 3 pipelines instead of a single pipeline that does everything, for me personally that's more comfortable because these pipelines are going to be maintained by different people, but if you want you can put together these 3 pipelines in a single one. 
