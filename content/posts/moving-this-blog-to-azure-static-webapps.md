@@ -1,36 +1,36 @@
 ---
-title: "Trying Azure Static WebApps. Trying to deploy this blog into an Azure Static Webapp"
-date: 2020-11-22T17:14:40+01:00
-tags: ["azure", "static", "webapps", "github"]
+title: "Testing out Azure Static Web Apps service. Let's try to deploy this blog into an static web app"
+date: 2020-11-24T10:04:40+01:00
+tags: ["azure", "static", "webapps", "github", "action"]
 draft: true
 ---
 
-I been wanted to try Azure Static WebApps for quite some time, so I have thought that instead of using some dummy static page I'm going to try to deploy this blog page.   
+> If you only care about the end result, I upload the final result in this GitHub repository: **[github-link](https://github.com/karlospn/blog-azure-static-webapp)**   
+This repository contains the entire blog source code.   
+In the **_"/infrastructure"_** folder you can find an ARM template that is used to create the static web app.   
+>In the **/.github/workflows** folder you can find a couple of github actions: 
+>   - The **infrastructure.yml** file is a github action that creates the resources on Azure.
+>   - The **app-deployment.yml** file is a gitHub action that deploys the blog.
 
->If you only want to see the end result and not bother reading the post. I upload everything here: **[github-link](https://github.com/karlospn/dotnetramblings_source/tree/feature/static-web-app)**   
-This branch contains a folder called **"infrastructure"**, that's where you can find the ARM template that creates the Azure Static WebApp.  
->And in the **.github** folder you can find both GitHub actions: 
->- The **infrastructure.yml** is a pipeline that creates the resource group, deploys the ARM template and sets the custom domain.
->- The **application.yml** is a pipeline that deploys the blog source code into the WebApp.
 
-
-This blog it's just a bunch of static files, so it should be quite easy to deploy into an Azure Static WebApp.   
+I been wanted to try Azure Static Web Apps for quite some time and I thought that instead of deploying some random static page I'm going to deploy this blog.   
+This blog it's just a bunch of static files, so it should be quite easy to deploy into an Azure Static Web App.   
 Right now it uses **Hugo** as a static site framework and **GitHub Pages** to host it.
 The current workflow looks like this:
 
-<FOTO>
+![current-workflow](/img/hugo-blog-workflow.png)
 
 - A GitHub repository hosts the source code. 
-- When the code is pushed to master a **GitHub Action** builds the source code and pushes the artifact onto another GitHub repository.
-- The second GitHub repository is configured as a GitHub Pages repository and have a custom domain associated.
+- When the code is pushed to master a **github action** builds the source code and pushes the artifact onto another GitHub repository.
+- The second GitHub repository is configured as a github page repository and has a custom domain associated.
 
 As you can see it's a super straight-forward CI/CD process: I write a new post, I push it to master and it gets published. No need for anything more complicated.    
-And I'm hoping to maintain that simplicity when I move it to Azure Static WebApps.
+So I'm hoping to maintain that simplicity when I move it to Azure Static Web App.
 
-I have 3 goals in mind that I want to test with this move to Azure Static WebApps:
-- Goal 1: Use Azure DevOps as my VCS (Version control system).
-- Goal 2: Use an infrastructure-as-code (IaC) approach when creating the resources on Azure.
-- Goal 3: Maintain the CI/CD simplicity that I have right now on GitHub.
+I have 3 main things I want to test:
+- **Goal 1**: Use Azure DevOps as my VCS (Version control system) instead of GitHub.
+- **Goal 2**: Use an infrastructure-as-code (IaC) approach when creating the resources on Azure.
+- **Goal 3**: Maintain the CI/CD simplicity that I have right now on GitHub.
 
 
 ## Goal 1. Moving the blog source code to Azure DevOps
@@ -38,24 +38,21 @@ I have 3 goals in mind that I want to test with this move to Azure Static WebApp
 I would like to move the blog source code from GitHub to Azure DevOps because that's where I'm hosting nowadays all my private projects. But it seems that you can't do that.
 
 - **Azure Static WebApps doesn't support Azure DevOps** nowadays. 
-- It **only support GitHub as a VCS**, you can't use any other version control system like Azure DevOps or GitLab.
+- The **only VCS supported right now is GitHub**, you can't use Azure DevOps or GitLab or any other VCS.
 
-But to be fair Azure Static WebApps it's still on preview and after poking around on the Azure GitHub repository it seems that they are working on supporting Azure DevOps: https://github.com/Azure/static-web-apps/issues/5   
+After poking around a little bit, it seems that they are working on supporting Azure DevOps in a near future: https://github.com/Azure/static-web-apps/issues/5   
 
-So, I guess I'm staying on GitHub for now.
+So, I guess my blog is staying on GitHub for now.
 
 
-## Goal 2. Create the Azure Static WebApps blog using IaC
+## Goal 2. Create the Azure Static Web App blog using IaC
 
-I'm going a little bit fancy here. For a project as simple as this I could create the WebApp directly on the Azure portal, but let's try to follow some good DevOps practices and provision all the resources using IaC.
+For a project as simple as this I could create the web app directly on the Azure portal, but let's try to follow some good DevOps practices and provision all the resources using IaC.
 
-My de facto IaC tool is **Terraform**, but it doesn't support Azure Static WebApps. 
-They're working on it: https://github.com/terraform-providers/terraform-provider-azurerm/pull/7150   
-Pulumi also doesn't support it.   
-So it seems that my best option right now is using **ARM templates**.   
+My de facto tool for IaC is **Terraform**, but it doesn't support Azure Static WebApps right now. It seems that they're also working on it: https://github.com/terraform-providers/terraform-provider-azurerm/pull/7150    
+**Pulumi** also doesn't support it, so it seems that my best option right now is using an **ARM template**.   
 
-Let me show you the final result. That's the ARM template:
-
+Here's the ARM template I have built:
 ```json
 {
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
@@ -120,7 +117,7 @@ Let me show you the final result. That's the ARM template:
     ]
 }
 ```
-And that's the parameters file:
+And I'm also using a parameters file:
 
 ```json
 {
@@ -140,10 +137,10 @@ And that's the parameters file:
             "value": "Free"
         },
         "repositoryUrl": {
-            "value": "https://github.com/karlospn/dotnetramblings_source"
+            "value": "https://github.com/karlospn/blog-azure-static-webapp"
         },
         "branch": {
-            "value": "feature/static-web-app"
+            "value": "master"
         },
         "repositoryToken": {
             "value": "" 
@@ -159,7 +156,7 @@ And that's the parameters file:
         },
         "resourceTags": {
             "value": {
-                "Environment": "Dev",
+                "Environment": "Development",
                 "Project": "personal-blog",
                 "ApplicationName": "mytechramblings-blog"
             }
@@ -167,63 +164,146 @@ And that's the parameters file:
     }
 }
 ```
-The **"repositoryToken"** parameter must contain a GitHub PAT with admin/write access to the repository and the ability to interact with workflows.    
-Right now I'm leaving it empty and I will inject the right value during the CI/CD pipeline.   
-I'm also leaving the **apiLocation** parameter empty, you should include an api location only if your project uses an Azure Function.
 
-I'm pushing these ARM template files into a folder called **"infrastructure"**.
+It's a pretty simple ARM template, there is only a couple of things worth mentioning:
+- The **"repositoryToken"** parameter must contain a GitHub PAT with admin/write access to the repository and the ability to interact with workflows.    
+Right now I'm leaving it as a empty string in the parameters file, and I will inject the correct value during the deployment pipeline.   
+- I'm also leaving the **apiLocation** parameter empty, you only need to include an api location if your project uses an Azure Function.
 
-<FOTO>
 
 ## Goal 3: Building the CI/CD pipeline
 
 Not a big fan of what they have built here, and that's mainly because:
 
-- An entire CI/CD pipeline is automatically created for you with Github Actions when you create your web app.
+- **An entire CI/CD pipeline is automatically created for you when you create your web app.**
   
-It sounds kind of weird to me. After provisioning a new web app if you browse into your github repository you're going to find out that a Github action has been pushed onto it. And also has already ran once.   
-Maybe it can be turned off but I didn't find a way to do it.   
-The bright side about that behaviour is that without doing absolutely nothing you have a working CI/CD pipeline already built on your GitHub repository.   
-The bad thing about that behaviour is that without doing absolutely nothing you have a working CI/CD pipeline already built on your GitHub repository. Why it's a bad thing? Well because I want to build the pipeline myself and do whatever I want..
-After the pipeline has ran once you can delete it or modify it, but I still don't like that approach.
+After provisioning a new web app if you take a look into your github repository you're going to find out that a **github action has been added**. And that action **already ran once**. 
 
-That behaviour trumps my original idea of having a single pipeline that does everything: creates the needed infrastructure on Azure, compiles the blog source code and deploys it.   
-If you try to do it you're going to end up with 2 pipelines that are doing exactly the same: the one that you created and the one that the service has created for you.
+If you only wanted to create the resources on Azure and deploy the app later you're out of luck, the service is going to deploy the code for you. 
+I find that behaviour a little weird, and the worst thing is that I didn't find a way to turn that feature off.   
 
-So instead of having a single pipeline I guess I should build 2 pipelines:
+So without doing absolutely nothing you have a working CI/CD pipeline already built on your GitHub repository. That doesn't sound so bad, right? I don't like it, I want to build the pipeline myself and do whatever I want..
+
+That behaviour trumps my original idea of having a single pipeline that does everything: creates the  infrastructure on Azure, compiles the blog code and finally deploys the artifact into the web app.   
+If you try to do that you're going to end up with 2 pipelines that are doing exactly the same: the one that you created and the one that the service has created for you.
+
+So instead of having a single pipeline I guess I should have two of them:
 
 - The first pipeline will create the infrastructure using the ARM template. It will have a manual trigger.
 
-- And for the second pipeline I'm going to use the pipeline that the services that the service has created automatically for me.
+- For the second pipeline I'm going to use the pipeline that the service has created automatically for me.
 
-To be honest I find that deployment workflow looks a little bit weird:
+The resulting workflow will be something like that:
 
-- First of all I need to run manually the pipeline that will create the resources on Azure. 
-  - That pipeline will create another pipeline that deploys the source code.
-- Now I can use the auto-generated pipeline for later deployments. 
+- There is a manual pipeline that creates the resources on Azure.
+- When the web app  service itself it will create for me another pipeline that I can use to deploy the blog.
+- And from now on I can use the auto-generated pipeline for later deployments. 
 
+Let me show you the github actions:
 
-Those are the end results: 
-
-- Pipeline 1:
+- **This action creates the Azure static web app using an ARM template**
 
 ```yaml
-
+name: Create Azure Static WebApps resources
+on:
+  workflow_dispatch:
+  
+env:
+  resourceGroupName: 'rg-blog-dev-001'
+  resourceGroupRegion: 'westeurope'   
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: azure/login@v1
+      name: Azure Login
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - uses: Azure/cli@v1.0.0
+      name: Create resource Group 
+      with:  
+        inlineScript: |
+          az group create -l ${{ env.resourceGroupRegion }} -n ${{ env.resourceGroupName }}
+    - uses: azure/arm-deploy@v1
+      name: Deploy ARM Template
+      with:
+        subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        resourceGroupName: ${{ env.resourceGroupName }}
+        template: ./infrastructure/azuredeploy.json
+        parameters: ./infrastructure/azuredeploy.parameters.json repositoryToken=${{ secrets.PAT_FOR_AZURE_STATIC_WEBAPPS }}
+        deploymentName: mytechramblings-deployment
 ```
 
-- Pipeline 2:
+
+- **This action builds and deploy the blog**.    
+I did not build this action it was auto-generated and commited on my repository by the service itself.
 
 ```yaml
+name: Azure Static Web Apps CI/CD
 
+on:
+  push:
+    branches:
+      - master
+    paths-ignore: 
+      - '.github/**'
+      - 'infrastructure/**'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - master
+
+jobs:
+  build_and_deploy_job:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Build And Deploy
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v0.0.1-preview
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_PURPLE_FOREST_03D78C803 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
+          action: "upload"
+          ###### Repository/Build Configurations - These values can be configured to match you app requirements. ######
+          # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
+          app_location: "/" # App source code path
+          api_location: "api" # Api source code path - optional
+          output_location: "public" # Built app content directory - optional
+          ###### End of Repository/Build Configurations ######
+
+  close_pull_request_job:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close Pull Request Job
+    steps:
+      - name: Close Pull Request
+        id: closepullrequest
+        uses: Azure/static-web-apps-deploy@v0.0.1-preview
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_PURPLE_FOREST_03D78C803 }}
+          action: "close"
+```
+
+After executing both pipelines the blog is finally up and running on an static web app.
+
+The last step is to add my custom domain in the web app, you can do it either from the Azure portal or using the Azure CLI:
+
+```bash
+az staticwebapp hostname set -n mytechramblings-blog --hostname www.mytechramblings.com
 ```
 
 
 ## Final thoughts
 
-My impressions after tinkering a little bit with Azure Static WebApps is that it's lacking a little bit in the deployment department and in the VCS department.   
+My impressions after tinkering a little bit with Azure Static WebApps is that it's still lacking a little bit in some departments.
 
-I get the impression that the service is trying a little too hard to automate things for me, it's a nice feature that it creates a fully functional CI/CD pipeline for me but I want the ability to turn that behaviour off and use whatever I want to deploy the code.
+I'm getting the impression that the service is trying a little too hard to automate things for me, it's a nice feature that it creates a fully functional CI/CD pipeline for me, but I want the ability to turn that feature off and do whatever I want to deploy the code.   
+Also the support for Azure DevOps is a must. GitHub is great and all, but seems a weird decision to support only GitHub when a huge chunk of .NET shops are using Azure DevOps.
 
-Also I think that support for Azure DevOps is a must. GitHub is great and all, but seems a weird decision to support only GitHub.
-
-Take everything I said here, with a grain of salt. The service it's still in preview so maybe in a couple a months they have fixed all the problems that I have encountered today. 
+At the end of the day take everything I said here with a grain of salt. The service is still in preview, so it could perfectly be that in a couple a months they have fixed everything I have mentioned here.
