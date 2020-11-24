@@ -2,7 +2,7 @@
 title: "Testing out Azure Static Web Apps service. Let's try to deploy this blog into an static web app"
 date: 2020-11-24T10:04:40+01:00
 tags: ["azure", "static", "webapps", "github", "action"]
-draft: true
+draft: false
 ---
 
 > If you only care about the end result, I upload the final result in this GitHub repository: **[github-link](https://github.com/karlospn/blog-azure-static-webapp)**   
