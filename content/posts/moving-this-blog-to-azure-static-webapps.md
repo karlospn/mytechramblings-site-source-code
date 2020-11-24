@@ -13,7 +13,7 @@ In the **_"/infrastructure"_** folder you can find an ARM template that is used 
 >   - The **app-deployment.yml** file is a gitHub action that deploys the blog.
 
 
-I been wanted to try Azure Static Web Apps for quite some time and I thought that instead of deploying some random static page I'm going to deploy this blog.   
+I been wanting to try Azure Static Web Apps for quite some time and I thought that instead of deploying some dummy static site I could use my blog as a test subject.
 This blog it's just a bunch of static files, so it should be quite easy to deploy into an Azure Static Web App.   
 Right now it uses **Hugo** as a static site framework and **GitHub Pages** to host it.
 The current workflow looks like this:
@@ -27,7 +27,7 @@ The current workflow looks like this:
 As you can see it's a super straight-forward CI/CD process: I write a new post, I push it to master and it gets published. No need for anything more complicated.    
 So I'm hoping to maintain that simplicity when I move it to Azure Static Web App.
 
-I have 3 main things I want to test:
+I have 3 things in mind that I want to test:
 - **Goal 1**: Use Azure DevOps as my VCS (Version control system) instead of GitHub.
 - **Goal 2**: Use an infrastructure-as-code (IaC) approach when creating the resources on Azure.
 - **Goal 3**: Maintain the CI/CD simplicity that I have right now on GitHub.
