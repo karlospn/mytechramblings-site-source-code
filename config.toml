@@ -42,8 +42,7 @@ googleAnalytics = "UA-170300931-1"
     minuteReadingTime = "min read"
     dateFormatSingle = "2006-01-02"
     dateFormatList = "2006-01-02"
-    # leave empty to disable, enter display text to enable
-    # lastModDisplay = ""
+    lastModDisplay = "Modified:"
 
     [languages.en.params.logo]
       logoText = "my tech ramblings"
