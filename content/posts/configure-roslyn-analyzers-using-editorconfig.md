@@ -1,45 +1,46 @@
 ---
 title: "How to configure your custom roslyn analyzer using an .editorconfig file"
-date: 2021-01-13T12:59:43+01:00
-tags: ["c#", "csharp", "dotnet", "roslyn", "editorconfig"]
+date: 2021-01-14T12:59:43+01:00
+tags: ["csharp", "dotnet", "roslyn", "editorconfig"]
 draft: true
 ---
 
-# Introduction
-
-Roslyn Analyzers are extensions that analyze source code and report violations. Some analyzers are built-into VS (like the IDE analyzers that report style issues) and some are third party ones which can be installed (like StyleCopyAnalyzers, FxCopAnalyzers, etc.)
+Roslyn Analyzers are extensions that analyze source code and report violations. Some analyzers are built-into VS (like the IDE analyzers that report style issues) and some are third party ones which can be installed (like StyleCopyAnalyzers, FxCopAnalyzers, etc.).   
 
 Analyzers can be configurated using file(s) to allow end users to control the behavior of each analyzer and severity of reported diagnostics. This may be via an editorconfig or a ruleset file or even completely custom format specific to the third party analyzer package.   
 
 IDE analyzers support configuration via .editorconfig for available options and semantics.
-Meanwhile styleCop analyzers do not support editorconfig based configuration, but use their own stylecop.json with their own custom format, that end users can provide in their project for configuration of stylecop analyzers.
+Meanwhile styleCop analyzers do not support EditorConfig based configuration, but use their own stylecop.json with their own custom format, that end users can provide in their project for configuration of stylecop analyzers.
 
-If you have being working with .NET long enough you have probably used FxCop XML Ruleset files to configure the code analysis on a particular project. RuleSets and EditorConfig files can coexist and can both be used to configure analyzers. Both editorConfig files and rule sets let you enable and disable rules and set their severity.   
-However, EditorConfig files offer additional ways to configure rules too:
-- For the .NET code-quality analyzers, EditorConfig files let you define which types of code to analyze.   
-- For the .NET code-style analyzers that are built into Visual Studio, EditorConfig files let you define the preferred code styles for a codebase.   
+If you have been working with .NET long enough you have probably used FxCop XML Ruleset files to configure the code analysis on a particular project, rulesets and editorconfig files can coexist and both can be used to configure analyzers. Both editorconfig files and rulesets let you enable and disable rules and set their severity.   
+However, editorconfig files offer additional ways to configure rules too:
+- For the .NET code-quality analyzers, editorconfig files let you define which types of code to analyze.   
+- For the .NET code-style analyzers editorconfig files let you define the preferred code styles for a codebase.   
 
-> I DON'T pretend to write a deep dive about how a roslyn analyzers works or what's an editorconfig file.   
+> In this post I don't pretend to write a deep dive about how a roslyn analyzers works or what's an editorconfig file. I was just writing some lines about how these two work together, because that's going to be the main focus of this post.
 
-**In this post I want to show you how you can add whatever your want on an Editorconfig file and how a roslyn analyzer can read those values and act accordingly.**
+**In this post I want to show you how you can configure a custom roslyn analyzer using an editorconfig file.**   
+**You can implement different code styles on you analyzer and allow the end-user to decide via editorconfig which code style they want to enforce.**
 
-**That's a really nice cool because you can implement different code styles on you analyzer and allow the end user to decide via editorconfig which code style they want to enforce.**
-
-I'm aware that probably it's not entirely clear what I'm trying to achieve in this post so let me show you a very quick example.
+I'm aware that maybe it's not entirely clear what I'm trying to achieve in this post so let me show you a very quick example.
 
 ## Quick example
 
-The Roslyn rule **IDE0065** is an analyzer built into Visual Studio, specifically it analyzes if a using statement should be inside or outside a namespace based on a configuration attribute.   
+The Roslyn rule **IDE0065** is an analyzer built into Visual Studio, specifically it analyzes if a "using" statement should be inside or outside a namespace based on a configuration attribute.   
 
-This rule can be configure via EditorConfig and you can define your preferred code style. More info here: https://docs.microsoft.com/es-es/dotnet/fundamentals/code-analysis/style-rules/ide0065#csharp_using_directive_placement
+This rule can be configure via editorconfig so you can define your preferred coding style. 
 
-With rule **IDE0065** you can define if a using statement should be inside or outside a namespace
-with the following editorconfig attribute:
+> More info here: https://docs.microsoft.com/es-es/dotnet/fundamentals/code-analysis/style-rules/ide0065#csharp_using_directive_placement
+
+As I said previously with rule **IDE0065** you can enforce if a "using" statement should be inside or outside a namespace with the following editorconfig attribute:
 
 ```yaml
 csharp_using_directive_placement = inside_namespace:error
 csharp_using_directive_placement = outside_namespace:error
 ```
+So if you want to enforce that all your "usings" are always placed inside a namespace you can use the "inside_namespace" value and viceversa.   
+Let me show a practical test.   
+
 - **Example 1**: If we configure the analyzer **IDE0065** via editorconfig like this:
 
 ```yaml
@@ -102,10 +103,11 @@ namespace Convention2
 }
 ```
 
-**In concrete example we're using the "csharp_using_directive_placement" editorconfig attribute to enforce to different code-styles.**  
+**Basically we're using the "csharp_using_directive_placement" editorconfig attribute to enforce our own code-style.**    
 
-And that's **EXACTLY** what I want to talk in this post.   
-Given a roslyn analyzer how we can add support to different code styles using an attribute on the editorconfig file.   
+And that's **EXACTLY** what I want to talk in this post.    
+
+**Given a roslyn analyzer how we can add support for different code styles using an attribute on the editorconfig file.**    
 That's a cool feature to add on your own Roslyn analyzers and it's super easy to do it.    
 To do this we have the **AnalyzerConfigOptionsProvider Roslyn API**
 
@@ -118,8 +120,12 @@ More info. here: https://docs.microsoft.com/en-us/dotnet/api/microsoft.codeanaly
 
 Be aware that this feature is only available on the newer versions of Microsoft.CodeAnalysis nuget package. **If you're using a nuget version below 3.1.0 that feature is not available**.
 
-Let me show you how you can use it.   
-I have built a roslyn analyzer that reports an error if a csharp file contains more than one namespace. Here's the code:
+Let me show you how you can use it.  
+
+
+# Building a Roslyn Analyzer that uses the AnalyzerConfigOptionsProvider API
+
+First of all I have built a roslyn analyzer that reports an error if a csharp file contains more than one namespace. Here's the code:
 
 ```csharp
 using Microsoft.CodeAnalysis;
@@ -173,11 +179,7 @@ namespace MyOwn.Analyzer
                 {
                     if (foundNode)
                     {
-                        var location = GetNameOrIdentifierLocation(node);
-                        if (location != null)
-                        {
-                            context.ReportDiagnostic(Diagnostic.Create(Rule, Location.None));
-                        }
+                        context.ReportDiagnostic(Diagnostic.Create(Rule, Location.None));
                     }
                     else
                     {
@@ -186,40 +188,25 @@ namespace MyOwn.Analyzer
                 }
             }
         }
-
-         internal static Location GetNameOrIdentifierLocation(SyntaxNode member)
-        {
-            Location location = null;
-            location = location ?? (member as PropertyDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as FieldDeclarationSyntax)?.Declaration?.Variables.FirstOrDefault()?.Identifier.GetLocation();
-            location = location ?? (member as MethodDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as ConstructorDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as DestructorDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as BaseTypeDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as NamespaceDeclarationSyntax)?.Name.GetLocation();
-            location = location ?? (member as UsingDirectiveSyntax)?.Name.GetLocation();
-            location = location ?? (member as ExternAliasDirectiveSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as AccessorDeclarationSyntax)?.Keyword.GetLocation();
-            location = location ?? (member as DelegateDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as EventDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as IndexerDeclarationSyntax)?.ThisKeyword.GetLocation();
-            location = location ?? member.GetLocation();
-            return location;
-        }
     }
 }
 ```
+So if you have more than one namespace in a single csharp file that analyzer is going to report an error.   
+But it would be kind of cool if **the end-user was capable of choosing if a csharp file can contain more than one namespace or not**.
 
-Now I want to add editorconfig support. More specifically **I want the end user to be capable of choosing if a csharp file can contains more than one namespace or not.**
+And that's exactly what are we going to build right now, we are going to use a new editorconfig attribute that allows us to choose which behaviour we want to enforce.
 
-On the editorconfig file I wanted to add a line that will look something like this:
+First we need to create a new attribute on the editorconfig.
+
+> Beware that you **NEED** to follow this pattern: dotnet_diagnostic.<RULE_ID>.<ATTRIBUTE_NAME>
+
+I decided that the attribute will be:
 
 ```yaml
 dotnet_diagnostic.MyRules0001.use_multiple_namespaces_in_a_single_file = false
 ```
-Beware that you **NEED** to follow this pattern: dotnet_diagnostic.<RULE_ID>.<ATTRIBUTE>
 
-Here's the code after adding support for multiple namespaces:
+And now I need to add the code on my analyzer that reads this new attribute and acts accordingly. Here's the result: 
 
 ```csharp
 using Microsoft.CodeAnalysis;
@@ -280,14 +267,9 @@ namespace MyOwn.Analyzer
                 {
                     if (foundNode)
                     {
-                        if (configValue.Equals("false", StringComparison.InvariantCultureIgnoreCase))
-                        
+                        if (configValue.Equals("false", StringComparison.InvariantCultureIgnoreCase))                       
                         {
-                            var location = GetNameOrIdentifierLocation(node);
-                            if (location != null)
-                            {
-                                context.ReportDiagnostic(Diagnostic.Create(Rule, Location.None));
-                            }
+                            context.ReportDiagnostic(Diagnostic.Create(Rule, Location.None));
                         }
                     }
                     else
@@ -297,39 +279,20 @@ namespace MyOwn.Analyzer
                 }
             }
         }
-
-         internal static Location GetNameOrIdentifierLocation(SyntaxNode member)
-        {
-            Location location = null;
-            location = location ?? (member as PropertyDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as FieldDeclarationSyntax)?.Declaration?.Variables.FirstOrDefault()?.Identifier.GetLocation();
-            location = location ?? (member as MethodDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as ConstructorDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as DestructorDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as BaseTypeDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as NamespaceDeclarationSyntax)?.Name.GetLocation();
-            location = location ?? (member as UsingDirectiveSyntax)?.Name.GetLocation();
-            location = location ?? (member as ExternAliasDirectiveSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as AccessorDeclarationSyntax)?.Keyword.GetLocation();
-            location = location ?? (member as DelegateDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as EventDeclarationSyntax)?.Identifier.GetLocation();
-            location = location ?? (member as IndexerDeclarationSyntax)?.ThisKeyword.GetLocation();
-            location = location ?? member.GetLocation();
-            return location;
-        }
     }
 }
 ```
-- As you can see it's really easy to implement but let me break down the key aspects:
+- As you can see it's really easy to implement, but let me break down the key aspects:
 
-I start by reading the value from the editorconfig using the AnalyzerConfigOptionsProvider API.
+I begin by reading the value from the editorconfig file using the AnalyzerConfigOptionsProvider API.
 
 ```csharp
 var config = context.Options.AnalyzerConfigOptionsProvider.GetOptions(context.Tree);
 config.TryGetValue("dotnet_diagnostic.MyRules0001.use_multiple_namespaces_in_a_file", out var configValue);
  ```
 
-Also I  implemented a default behaviour. So if the end user do not want to set the value on the editorconfig I assume that we allow to have multiple namespaces in the same csharp file and simply return and don't validate anything.
+ In my case I have implemented a default behaviour, so if the end-user do not set the value on the editorconfig I assume that we can have more than one namespace in the same file.   
+ That's the reason why I'm breaking the code execution in case that the value is null or empty.
 
 ```csharp
 if (string.IsNullOrEmpty(configValue))
@@ -338,20 +301,14 @@ if (string.IsNullOrEmpty(configValue))
 }
  ```
 
-And only report a diagnostic if we have found a previous namespace on the same file and the "use_multiple_namespaces_in_a_file" is set to false
+Only report a diagnostic if we have found more than one namespace on the same file and the "use_multiple_namespaces_in_a_file" value is set to false
 
 ```csharp
-
 if (foundNode)
 {
     if (configValue.Equals("false", StringComparison.InvariantCultureIgnoreCase))
-    
     {
-        var location = GetNameOrIdentifierLocation(node);
-        if (location != null)
-        {
-            context.ReportDiagnostic(Diagnostic.Create(Rule, Location.None));
-        }
+        context.ReportDiagnostic(Diagnostic.Create(Rule, Location.None));
     }
 }
 else
@@ -360,7 +317,79 @@ else
 }
 ```
 
-- As you can see it's really easy to add Editorconfig support for you Roslyn Analyzers and it's a really nice bonus you can use to support multiple code styles without the need to write a lot of boilerplatecode. 
+
+# Testing our analyzer
+
+As a last step let's test the analyzer.
+
+- **Test 1**
+
+I created the following editorconfig file:
+
+```yaml
+root = true
+
+# C# files
+[*.cs]
+
+dotnet_diagnostic.MyRules0001.severity = error
+dotnet_diagnostic.MyRules0001.use_multiple_namespaces_in_a_file = false
+```
+
+Also I have created a new console program that contains my analyzer.    
+The _Program.cs_ file looks like this:
+
+```csharp
+//program.cs
+
+using System;
+
+namespace ConsoleApp3
+{
+    class Program
+    {
+        public static void Main(string[] args)
+        {
+            var stud = new StudentNs.Student();
+            stud.PrintStudentName("Carlos");        
+        }
+    }
+}
+
+
+namespace StudentNs
+{
+    public class Student
+    {
+       public void PrintStudentName(string name)
+       {
+            Console.WriteLine($"Your name is: {name}");
+       }
+    }
+}
+```
+
+As you can see VS shows an error:
+
+![ns-error](/img/roslyn-analyzer-error-ns.png)
+
+
+- **Test 2**
+
+Now if I modify the editorconfig file to look like this:
+
+```yaml
+root = true
+
+# C# files
+[*.cs]
+
+dotnet_diagnostic.MyRules0001.severity = error
+dotnet_diagnostic.MyRules0001.use_multiple_namespaces_in_a_file = true
+```
+And I'm using the same program.cs as the previous test.
+
+Now Visual Studio doesn't show any error, because now we are allowing to use multiple namespaces in a single file.
 
 
 # Useful Resources
