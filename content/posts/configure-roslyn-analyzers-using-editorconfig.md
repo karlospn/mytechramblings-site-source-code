@@ -2,7 +2,7 @@
 title: "How to configure your custom roslyn analyzer using an .editorconfig file"
 date: 2021-01-14T12:59:43+01:00
 tags: ["csharp", "dotnet", "roslyn", "editorconfig"]
-draft: true
+draft: false
 ---
 
 Roslyn Analyzers are extensions that analyze source code and report violations. Some analyzers are built-into VS (like the IDE analyzers that report style issues) and some are third party ones which can be installed (like StyleCopyAnalyzers, FxCopAnalyzers, etc.).   
@@ -15,11 +15,11 @@ Meanwhile styleCop analyzers do not support EditorConfig based configuration, bu
 If you have been working with .NET long enough you have probably used FxCop XML Ruleset files to configure the code analysis on a particular project, rulesets and editorconfig files can coexist and both can be used to configure analyzers. Both editorconfig files and rulesets let you enable and disable rules and set their severity.   
 However, editorconfig files offer additional ways to configure rules too:
 - For the .NET code-quality analyzers, editorconfig files let you define which types of code to analyze.   
-- For the .NET code-style analyzers editorconfig files let you define the preferred code styles for a codebase.   
+- For the .NET code-style analyzers, editorconfig files let you define the preferred code styles for a codebase.   
 
 > In this post I don't pretend to write a deep dive about how a roslyn analyzers works or what's an editorconfig file. I was just writing some lines about how these two work together, because that's going to be the main focus of this post.
 
-**In this post I want to show you how you can configure a custom roslyn analyzer using an editorconfig file.**   
+**In this post I want to show you how you can configure your custom roslyn analyzer using an editorconfig file.**   
 **You can implement different code styles on you analyzer and allow the end-user to decide via editorconfig which code style they want to enforce.**
 
 I'm aware that maybe it's not entirely clear what I'm trying to achieve in this post so let me show you a very quick example.
@@ -103,11 +103,11 @@ namespace Convention2
 }
 ```
 
-**Basically we're using the "csharp_using_directive_placement" editorconfig attribute to enforce our own code-style.**    
+**In this example we're using the "csharp_using_directive_placement" attribute to enforce our own code-style.**    
 
 And that's **EXACTLY** what I want to talk in this post.    
 
-**Given a roslyn analyzer how we can add support for different code styles using an attribute on the editorconfig file.**    
+**Given a roslyn analyzer how we can add support for different code styles using the editorconfig file.**    
 That's a cool feature to add on your own Roslyn analyzers and it's super easy to do it.    
 To do this we have the **AnalyzerConfigOptionsProvider Roslyn API**
 
