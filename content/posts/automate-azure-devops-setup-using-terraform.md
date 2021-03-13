@@ -245,6 +245,15 @@ output "aad_users" {
 
 ```
 
+Let me explain a little bit what we're doing on the module:
+
+- First with the "azure_group" data resource we retrieve the groups from the AAD.
+- After that with the "azuread_user" data resource we  retrieve all the users from each AAD group.
+- Finally with the "azuredevops_user_entitlement" we enroll every AAD user into our AzDo org.
+
+Maybe someone is asking himself: "Why are you not using the Azure DevOps "Group Rules" feature?"    
+It's true that the AzDo "Group Rules" ((https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/assign-access-levels-by-group-membership) allows us to do exactly the same thing we're doing in an easier way, but the answer is pretty simple the provider doesn't support it.
+
 # Step 2 - Create a Team project for each team
 
 - We want to create 2 Team Projects. 
@@ -303,6 +312,7 @@ resource "azuredevops_project" "project-sales" {
 }
 ```
 
+Nothing to explain here is pretty self-explanatory.
 
 # Step 3 - Give permissions
 
