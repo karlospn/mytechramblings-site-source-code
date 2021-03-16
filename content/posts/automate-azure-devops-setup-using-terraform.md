@@ -248,7 +248,7 @@ output "aad_users" {
 
 Let me explain a little bit what we're doing on the module:
 
-- First with the "azure_group" data resource we retrieve the groups from the AAD.
+- First with the "azuread_group" data resource we retrieve the groups from the AAD.
 - After that with the "azuread_user" data resource we  retrieve all the users from each AAD group.
 - Finally with the "azuredevops_user_entitlement" we enroll every AAD user into our AzDo org.
 
@@ -337,7 +337,7 @@ I'm going to built another Terraform module so I can reuse it to add permissions
 The end result looks like this.
 
 - That's the main.tf file.
-- The main.tf is using the "add-aad-users-to-azdo-team-project-sec-group" module to add the permissions for every group in every team project.
+- The main.tf is using the "add-aad-groups-to-azdo-team-project-sec-group" module to add the permissions for every group in every team project.
 
 ```yaml
 terraform {
@@ -368,7 +368,7 @@ provider "azuread" {
 
 ## Add the commercial teams AAD group as contributor on the commercial team project
 module "add-comm-group-to-azdo-sec-group" {
-    source      = "../modules/add-aad-users-to-azdo-team-project-sec-groupp"
+    source      = "../modules/add-aad-groups-to-azdo-team-project-sec-group"
     project_name =  "Commercial Team Project"
     azdo_group_name = "Contributors"
     aad_users_groups = ["it-commercial-team"]
@@ -376,7 +376,7 @@ module "add-comm-group-to-azdo-sec-group" {
 
 ## Add the sales teams AAD group as contributor on the sales team project
 module "add-sales-group-to-azdo-sec-group" {
-    source      = "../modules/add-aad-users-to-azdo-team-project-sec-group"
+    source      = "../modules/add-aad-groups-to-azdo-team-project-sec-group"
     project_name = "Sales Team Project"
     azdo_group_name = "Contributors"
     aad_users_groups = ["it-sales-team"]
@@ -385,7 +385,7 @@ module "add-sales-group-to-azdo-sec-group" {
 
 ## Add the managers AAD group group as readers on the commercial team project
 module "add-manager-group-to-comm-azdo-sec-group" {
-    source      = "../modules/add-aad-users-to-azdo-team-project-sec-groupp"
+    source      = "../modules/add-aad-groups-to-azdo-team-project-sec-group"
     project_name =  "Commercial Team Project"
     azdo_group_name = "Readers"
     aad_users_groups = ["it-managers-team"]
@@ -394,7 +394,7 @@ module "add-manager-group-to-comm-azdo-sec-group" {
 
 ## Add the managers AAD group as readers on the sales team project
 module "add-manager-group-to-sales-azdo-sec-group" {
-    source      = "../modules/add-aad-users-to-azdo-team-project-sec-group"
+    source      = "../modules/add-aad-groups-to-azdo-team-project-sec-group"
     project_name = "Sales Team Project"
     azdo_group_name = "Readers"
     aad_users_groups = ["it-managers-team"]
@@ -406,7 +406,7 @@ module "add-manager-group-to-sales-azdo-sec-group" {
 _For ease the reading, I have compacted all the module files on a single markdown block code_
 
 ```yaml
-#/modules/add-aad-users-to-azdo-team-project-sec-group/variables.tf
+#/modules/add-aad-groups-to-azdo-team-project-sec-group/variables.tf
 variable "project_name" {
     type = string
 }
@@ -421,7 +421,7 @@ variable "aad_users_groups" {
 }
 
 
-#/modules/add-aad-users-to-azdo-team-project-sec-group/main.tf
+#/modules/add-aad-groups-to-azdo-team-project-sec-group/main.tf
 terraform {
   required_providers {
     azuredevops = {
@@ -465,6 +465,13 @@ resource "azuredevops_group_membership" "membership" {
   members = flatten(values(azuredevops_group.azdo_group_linked_to_aad)[*].descriptor)
 }
 ```
+
+Let's also explain a little bit what we're doing in the module:
+
+- With the "azuread_group" data resource we retrieve the groups from the AAD.
+- With the "azuredevops_group" data resource we retrieve the security group.
+- With the "azuredevops_group" we are linking the aad group to the azdo group.
+- Finally with the "azuredevops_group_membership" we're adding the AAD group into the security group.
 
 # Step 4 - Create git repositories and master branch policies
 
@@ -623,6 +630,19 @@ output "repository_id" {
   value = azuredevops_git_repository.repository.id
 }
 ```
+The module needs no explanation, it's really simple.
+
+
+# Next Steps
+
+I could keep adding more and more steps into the scenario, for example I could built another module that creates the service connections to AWS or Azure so we are ready to deploy the apps whenever we want. 
+
+But I think that this post it's a little bit longer than usual so I'm going to stop here.
+
+In the end I'm pretty pleased with the provider. Some resources are still missing but overall it's pretty solid, to be honest it looks better that the Azure AD provider.
+
+Also the provider offers some resources that I haven't tested yet, if after reading this post you're interested in trying it out for yourself, go take a look:
+https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs
 
 
 
