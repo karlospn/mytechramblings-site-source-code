@@ -34,18 +34,19 @@ There are some prerequisites I have done before start building this scenario to 
 
 # Scenario to build
 
+I'm going try to build a more or less "realistic" scenario.    
+So we're going to build the following scenario:
+
 - We have 2 development teams (the commercial dev team and the sales dev team).
 - We have 1 managers team.
 - Those 3 teams have been created as groups on my Azure Active Directory.
 - We want to enroll them on my AzDo organization so they can start working as soon as possible.
+  
 
-So we're going to build the following scenario:
-
-1 - We want to enroll both AAD groups into my AzDo organization and assign all the users from those groups a license.   
-2 - We want to create a Team Project for each team.   
-3 - We want to give permissions to each AAD group so each team can start working on his Team Project.   
-4 - We want to create the git repositories for all the applications that each team are going to develop. Also we want to set the branch policies for the main branch for each repository we're going to create.
-
+1 - We need to enroll those 3 AAD groups into my AzDo organization and assign a license to every member of the group.   
+2 - We need to create a Team Project for each development team. The managers team doesn't need a Team Project.   
+3 - We need to add permissions to each AAD group so each team can start working on his respective Team Project.   
+4 - We need to create the git repositories for all the applications that each team are going to develop. Also for every git repository we create, we want to set some branch policies in the main branch.   
 
 # Step 0 - Setup the Terraform providers
 
@@ -312,15 +313,316 @@ resource "azuredevops_project" "project-sales" {
 }
 ```
 
-Nothing to explain here is pretty self-explanatory.
+Nothing remarkable to explain here, it's pretty self-explanatory.
 
-# Step 3 - Give permissions
+# Step 3 - Add permissions
+
+Let's make a quick recap:
+- On step 1 we have enrolled those 3 AAD groups: it-commercial-team,it-sales-team, it-managers into our AzDo org.
+- On step 2 we have created a team project for the 'it commercial team' and anothere team project for the 'it sales team'.   
+
+Now in step 3 it's time to set the permissions in each team project. We're going to add these permissions:
+
+- In the 'Commercial Team Project' we're going to set the following permissions:
+  - The 'it-commercial-team' AAD group is going to be added into the 'Contributors' security group.
+  - The 'it-managers' AAD group is going to be added into the 'Readers' security group
+
+- In the 'Sales Team Project' we're going to set the following permissions:
+  - The 'it-sales-team' AAD group is going to be added into the 'Contributors' security group.
+  - The 'it-managers' AAD group is going to be added into the 'Readers' security group
+
+
+I'm going to built another Terraform module so I can reuse it to add permissions for each group.
+
+The end result looks like this.
+
+- That's the main.tf file.
+- The main.tf is using the "add-aad-users-to-azdo-team-project-sec-group" module to add the permissions for every group in every team project.
+
+```yaml
+terraform {
+  required_providers {
+    azuredevops = {
+      source = "microsoft/azuredevops"
+      version = ">=0.1.0"
+    }
+
+    azuread = {
+      source = "azuread"
+      version = ">=1.4.0"
+    }
+  }
+}
+
+provider "azuredevops"{
+    org_service_url = var.org_service_url
+    personal_access_token = var.personal_access_token
+}
+
+provider "azuread" {
+    client_id = var.aad_client_id
+    client_secret = var.aad_client_secret
+    tenant_id     = var.aad_tenant_id
+}
+
+
+## Add the commercial teams AAD group as contributor on the commercial team project
+module "add-comm-group-to-azdo-sec-group" {
+    source      = "../modules/add-aad-users-to-azdo-team-project-sec-groupp"
+    project_name =  "Commercial Team Project"
+    azdo_group_name = "Contributors"
+    aad_users_groups = ["it-commercial-team"]
+}
+
+## Add the sales teams AAD group as contributor on the sales team project
+module "add-sales-group-to-azdo-sec-group" {
+    source      = "../modules/add-aad-users-to-azdo-team-project-sec-group"
+    project_name = "Sales Team Project"
+    azdo_group_name = "Contributors"
+    aad_users_groups = ["it-sales-team"]
+}
+
+
+## Add the managers AAD group group as readers on the commercial team project
+module "add-manager-group-to-comm-azdo-sec-group" {
+    source      = "../modules/add-aad-users-to-azdo-team-project-sec-groupp"
+    project_name =  "Commercial Team Project"
+    azdo_group_name = "Readers"
+    aad_users_groups = ["it-managers-team"]
+}
+
+
+## Add the managers AAD group as readers on the sales team project
+module "add-manager-group-to-sales-azdo-sec-group" {
+    source      = "../modules/add-aad-users-to-azdo-team-project-sec-group"
+    project_name = "Sales Team Project"
+    azdo_group_name = "Readers"
+    aad_users_groups = ["it-managers-team"]
+}
+
+```
+- And the module files:
+
+_For ease the reading, I have compacted all the module files on a single markdown block code_
+
+```yaml
+#/modules/add-aad-users-to-azdo-team-project-sec-group/variables.tf
+variable "project_name" {
+    type = string
+}
+
+variable "azdo_group_name" {
+    type = string
+}
+
+variable "aad_users_groups" {
+    type = list(string)
+    default = []
+}
+
+
+#/modules/add-aad-users-to-azdo-team-project-sec-group/main.tf
+terraform {
+  required_providers {
+    azuredevops = {
+      source = "microsoft/azuredevops"
+      version = ">=0.1.0"
+    }
+    
+    azuread = {
+      source = "azuread"
+      version = ">=1.4.0"
+    }
+  }
+}
+
+## Get project info
+data "azuredevops_project" "project" {
+  name = var.project_name
+}
+
+## Get group info from azure ad
+data "azuread_group" "aad_group" {
+  for_each  = toset(var.aad_users_groups)
+  display_name     = each.value
+}
+
+## Get group info from AzDo
+data "azuredevops_group" "azdo_group" {
+  project_id = data.azuredevops_project.project.id
+  name       = var.azdo_group_name
+}
+
+## Link the aad group to an azdo group
+resource "azuredevops_group" "azdo_group_linked_to_aad" {
+  for_each  = toset(var.aad_users_groups)
+  origin_id = data.azuread_group.aad_group[each.key].object_id
+}
+
+## Add membership
+resource "azuredevops_group_membership" "membership" {
+  group = data.azuredevops_group.azdo_group.descriptor
+  members = flatten(values(azuredevops_group.azdo_group_linked_to_aad)[*].descriptor)
+}
+```
 
 # Step 4 - Create git repositories and master branch policies
 
+In the step 4 we're going to create the git repositories for all the applications that each team are going to develop.   
+Also for every git repository we create, we want to set some branch policies in the main branch.   
 
 
+We're going to create the following git repositories:
 
+- In the Commercial Team Project we're going to create:
+  - A git repository for a webapi + some branch policies on the main branch
+  - A git repository for a SPA + some branch policies on the main branch
+
+- In the 'Sales Team Project we're going to create:
+  - A git repository for a WebAPI + some branch policies on the main branch
+
+I'm going to built another Terraform module so I can reuse it when creating the different git repositories.   
+
+The end result looks like this.
+
+- That's the main.tf file.
+- The main.tf is using the "create-repository-and-branch-policies" Terraform module to add create the git repositories and the branch policies.
+
+```yaml
+terraform {
+  required_providers {
+    azuredevops = {
+      source = "microsoft/azuredevops"
+      version = ">=0.1.0"
+    }
+  }
+}
+
+provider "azuredevops"{
+    org_service_url = var.org_service_url
+    personal_access_token = var.personal_access_token
+}
+
+provider "azuread" {
+    client_id = var.aad_client_id
+    client_secret = var.aad_client_secret
+    tenant_id     = var.aad_tenant_id
+}
+
+locals {
+  comm_prj_name = "Commercial Team Project"
+  sales_prj_name = "Sales Team Project"
+}
+
+## Create repository for commercial team apps
+## Create repository for commercial team api
+module "create-repository-and-policies-for-commercial-team-api" {
+    source      = "../modules/create-repository-and-branch-policies"
+    project_name = local.comm_prj_name
+    repository_name = "comm-api"
+}
+
+## Create repository for commercial team ui
+module "create-repository-and-policies-for-commercial-team-ui" {
+    source      = "../modules/create-repository-and-branch-policies"
+    project_name = local.comm_prj_name
+    repository_name = "comm-ui"
+}
+
+## Create repository for sales team apps
+## Create repository for sales team ui
+module "create-repository-and-policies-for-sales-team-api" {
+    source      = "../modules/create-repository-and-branch-policies"
+    project_name = local.sales_prj_name
+    repository_name = "sales-api"
+}
+```
+- And the module source code:
+  
+_For ease the reading, I have compacted all the module files on a single markdown block code_
+```yaml
+#/modules/create-repository-and-branch-policies/variables.tf
+variable "project_name" {
+    type = string
+}
+
+variable "repository_name" {
+    type = string
+}
+
+
+#/modules/create-repository-and-branch-policies/main.tf
+terraform {
+  required_providers {
+    azuredevops = {
+      source = "microsoft/azuredevops"
+      version = ">=0.1.0"
+    }
+  }
+}
+
+
+## Get project info
+data "azuredevops_project" "project" {
+  name = var.project_name
+}
+
+
+## Create Git Repository
+resource "azuredevops_git_repository" "repository" {
+  project_id = data.azuredevops_project.project.id
+  name       =  var.repository_name
+  initialization {
+    init_type = "Clean"
+  }
+}
+
+
+## Start Branch permission block
+resource "azuredevops_branch_policy_min_reviewers" "policy-min-reviewers" {
+  project_id = data.azuredevops_project.project.id
+
+  enabled  = true
+  blocking = true
+
+  settings {
+    reviewer_count     = 1
+    submitter_can_vote = false
+    last_pusher_cannot_approve = true
+    allow_completion_with_rejects_or_waits = false
+    on_push_reset_approved_votes = true
+
+    scope {
+      repository_id  = azuredevops_git_repository.repository.id               
+      repository_ref = azuredevops_git_repository.repository.default_branch
+      match_type     = "Exact"
+    }
+  }
+}
+
+resource "azuredevops_branch_policy_comment_resolution" "policy-comment-resolution" {
+  project_id = data.azuredevops_project.project.id
+
+  enabled  = true
+  blocking = true
+
+  settings {
+
+     scope {
+      repository_id  = azuredevops_git_repository.repository.id               
+      repository_ref = azuredevops_git_repository.repository.default_branch
+      match_type     = "Exact"
+    }
+  }
+}
+
+## End Branch permission block
+
+#/modules/create-repository-and-branch-policies/outputs.tf
+output "repository_id" {
+  value = azuredevops_git_repository.repository.id
+}
+```
 
 
 
