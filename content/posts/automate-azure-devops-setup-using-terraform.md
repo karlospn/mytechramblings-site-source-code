@@ -5,57 +5,53 @@ tags: ["azure", "devops", "terraform", "aad"]
 draft: true
 ---
 
-> **Give me the code**   
-> If you don't care about my writings, I have upload the source code on my Github:    
-> https://github.com/karlospn/provisioning-an-azdo-org-with-terraform
+> **Show me the code**   
+> If you don't care about my writings, I have upload the code on my [Github](https://github.com/karlospn/provisioning-an-azdo-org-with-terraform)
+
+On today's post **I want to try the Azure DevOps Terraform provider for automating the setup of an Azure DevOps organization**.   
 
 
-These past few days I have been tinkering with the Azure DevOps provider for Terraform and I was pleasant surprised with it.    
-So on **today's post I want to try to use it for automating the setup of an Azure DevOps organization**.   
-
-
-> You might also be interested in these post I wrote a few months ago about automating the app registration process using the Terraform Azure Active Directory provider: 
+> You might also be interested in these post I wrote a few months ago about automating the AAD App Registration process using the Terraform Azure Active Directory provider: 
 > https://www.mytechramblings.com/posts/automate-azure-ad-app-registration-using-terraform/
 
 
 # Prerequisites
 
-There are some prerequisites I have done before start building this scenario to speed things up. The prerequisites are the following ones:
+There are some prerequisites I have done beforehand to try to to speed things up. The prerequisites are the following ones:
 
 - I have created an AzDo organization.
 - I have an existing Azure Active Directory, and I have populated it with some users and groups.
-  - This prerequisite is key because we're not going to create new users on my AzDo organization. We're going to use the existing AAD groups and enrolls the users from those groups into our AzDo organization.
-  - Using the users from AAD it's a more realistic scenario than creating some new users directly on AzDo.
+  - This prerequisite is key because we're not going to create new users on my AzDo organization. We're going to use the existing AAD groups and enroll the users from those groups into our AzDo organization.
+  - I think that using the users from AAD instead of creating some new user directly on AzDo it's a more interesting and realistic scenario.
 - I have connected my Azure DevOps organization into the AAD directory.
 
 ![azdo-connect-aad](/img/azdo-connect-aad.png)
 
-  
 
 # Scenario to build
 
-I'm going try to build a more or less "realistic" scenario.    
-So we're going to build the following scenario:
+Let's define what I'm going try to build. We're going to implement the following scenario:
 
-- We have 2 development teams (the commercial dev team and the sales dev team).
-- We have 1 managers team.
-- Those 3 teams have been created as groups on my Azure Active Directory.
-- We want to enroll them on my AzDo organization so they can start working as soon as possible.
+- I have **2 development teams** (the **commercial dev team** and the **sales dev team**) and I want enroll them on my AzDo organization so they can start working as soon as possible.
+- I also have a **managers team** and I want to enroll it into my AzDo, but **the managers doesn't need the same permissions as the developers**. 
+- **Those 3 teams have been created as groups on my Azure Active Directory**.
+
+I think I can summarize those 3 requirements in these 4 steps.
   
-
-1 - We need to enroll those 3 AAD groups into my AzDo organization and assign a license to every member of the group.   
-2 - We need to create a Team Project for each development team. The managers team doesn't need a Team Project.   
-3 - We need to add permissions to each AAD group so each team can start working on his respective Team Project.   
-4 - We need to create the git repositories for all the applications that each team are going to develop. Also for every git repository we create, we want to set some branch policies in the main branch.   
+_**Step 1**_ - We need to **enroll those 3 AAD groups into my AzDo organization** and **assign a license to every member of the group**.   
+_**Step 2**_ - We need to **create a Team Project for each development team**. The managers team doesn't need a Team Project.   
+_**Step 3**_ - We need to **give permissions to each AAD group** so each team development can start working on his respective Team Project.      
+_**Step 4**_ -  We need to **create the git repositories for all the applications** that each team are going to develop. Also **for every git repository we want to set some branch policies in the main branch**.   
 
 # Step 0 - Setup the Terraform providers
 
+Before start building those 4 step, let me show you how you can setup the Terraform provider.
 
 ## 1. Azure DevOps Terraform provider
 
 The Azure DevOps provider only supports a PAT (personal access token) for authenticating to Azure DevOps.   
 
->More info about it here: https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs/guides/authenticating_using_the_personal_access_token
+>More info about it [HERE](https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs/guides/authenticating_using_the_personal_access_token)
 
 So I guess I'm going to create PAT on my AzDo org.
 
@@ -71,18 +67,15 @@ provider "azuredevops"{
 }
 ```
 
-**You don't want to hardcode the PAT on the Terraform file.**    
-Use variables or variables files or Terragrunt or whatever you want, but do not hardcode the PAT creds in here.   
+_**You don't want to hardcode the PAT on the Terraform file.** Use variables, use variables files, use Terragrunt or use whatever you like the most but do not hardcode any kind of creds in here._   
 
 ## 2. Azure Active Directory Terraform provider
 
 I'm going to need to use the Azure AD Terraform provider, but why? 
-- The AzDo provider cannot access the AAD to retrieve the AAD groups.
-
-So I'm going to use this provider to retrieve the AAD groups info and use the output with the AzDo provider.   
+- The AzDo provider cannot access the AAD to retrieve the AAD groups, so 'm going to use the AAD provider to retrieve the groups info and feed that info into the AzDo provider.   
 
 To authenticate against my AAD I'm going to register a new App on my AAD with some Graph permissions and create a Service Principal with a client secret .   
-> If you want to read more about what you need, you can go here: https://www.terraform.io/docs/providers/azuread/guides/service_principal_client_secret.html
+> If you want to read more about what you need, you can go [HERE](https://www.terraform.io/docs/providers/azuread/guides/service_principal_client_secret.html)
 
 
 The provider configuration will look like this:
@@ -94,10 +87,6 @@ provider "azuread" {
 }
 ```
 
-**You don't want to hardcode the client secret on the Terraform file.**    
-Use variables or variables files or Terragrunt or whatever you want, but do not hardcode the PAT creds in here.
-
-
 # Step 1 - Enroll the AAD groups into my AzDo org
 
 We have 3 groups on my Azure Active Directory Team.
@@ -105,27 +94,23 @@ We have 3 groups on my Azure Active Directory Team.
   - it-sales-team: These group contains the developers for the sales team.
   - it-managers: These group contains the bosses from both teams.
 
-And each group contains some AAD users.
+![aad-azdo-groups](/img/aad-azdo-groups.png)
 
-That's the look of the 3 teams on my AAD this:
+And each group contains some AAD users. Here's a quick peek at how a group looks like on my AAD:
 
-<ADD FOTO HERE>
-
-And as you can see every team as some user. For example if we take a look at the it-commercial-team, we can see:
-
-<ADD FOTO HERE>
+![aad-azdo-group-members](/img/aad-azdo-group-members.png)
 
  We want to enroll those 3 AAD groups into my AzDo organization and assign all the users from those groups a license. 
- - I'm going to assign a "Basic" license to the commercial and the sales team.
- - I'm going to assign a "Stakeholder" license to the managers team.
+ - I'm going to **assign a "Basic" license** to each user **from the commercial dev team and the sales dev team**.
+ - I'm going to **assign a "Stakeholder" license** to every user **from the managers team.**
 
 
-Instead of creating a single Terraform file with the enrollment of these 3 groups, I'm going to built a Terraform module so I can reuse it to enroll each team. 
+**Instead of creating a single Terraform file** with the enrollment of these 3 groups, I'm going to **built a Terraform module so I can reuse it to enroll each team**. 
 
 The end result looks like this.
 
 - That's the main.tf file.
-- The main.tf is using the "add-entitlement-to-group-users" module to enroll the users.
+- The main.tf is using a Terraform module called _"add-entitlement-to-group-users"_ to enroll the users.
 
 ```yaml
 terraform {
@@ -175,7 +160,7 @@ module "add-entitlement-to-managers-team-group-users" {
 }
 
 ```
-- And those are the module files(variables.tf, output.tf and main.tf)
+- And now let's take a look at the module
 
 _For ease the reading, I have compacted all the module files on a single markdown block code_
 
@@ -248,9 +233,9 @@ output "aad_users" {
 
 Let me explain a little bit what we're doing on the module:
 
-- First with the "azuread_group" data resource we retrieve the groups from the AAD.
-- After that with the "azuread_user" data resource we  retrieve all the users from each AAD group.
-- Finally with the "azuredevops_user_entitlement" we enroll every AAD user into our AzDo org.
+- First of all with the _"azuread_group" data resource_ we retrieve the groups from the AAD.
+- After that using the _"azuread_user" data resource_ we retrieve all the users from each AAD group.
+- And finally with the _"azuredevops_user_entitlement" resource_ we enroll every AAD user into our AzDo org.
 
 Maybe someone is asking himself: "Why are you not using the Azure DevOps "Group Rules" feature?"    
 It's true that the AzDo "Group Rules" ((https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/assign-access-levels-by-group-membership) allows us to do exactly the same thing we're doing in an easier way, but the answer is pretty simple the provider doesn't support it.
@@ -639,9 +624,10 @@ I could keep adding more and more steps into the scenario, for example I could b
 
 But I think that this post it's a little bit longer than usual so I'm going to stop here.
 
-In the end I'm pretty pleased with the provider. Some resources are still missing but overall it's pretty solid, to be honest it looks better that the Azure AD provider.
+I have built the scenario that I envisioned at the start of the post with very few hiccups.   
+It's true that some resources are still missing but overall it looks like a pretty solid provider.   
 
-Also the provider offers some resources that I haven't tested yet, if after reading this post you're interested in trying it out for yourself, go take a look:
+Also the provider offers some resources that I haven't tested yet, so if you're interested in trying it out for yourself, go take a look:
 https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs
 
 
