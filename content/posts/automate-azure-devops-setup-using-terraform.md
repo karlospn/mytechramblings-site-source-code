@@ -2,7 +2,7 @@
 title: "Trying to setup an Azure DevOps organization using Terraform"
 date: 2021-03-18T10:00:02+01:00
 tags: ["azure", "devops", "terraform", "aad"]
-draft: true
+draft: false
 ---
 
 > **Show me the code**   
