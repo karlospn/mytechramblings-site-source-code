@@ -1,5 +1,5 @@
 ---
-title: "Testing out Azure Static Web Apps service. Let's try to deploy this blog into an static web app"
+title: "Testing out the Azure Static Web Apps service. Let's try to deploy this blog into an static web app"
 date: 2020-11-24T10:04:40+01:00
 tags: ["azure", "static", "webapps", "github", "action"]
 draft: false
