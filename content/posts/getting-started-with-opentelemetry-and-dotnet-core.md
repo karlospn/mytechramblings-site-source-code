@@ -106,7 +106,7 @@ Here's the diagram:
 
 
 - **App1.WebApi** is a **NET5 Web API** with 2 endpoints:
-    - **/http** endpoint : makes an HTTP call to App2 _"dummy"_ endpoint.
+    - **/http** endpoint : makes an HTTP request to the App2 _"dummy"_ endpoint.
     - **/publish-message** endpoint : publishes a message into a RabbitMq queue named _"sample"_.
     
 - **App2.WebApi** is a **NET5 Web API** with 2 endpoints
@@ -124,7 +124,7 @@ Those apps are not using OpenTelemetry right now, so in the next sections we're 
 
 # OpenTelemetry .NET Client
 
-To get started with OpenTelemetry we're going to install the following packages.
+To get started with OpenTelemetry we're going to need the following packages.
 
 ```xml
 <PackageReference Include="OpenTelemetry" Version="1.1.0-beta1" />
@@ -137,24 +137,352 @@ To get started with OpenTelemetry we're going to install the following packages.
 ```
 
 - The _**OpenTelemetry**_ package is the core library.
-- The _**OpenTelemetry.Exporter.Jaeger**_ package allows us to export the traces from the application to Jaeger.
-- The _**OpenTelemetry.Extensions.Hosting**_ package contains some _"Startup"_ extensions that allows us to register OpenTelemetry into the application DI container.
+- The _**OpenTelemetry.Exporter.Jaeger**_ package allows us to export the traces to Jaeger.
+- The _**OpenTelemetry.Extensions.Hosting**_ package contains some extensions that allows us to register the dependencies into the DI container and setup the Hosting.
 - The _**OpenTelemetry.Instrumentation.***_ packages are instrumentation libraries for third parties libraries.   
 These packages are instrumenting common libraries/functionalities/classes so we don't have to do all the heavy lifting by ourselves.   
 In our case we're using the following ones:
   - The _**OpenTelemetry.Instrumentation.AspNetCore**_ instruments ASP.NET Core and collect telemetry about incoming web requests. This instrumentation also collects incoming gRPC requests using Grpc.AspNetCore.
-  - The _**OpenTelemetry.Instrumentation.Http**_ instruments System.Net.Http.HttpClient and System.Net.HttpWebRequest and collects telemetry about outgoing HTTP requests. 
-  - The _**OpenTelemetry.Instrumentation.SqlClient**_ instruments Microsoft.Data.SqlClient and System.Data.SqlClient and collects telemetry about database operations.
-  - The _**OpenTelemetry.Instrumentation.StackExchangeRedis**_ instruments StackExchange.Redis and collects telemetry about outgoing calls to Redis.
+  - The _**OpenTelemetry.Instrumentation.Http**_ instruments System.Net.Http.HttpClient and System.Net.HttpWebRequest types and collects telemetry about outgoing HTTP requests. 
+  - The _**OpenTelemetry.Instrumentation.SqlClient**_ instruments Microsoft.Data.SqlClient and System.Data.SqlClient types and collects telemetry about database operations.
+  - The _**OpenTelemetry.Instrumentation.StackExchangeRedis**_ instruments StackExchange.Redis types and collects telemetry about outgoing calls to Redis.
+
+In the near future I expect to see more a more instrumentation libraries like these ones, so we can instrument the most common functionalities with no effort at all, just install a nuget, add  some config lines in the Startup and you're good to go.
 
 
-## Install and run OpenTelemetry on the App1
+## Adding OpenTelemetry on App1
+
+1- Setup the OpenTelemetry library.
+
+```csharp
+services.AddOpenTelemetryTracing((sp, builder) =>
+{
+    builder.AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddSource(nameof(PublishMessageController))
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))
+        .AddJaegerExporter(opts =>
+        {
+            opts.AgentHost = Configuration["Jaeger:AgentHost"];
+            opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
+        });
+});
+```
+Let me explain what we're doing line by line
+
+```csharp
+AddAspNetCoreInstrumentation()
+```
+Enables NET Core instrumentation.
+
+```csharp
+AddHttpClientInstrumentation()
+```
+Enable HTTP Instrumentation.    
+The Api 1 makes an HTTP request to the App2, if we want instrument the call between these 2 apps we can do it simply by adding this extension method and that's it.
+
+```csharp
+.AddSource(nameof(PublishMessageController))
+```
+The AddSource method can be used to add a ActivitySource to the provider. Multiple AddSource can be called to add more than one span.
+
+Why we need this? The Api 1 queues a message into a rabbit queue and we want to record this trace.   
+In the former paragraph we have seen that for HTTP requests the OpenTelemetry team has built-in instrumentation via method extension. That is not the case for the RabbitMQ dependency. In order to continue the distributed transaction, we must create a new Activity.
 
 
-## Install and run OpenTelemetry on the App2
+```csharp
+SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))
+```
+A Resource is the immutable representation of the entity producing the telemetry. 
+With the SetResourceBuilder method we're setting the ResourceBuilder on the provider a giving it a name.
+
+```csharp
+AddJaegerExporter(opts =>
+{
+    opts.AgentHost = Configuration["Jaeger:AgentHost"];
+    opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
+});
+```
+The method sets Jaeger as the exporter where all the traces are going to be sent.
+
+2-  Unlike the HTTP request, OpenTelemetry does not yet have support for automatic RabbitMq trace correlation.
+
+The code below demonstrates how the publish operation trace can be created. It adds the trace information to the enqueued message header, which will later be used to link both operations.
+
+We are using a Propagator to inject the activity into the message header and the consumer app will use another Propagator to extract the Activity and link the producer activity with the consumer activity.
+
+We are also using the Tags attribute to store relevant metadata into the Activity.
+
+```csharp
+[ApiController]
+[Route("publish-message")]
+public class PublishMessageController : ControllerBase
+{
+    private static readonly ActivitySource Activity = new(nameof(PublishMessageController));
+    private static readonly TextMapPropagator Propagator = Propagators.DefaultTextMapPropagator;
+
+    private readonly ILogger<PublishMessageController> _logger;
+    private readonly IConfiguration _configuration;
+
+    public PublishMessageController(
+        ILogger<PublishMessageController> logger,
+        IConfiguration configuration)
+    {
+        _logger = logger;
+        _configuration = configuration;
+    }
+
+    [HttpGet]
+    public void Get()
+    {
+        try
+        {
+            using (var activity = Activity.StartActivity("RabbitMq Publish", ActivityKind.Producer))
+            {
+                var factory = new ConnectionFactory { HostName = _configuration["RabbitMq:Host"] };
+                using (var connection = factory.CreateConnection())
+                using (var channel = connection.CreateModel())
+                {
+                    var props = channel.CreateBasicProperties();
+
+                    AddActivityToHeader(activity, props);
+
+                    channel.QueueDeclare(queue: "sample",
+                        durable: false,
+                        exclusive: false,
+                        autoDelete: false,
+                        arguments: null);
+
+                    var body = Encoding.UTF8.GetBytes("I am app1");
+
+                    channel.BasicPublish(exchange: "",
+                        routingKey: "sample",
+                        basicProperties: props,
+                        body: body);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError("Error trying to publish a message", e);
+            throw;
+        }
+    }
+
+    private void AddActivityToHeader(Activity activity, IBasicProperties props)
+    {
+        Propagator.Inject(new PropagationContext(activity.Context, Baggage.Current), props, InjectContextIntoHeader);
+        activity?.SetTag("messaging.system", "rabbitmq");
+        activity?.SetTag("messaging.destination_kind", "queue");
+        activity?.SetTag("messaging.rabbitmq.queue", "sample");
+    }
+
+    private void InjectContextIntoHeader(IBasicProperties props, string key, string value)
+    {
+        try
+        {
+            props.Headers ??= new Dictionary<string, object>();
+            props.Headers[key] = value;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to inject trace context.");
+        }
+    }
+}
+
+```
 
 
-## Install and run OpenTelemetry on the App3
+## Adding OpenTelemetry on App2
+
+1- Setup the OpenTelemetry library.
+
+```csharp
+ services.AddOpenTelemetryTracing((sp, builder) =>
+{
+    builder.AddAspNetCoreInstrumentation()
+        .AddSource(nameof(RabbitRepository))
+        .AddSqlClientInstrumentation()
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App2"))
+        .AddJaegerExporter(opts =>
+        {
+            opts.AgentHost = Configuration["Jaeger:AgentHost"];
+            opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
+        });
+});
+```
+
+As you can see the setup is almost identical. There are only a couple of things worth mentioning:
+
+```csharp
+AddSqlClientInstrumentation()
+```
+This app is not making any HTTP request instead of that is querying a database, so we're using this extension method to enable SQL instrumentation.
+We're simply swapping the "OpenTelemetry.Instrumentation.Http" library for the "OpenTelemetry.Instrumentation.SqlClient" library.
+
+```csharp
+.AddSource(nameof(RabbitRepository))
+```
+The AddSource method can be used to add a ActivitySource to the provider. Multiple AddSource can be called to add more than one Activity.
+
+Why we need this? The Api 2 also queues a message into another rabbit queue and we want to record this trace. 
+The code is exactly the same as the previous code snippet: Create a new activity, use a propagator to add the activity into the message headers and publish the message.
+
+## Adding OpenTelemetry on App3
+
+1 - Setup the OpenTelemetry library
+
+This one is a tiny bit different.   
+The app3 is a console app so we have to setup the library in a different way, so instead of using an IServiceCollection extension we're creating the TraceProvider. But apart from that everything else looks pretty much the same
+
+```csharp
+ Sdk.CreateTracerProviderBuilder()
+    .AddHttpClientInstrumentation()
+    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App3"))
+    .AddSource(nameof(Program))
+    .AddJaegerExporter(opts =>
+    {
+        opts.AgentHost = _configuration["Jaeger:AgentHost"];
+        opts.AgentPort = Convert.ToInt32(_configuration["Jaeger:AgentPort"]);
+    })
+    .Build();
+```
+
+2 - Instrument dependency calls.
+
+- The HTTP call is instrument automatically using the AddHttpClientInstrumentation extension method.
+- This app also dequeues a message from Rabbit. The code is pretty much exactly the same as the Rabbit producer but instead of injecting the activity we have to extract it from the message header.
 
 
-## Install and run OpenTelemetry on the App4
+```csharp
+private static async Task ProcessMessage(BasicDeliverEventArgs ea,
+            HttpClient httpClient,
+            IModel rabbitMqChannel)
+{
+    try
+    {
+      //Extract the activity and set it into the current one
+      var parentContext = Propagator.Extract(default, ea.BasicProperties, ExtractTraceContextFromBasicProperties);
+      Baggage.Current = parentContext.Baggage;
+
+      //Start a new Activity
+      using (var activity = Activity.StartActivity("Process Message", ActivityKind.Consumer, parentContext.ActivityContext))
+      {
+
+          var body = ea.Body.ToArray();
+          var message = Encoding.UTF8.GetString(body);
+
+          //Add Tags to the Activity
+          AddActivityTags(activity);
+
+          _logger.LogInformation("Message Received: " + message);
+
+          _ = await httpClient.PostAsync("/sql-to-event",
+              new StringContent(JsonSerializer.Serialize(message),
+                  Encoding.UTF8,
+                  "application/json"));
+
+          rabbitMqChannel.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
+      }
+
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"There was an error processing the message: {ex} ");
+    }
+}
+
+//Extract the Activity from the message header
+private static IEnumerable<string> ExtractTraceContextFromBasicProperties(IBasicProperties props, string key)
+{
+    try
+    {
+        if (props.Headers.TryGetValue(key, out var value))
+        {
+            var bytes = value as byte[];
+            return new[] { Encoding.UTF8.GetString(bytes) };
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Failed to extract trace context: {ex}");
+    }
+
+    return Enumerable.Empty<string>();
+}
+
+//Add Tags to the Activity
+private static void AddActivityTags(Activity activity)
+{
+    activity?.SetTag("messaging.system", "rabbitmq");
+    activity?.SetTag("messaging.destination_kind", "queue");
+    activity?.SetTag("messaging.rabbitmq.queue", "sample");
+}
+```
+
+## Adding OpenTelemetry on App4
+
+1 - Setup the OpenTelemetry library
+
+```csharp
+ services.AddOpenTelemetryTracing((sp, builder) =>
+{
+    IConfiguration config = sp.GetRequiredService<IConfiguration>();
+    RedisCache cache = (RedisCache)sp.GetRequiredService<IDistributedCache>();
+    builder.AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRedisInstrumentation(cache.GetConnectionAsync())
+        .AddSource(nameof(Worker))
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App4"))
+        .AddJaegerExporter(opts =>
+        {
+            opts.AgentHost = config["Jaeger:AgentHost"];
+            opts.AgentPort = Convert.ToInt32(config["Jaeger:AgentPort"]);
+        });
+});
+```
+This app dequeues a message from a RabbitMq queue and stores the message content into a Redis cache database and also.
+
+The instrumentation part for dequeuing the message from RabbitMq looks exactly the same as the snippet I have put on the App3 section.
+
+The instrumentation for Redis is a little more problematic, the issue is that the
+AddRedisInstrumentation extension method needs the instance of the ConnectionMultiplexer.
+If you're using an IDistributedCache interface and the AddStackExchangeRedisCache to setup the RedisCache class the ConnectionMultiplexer is not publicly accesible.
+
+
+```csharp
+services.AddStackExchangeRedisCache(options =>
+{
+    var connString =
+        $"{hostContext.Configuration["Redis:Host"]}:{hostContext.Configuration["Redis:Port"]}";
+
+    options.Configuration = connString ;
+});
+```
+
+So we have to do some Reflection to obtain it and pass it into the AddRedisInstrumentationMethod:
+
+```csharp
+public static class RedisCacheExtensions
+{
+
+    public static ConnectionMultiplexer GetConnectionAsync(this RedisCache cache)
+    {
+        //ensure connection is established
+        typeof(RedisCache).InvokeMember("Connect", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.InvokeMethod, null, cache, new object[] { });
+
+        //get connection multiplexer
+        var fi = typeof(RedisCache).GetField("_connection", BindingFlags.Instance | BindingFlags.NonPublic);
+        var connection = (ConnectionMultiplexer)fi.GetValue(cache);
+        return connection;
+    }
+}
+```
+
+
+
+
+
+
+
