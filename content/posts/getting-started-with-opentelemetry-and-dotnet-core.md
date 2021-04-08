@@ -1,8 +1,8 @@
 ---
 title: "Getting started with OpenTelemetry and distributed tracing in .NET Core"
-date: 2021-04-04T22:31:51+02:00
+date: 2021-04-08T10:11:51+02:00
 tags: ["opentelemetry", "tracing", "jaeger", "dotnet", "csharp"]
-draft: true
+draft: false
 ---
 
 > **Show me the code**   
@@ -26,7 +26,7 @@ This means that users can instrument their applications/libraries to emit OpenTe
 To create a Span in .NET we must first create a new activity:
 
 ```csharp
-private static readonly ActivitySource Activity = new(nameof(Program));
+private static readonly ActivitySource Activity = new(nameof(RabbitRepository));
 ```
 And then call _"StartActivity"_ to begin recording, everything that happens inside the using block will be recorded into that Span.
 
@@ -38,7 +38,8 @@ using (var activity = Activity.StartActivity("Process Message", ActivityKind.Con
 
 A propagator allows us to extract and inject context across process boundaries. 
 
-This is typically required if you are not using any of the .NET communication libraries which has instrumentations already available which does the propagation (eg: HttpClient). In such cases, context extraction and propagation is the responsibility of the library itself.
+This is typically required if you are not using any of the .NET communication libraries which has instrumentations already available which does the propagation (eg: HttpClient).    
+In such cases, context extraction and propagation is the responsibility of the library itself.
 
 To create a propagator in .NET we must first create a TextMapPropagator
 
@@ -63,7 +64,7 @@ If a value can not be parsed from the carrier, for a cross-cutting concern, the 
 
 ## **Exporters**
 
-Let's be honest emiting traces is kind of useless if you don't have a backend capable of aggregating the traces and displaying those traces in a friendly manner. 
+Let's be honest emiting traces is kind of pointless if you don't have a backend capable of aggregating the traces and displaying those traces in a friendly manner. 
 
 An exporter is how data gets sent to those different back-ends. 
 
@@ -140,14 +141,14 @@ To get started with OpenTelemetry we're going to need the following packages.
 
 - The _**OpenTelemetry**_ package is the core library.
 - The _**OpenTelemetry.Exporter.Jaeger**_ package allows us to export the traces to Jaeger.
-- The _**OpenTelemetry.Extensions.Hosting**_ package contains some extensions that allows us to register the dependencies into the DI container and setup the Host.
+- The _**OpenTelemetry.Extensions.Hosting**_ package contains some extensions that allows us to add the dependencies into the DI container and configure the HostBuilder.
 - The _**OpenTelemetry.Instrumentation.***_ packages are instrumentation libraries. These packages are instrumenting common libraries/functionalities/classes so we don't have to do all the heavy lifting by ourselves. In our example we're using the following ones:
-  - The _**OpenTelemetry.Instrumentation.AspNetCore**_ instruments _ASP.NET Core_ and collect telemetry about incoming web requests. This instrumentation also collects incoming gRPC requests using _Grpc.AspNetCore_.
+  - The _**OpenTelemetry.Instrumentation.AspNetCore**_ instruments _ASP.NET Core_ and collects telemetry about incoming web requests. This instrumentation also collects incoming gRPC requests using _Grpc.AspNetCore_.
   - The _**OpenTelemetry.Instrumentation.Http**_ instruments the _System.Net.Http.HttpClient_ and _System.Net.HttpWebRequest_ types and collects telemetry about outgoing HTTP requests. 
   - The _**OpenTelemetry.Instrumentation.SqlClient**_ instruments the _Microsoft.Data.SqlClient_ and _System.Data.SqlClient_ types and collects telemetry about database operations.
   - The _**OpenTelemetry.Instrumentation.StackExchangeRedis**_ instruments the _StackExchange.Redis_ type and collects telemetry about outgoing calls to Redis.
 
-In the near future I expect to see more a more instrumentation libraries like these ones, so we can instrument the most common dependencies with no effort at all, just install a nuget and add  some config lines in the Startup and you're good to go.
+In the near future I expect to see more and more instrumentation libraries like these ones so we can instrument the most common dependencies with no effort at all, just install a nuget, add some config lines in the _Startup_ and you're good to go.
 
 # Adding OpenTelemetry on App1
 
@@ -186,13 +187,13 @@ The Api 1 makes an HTTP request to the App2, if we want to trace the HTTP call b
 The `AddSource` method can be used to add a ActivitySource to the provider. Multiple AddSource can be called to add more than one span.
 
 Why we need this? The Api 1 queues a message into a rabbit queue and we want to record this trace.   
-In the former paragraph we have seen that  HTTP requests has built-in instrumentation via method extension. That is not the case for the RabbitMQ dependency. In order to continue the distributed transaction, we must create a new Activity.
+In the former paragraph we have seen that  HTTP requests has built-in instrumentation via method extension, that is not the case for the RabbitMQ dependency. In order to continue the distributed transaction, we must create a new Activity.
 
 
 ```csharp
 SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))
 ```
-A Resource is the immutable representation of the entity producing the telemetry. 
+A Resource is the immutable representation of the entity producing the telemetry.   
 With the `SetResourceBuilder` method we're configuring the Resource for the application.
 
 ```csharp
@@ -202,15 +203,15 @@ AddJaegerExporter(opts =>
     opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
 });
 ```
-The method sets Jaeger as the exporter where all the traces are going to be sent.
+This method sets Jaeger as the exporter where all the traces are going to be sent.
 
 **2 . Instrument dependency calls**
 
 Unlike the HTTP request, OpenTelemetry does not yet have support for automatic RabbitMq trace correlation.
 
-The code below demonstrates how the "publish message" trace can be created. The code snippet adds the trace information to the enqueued message header, which will later be used to link both operations.
+The code below demonstrates how the _"publish message"_ trace can be created. The code snippet adds the trace information to the enqueued message header, which will later be used to link both operations.
 
-Specifically we are using a Propagator to inject the activity into the message header that is going to be queued to Rabbot, afterwards the consumer application will use another Propagator to extract the Activity and link the producer activity with the consumer activity.
+Specifically we are using a Propagator to inject the activity into the message header that is going to be queued to Rabbit, afterwards the consumer application will use another Propagator to extract the Activity and link the producer activity with the consumer activity.
 
 Also we are also using the Tags attribute to store relevant metadata into the Activity.
 
@@ -412,7 +413,7 @@ AddSqlClientInstrumentation()
 ```
 This app is not making any HTTP request, instead of that is querying a database, so we're using the SQL extension method to enable SQL instrumentation. We're simply swapping the `OpenTelemetry.Instrumentation.Http` library for the `OpenTelemetry.Instrumentation.SqlClient` library.
 
-This app is also queuing a message into a RabbitMq queue but the code it's exactly the same as the one I have showed for the app1 section.
+This app is also queuing a message into a RabbitMq queue, but the code it's exactly the same as the one I have showed for the app1 section.
 
 
 ## Adding OpenTelemetry on App4
@@ -436,9 +437,9 @@ This app is also queuing a message into a RabbitMq queue but the code it's exact
         });
 });
 ```
-This app dequeues a message from a RabbitMq queue and stores the message content into a Redis cache database and also.
+This app dequeues a message from a RabbitMq queue and stores the message content into a Redis cache database.
 
-Again the instrumentation part for dequeuing the message from RabbitMq looks exactly the same as the snippet I have put on the App2 section.   
+The instrumentation part for dequeuing the message from RabbitMq looks exactly the same as the snippet I have put on the App2 section.   
 
 The instrumentation for Redis is a little more problematic, the issue when trying to instrument Redis is that the `AddRedisInstrumentation()` extension method needs an instance of the Redis `ConnectionMultiplexer`.   
 If you're using an `IDistributedCache` interface and the `AddStackExchangeRedisCache` extension method to configure the Redis connection, like this one: 
@@ -483,7 +484,7 @@ Let me break it up a little bit for you. That's a zoomed image of the spans we h
 
 ![otel-jaeger-span](/img/otel-jaeger-span.png)
 
-- The first span (publish-message) corresponds to the App1 api endpoint, that span is created everytime that when the api controller is executed thanks to the `AddAspNetCoreInstrumentation()` extension method.
+- The first span (publish-message) corresponds to the App1 api endpoint, that span is created automatically when the api controller is executed thanks to the `AddAspNetCoreInstrumentation()` extension method.
   
 - The second span (RabbitMq publish) is an Activity that we have created manually on the App1. You can see the code snippet on the "Adding OpenTelemetry on App1" section.
   
@@ -491,7 +492,7 @@ Let me break it up a little bit for you. That's a zoomed image of the spans we h
   
 - The fourth span (HTTP POST) corresponds to the HTTP request that the App2 is making to the App3. That span is created automatically thanks to the `AddHttpClientInstrumentation()` extension method found on the App2 setup.
   
-- The fifth span (sql-to-event) corresponds to the App3 sql-to-event api endpoint, that span is created automatically every time that the api controller is executed thanks to the `AddAspNetCoreInstrumentation()` extension method.
+- The fifth span (sql-to-event) corresponds to the App3 sql-to-event api endpoint, that span is created automatically when the api controller is executed thanks to the `AddAspNetCoreInstrumentation()` extension method.
   
 - The sixth span (sqlserver) corresponds to the SQL query that the App3 is doing, that span is created automatically thanks to the `AddSqlClientInstrumentation()` extension method.
   
@@ -535,10 +536,11 @@ And compare traces.
 
 If you want to take a look at the 4 apps, I have uploaded everything on my [GitHub repository](https://github.com/karlospn/opentelemetry-tracing-demo)   
 
-If you want to try for yourselves to execute this example the repository contains a **docker-compose** file with everything you need, so you can run a compose up and you're good to go.   
+If you want to try for yourselves to execute this example, I have uploaded also a **docker-compose** file with everything you need, so you can run a compose up and you're good to go.   
 
-But there is little caveat I wanted to mention in the docker-compose.   
-With docker-compose you can control the order of the services startup and shutdown with the depends_on option, but it does not wait until a container is “ready”, it only waits until it’s running.   
+But there is little caveat I wanted to mention in the docker-compose file.      
+
+With docker-compose you can control the order of the services startup and shutdown with the depends_on option, but it does not wait until a container is “ready”, it only waits until is running.   
 
 In my case that's a problem because App2 and App4 need to wait for the rabbitMq container to be ready, to avoid this problem the compose file is overwriting the "entrypoint" for both apps and executing a shell script that makes both apps sleep 30 seconds before starting up.
 
