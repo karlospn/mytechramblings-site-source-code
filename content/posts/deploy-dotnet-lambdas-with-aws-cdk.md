@@ -18,7 +18,7 @@ AWS CDK is available in a bunch of different languages:
 - Java 
 - .NET Core
 
-I already shared my thoughts about AWS CDK in some of my older posts so in this one I will cut to the chase and I will focus on showing you a few options available when you want to deploy a .NET Core Lambda.
+I already shared my thoughts about AWS CDK in some of my older posts so in this one I will cut to the chase and I will focus on showing you some of the options available when you want to deploy a .NET Core Lambda.
 
 Before start showing you the code I think that there are 2 concepts worth mentioning:
 
@@ -50,7 +50,7 @@ Also if you don't mind working with .NET Core 3.1 instead of .NET 5 you can use 
 ---
 <br/>
 
-The 4 options to deploy a .NETCore lambda with AWS CDK that I'm going to show you in this post are the following ones:
+The 4 options to deploy a .NET Core lambda with AWS CDK that I'm going to show you in this post are the following ones:
 
 - **Deploy a NET 5 lambda using a container image and the AWS CDK ``FromImageAsset`` option.**
 - **Deploy a NET 5 lambda using a container image that has already been pushed into an ECR registry.**
@@ -60,7 +60,7 @@ The 4 options to deploy a .NETCore lambda with AWS CDK that I'm going to show yo
 
 > In the following sections I'm going to assume that you have already a NET 5 lambda and a NET Core 3.1 lambda already built so I can focus on how to deploy them.
 
-# 1. Deploy a NET 5 lambda using a container image and the AWS CDK ``FromImageAsset`` option
+# 1. Deploy a NET 5 lambda using a container image and the AWS CDK _"FromImageAsset"_ option
 
 > _You can find a working example of this scenario in this [Link](https://github.com/karlospn/deploy-dotnet-lambda-with-aws-cdk/tree/main/src/Net5BundlingContainerLambdaCdk)_
 
@@ -173,7 +173,7 @@ In this particular example when we execute the ``cdk deploy`` command the follow
 
 
 
-# 3. Deploy a NET Core 3.1 lambda using a .zip file and the AWS CDK ``FromAsset`` with bundling options
+# 3. Deploy a NET Core 3.1 lambda using a .zip file and the AWS CDK _"FromAsset"_ with bundling options
 
 > _You can find a working example of this scenario in this [Link](https://github.com/karlospn/deploy-dotnet-lambda-with-aws-cdk/tree/main/src/NetCore31BundlingZipFileLambdaCdk)_
 
@@ -230,26 +230,29 @@ namespace NetCore31BundlingZipFileLambdaCdk
 ```
 
 When using ``Code.fromAsset(path)`` command it is possible to bundle the code found in the "path" folder by running some commands inside a Docker container.    
-The "path" will be mounted at ``/asset-input`` and the content at ``/asset-output`` folder will be zipped and used as the Lambda code.
+
+The "path" will be mounted in the container inside the  ``/asset-input`` folder. Afterwards you can run some commands to bundle the code at runtime.   
+The output needs to be stored in the ``/asset-output`` folder.    
+Finally the contents of the ``/asset-output/`` folder will be zipped and used as the Lambda handler.
 
 In this particular example when we execute the ``cdk deploy`` command the following steps are going to happen:
-- The ``../My.NetCore31.Lambda``  path will be mounted as ``/asset-input`` inside a docker container.
+- The ``../My.NetCore31.Lambda``  path will be mounted as ``/asset-input`` folder inside the docker container.
 - The commands described in the "Command" attribute will be executed.
-  - The first command to be executed will be ``bash -c`` . This command allows us to execute a bunch of joined bash commands. The bash commands to be executed will be:
-    - ``cd /asset-input`` command is to step into the folder where our assets are being mounted.
-    - The export commands are simply adding into the ``PATH`` environment variable the location of the ``.dotnet/tool`` folder. This is needed because in the next step we're going to install and use a dotnet tool.
+  - The first command to be executed will be ``bash -c`` . This command will allows us to execute series of sequential bash commands. The bash commands to be executed will be:
+    - ``cd /asset-input`` command is used to step into the folder where our assets are being mounted.
+    - The export commands are simply adding into the ``PATH`` environment variable the location of the ``.dotnet/tool`` folder (this is needed because in the next step we're going to install and use a dotnet tool).
     - ``dotnet tool install -g Amazon.Lambda.Tools`` command is installing the dotnet lambda  tool. This tool adds commands to the dotnet cli that can be used manage Lambda functions including deploying a function from the dotnet cli.
-    - ``dotnet lambda package -o output.zip`` command is using the global tool to build and publish the lambda function.
+    - ``dotnet lambda package -o output.zip`` command is using the global tool to build, publish and package the lambda function.
     - The last command ``unzip -o -d /asset-output output.zip`` is outputting the result into the ``/asset-output`` folder.
   - The content of the ``/asset-output`` will be zipped and used as the function handler.
 
 
-# 4. Deploy a NET Core 3.1 lambda using an existing .zip file and the AWS CDK ``FromAsset`` option
+# 4. Deploy a NET Core 3.1 lambda using an existing .zip file and the AWS CDK _"FromAsset"_ option
 
 
 > _You can find a working example of this scenario in this [Link](https://github.com/karlospn/deploy-dotnet-lambda-with-aws-cdk/tree/main/src/NetCore31ExistingZipFileLambdaCdk)_
 
-In this scenario the AWS CDK and the application will be deployed at the same time, but you need to have published the lambda function beforehand.
+In this scenario the AWS CDK and the application will be deployed at the same time, but you need to have created the zip that contains the lambda function beforehand.
 
 
 
@@ -280,7 +283,7 @@ namespace NetCore31ExistingZipFileLambdaCdk
 }
 ```
 
-In the previous scenario we have used the ``Code.fromAsset(path)`` command to create the artifact at deploy time, but the ``Code.fromAsset(path)`` command can also point to a .zip file that contains the published lambda function.
+In the previous scenario we have used the ``Code.fromAsset(path)`` command to create the artifact at deploy time, but with the ``Code.fromAsset(path)`` command you can also point to an existing .zip file that contains the published lambda function.
 
 In this particular example when we execute the ``cdk deploy`` command the following steps are going to happen:
 - The lambda will be created using the .zip file stored ``./src/My.NetCore31.Lambda.zip`` local folder.
