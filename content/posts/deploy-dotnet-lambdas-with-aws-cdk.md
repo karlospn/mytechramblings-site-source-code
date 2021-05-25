@@ -2,7 +2,7 @@
 title: "4 ways to deploy a .NET Core Lambda using AWS CDK"
 date: 2021-05-25T10:01:46+02:00
 tags: ["aws", "lambda", "cdk", "dotnet"]
-draft: true
+draft: false
 ---
 
 > **Show me the code**   
