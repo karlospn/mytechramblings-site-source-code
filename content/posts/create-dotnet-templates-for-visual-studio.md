@@ -218,9 +218,47 @@ dotnet new <TEMPLATE_NAME> --function-name "MyFunc" --log-level "Debug" --acr-na
 If you don't create a ``dotnetcli.host.json`` the template engine will pick the command options for you, so you might like it or not.
 
 
-## **1.5. Using your templates within in Visual Studio**
+## **1.6. Configure your template to work with Visual Studio**
 
-> **This feature is only available in Visual Studio 16.8 or higher**
+If your template needs some command options you need to create a file named ``ide.host.json`` and place it inside the ``.template.config`` folder.   
+This file will allow us to set up all of our command options to show up in the Visual Studio project dialog.
+
+Here's an example:
+```javascript
+{
+    "$schema": "http://json.schemastore.org/vs-2017.3.host",
+    "order": 0,
+    "icon": "icon.png",
+    "symbolInfo": [
+      {       
+        "id": "Docker",
+        "name": 
+        {
+          "text": "Adds a Dockerfile."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "ReadMe",
+        "name": 
+        {
+          "text": "Adds a Readme."
+        },
+        "isVisible": true      
+      }
+    ]
+}
+```
+
+Also you can add an icon that will be displayed when you create a new project using your template, To achieve it you just need to put and ``icon.png`` file inside the ``.template.confg`` folder.
+
+<ADD-IMG>
+
+
+## **1.6. Using your templates within in Visual Studio**
+
+> - **This feature is only available in Visual Studio 16.8 or higher**.    
+> - **If you're creating a solution template you need at least VS 16.10 or higher.**
 
 Right now there is no way to install a template package within Visual Studio, to install the templates on your machine you need to do it using the .NET CLI. _More info about how you can do it on section 1.3._
 
