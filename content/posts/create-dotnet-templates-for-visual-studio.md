@@ -32,7 +32,9 @@ Right now if you want to create a .NET template, the template engine offers feat
 
 When you want to use your own .NET template you can use it within Visual Studio and it doesn't matter if it's a project or a solution template. And also it's also fully integrated with the .NET CLI.
 
-I think right now the experience when you want to create a template is quite good so it is a good moment to write about it. **In this post I will focus on how you can create and pack multiple .NET Core templates in a single NuGet package and how to use it within Visual Studio or the .NET CLI.**
+I think right now the experience when you want to create a template is quite good so it is a good moment to write about it.   
+
+### **In this post I want to focus on the process of converting a few application in templates, package them in a NuGet and re-use it within Visual Studio.**   
 
 But first let's talk about a few key concepts that are worth mentioning.
 
@@ -265,30 +267,135 @@ Here's an example:
 
 ## **1.6. Using your templates within in Visual Studio**
 
-> - **This feature is only available in Visual Studio 16.8 or higher**.    
-> - **If you're creating a solution template you need at least VS 16.10 or higher.**
+> - **This feature is only available in Visual Studio version 16.8 or higher**.    
+> - **If you're creating a solution template you need at least Visual Studio version 16.10 or higher.**
 
 Right now there is **no way to install a template package within Visual Studio**, to install the templates on your machine **you need to do it using the .NET CLI**. _More info about how you can do it on section 1.3._
 
 After you have installed the templates via .NET CLI you need to enable the use of templates within Visual Studio.
 
-To enable this option visit the "Preview Features" options in the ``Tools > Options`` menu and look for the ``Show all .NET Core templates in the New Project dialog`` checkbox.
+To enable this option visit the "Preview Features" options in the ``Tools > Options`` menu and look for the ``Show all .NET Core templates in the New Project dialog`` checkbox. 
 
 After enabling this option and choosing to create a new project you’ll see your custom templates in the list of  available templates.
-![list-templates](/img/dotnet-vs-list-templates.png)
+![list-templates](/img/dotnet-vs-list-templates.png)   
 
-
-And if you try to create a new project using your custom template a nice dialog will show up with all the options you have set in the ``ide.host.json`` file. Here's an example about how it looks:
+If you try to create a new project using your custom template a nice dialog will show up with all the options you have set in the ``ide.host.json`` file.    
+Here's an example about how it looks:   
 ![api-vs-dialog](/img/dotnet-api-template-vs-dialog.png)
----
 
-I think that's enough concepts for now. Let's start building something.
+I think that's more than enough theory for now. Let's start building our package tenplates.
 
 # **2. Creating the MyTechRamblings.Templates package**
 
-VS 16.9 didn't properly support full solution templates and only supported project templates.    
+I'll be creating some solution templates a some project templates and use it within Visual Studio, so remember what I said before:
 
-It's the newest release of Visual Studio (VS 16.10) that adds a user interface for creating solutions from dotnet  templates
+> - **Using .NET CLI templates in Visual Studio is only available in Visual Studio version 16.8 or higher**.    
+> - **Also if you're creating a solution template you need at least Visual Studio version 16.10 or higher.**
+
+## Prerequisites:
+
+**I have develop 3 apps beforehand**, that's because in this post I want to focus on the process of converting those 3 apps in templates, package them in a NuGet and use it within Visual Studio.
+
+Those 3 apps are the following ones:
+- **NET 5 Web Api**
+  - It is an entire solution application. It uses a N-layer architecture with 3 layers:
+    - ``WebApi`` layer.
+    - ``Library`` layer.
+    - ``Repository`` layer.
+  - It uses the ``Microsoft.Build.CentralPackageVersions`` MSBuild SDK. This SDK allows us to manage all the NuGet package versions in a single file. The file can be found in the ``/build`` folder.
+  - The api also has the following features already built-in:
+    -  ``Azure Pipelines`` YAML file.
+    - ``GitHub Action`` file.
+    - ``HealthChecks``
+    - ``Swagger``
+    - ``Serilog``
+    - ``AutoMapper``
+    - ``Microsoft.Identity.Web``
+  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action``, so it can be deployed either using ``Azure DevOps`` or ``GitHub``.
+
+- **NET 5 Worker Service that consumes RabbitMq messages**
+  - It is an entire solution application. It creates a ``BackgroundService`` that consumes messages from a RabbitMq server. It uses a N-layer architecture with 3 layers:
+    - ``WebApi`` layer.
+    - ``Library`` layer.
+    - ``Repository`` layer.
+  - It uses the ``Microsoft.Build.CentralPackageVersions`` MSBuild SDK. This SDK allows us to manage all the NuGet package versions in a single file. The file can be found in the ``/build`` folder.
+  - The service also has the following features already built-in:
+    - ``Serilog``
+    - ``AutoMapper``
+    - ``Microsoft.Extensions.Hosting.Systemd``
+    - ``Microsoft.Extensions.Hosting.WindowsServices``
+  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action``, so it can be deployed either using ``Azure DevOps`` or ``GitHub``.
+
+- **NET Core 3.1 Azure Function that gets triggered by a timer**
+  - It is a single project. It creates a NET Core 3.1 Azure Function that is triggered by a timer.
+  - The apps also has the following features already built-in:
+    - HealthChecks
+    - Swagger
+    - Serilog
+    - AutoMapper
+    - Microsoft.Identity.Web
+  - The function also has the following features already built-in:
+    - ``Dependency Injection``
+    - ``Logging``
+  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action``, so it can be deployed either using ``Azure DevOps`` or ``GitHub``.
+
+In the following sections I'm going to convert these 3 apps in .NET templates, package them in a single NuGet package named "MyTechRamblings.Templates" and start using them.
+
+## 2.1. Convert the NET 5 WebApi in a .NET template
+
+###  **Create the template.json file**
+
+The first step will be to create the ``template.json`` file, but before start building it you need to know what exactly you want to parameterize in the template.
+
+After taking a look at the different feature I have built on the web api, I have come with a list of features that I want to parameterize:
+
+| Parameter             | Description                                                                                                                                                                                                                                                                                                | Default value           |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
+| **Docker**                | Adds a Dockerfile image.                                                                                                                                                                                                                                   | _true_                    |
+| **ReadMe**                | Adds a README markdown file describing the project.                                                                                                                                                                                                                                                     | _true_                    |
+| **Tests**                 | Adds an Integration Test project and a Unit Test project in the solution.                                                                                                                                                                                                                                                 | _true_                    |
+| **GitHub**                | Adds a GitHub Action file that allow us to deploy the api into an Azure Web App.                                                                                                                                                                                                                          | _false_                   |
+| **AzurePipelines**        | Adds an Azure pipeline YAML file that allow us to deploy the api into an Azure Web App.                                                                                                                                                                                                                   | _true_                    |
+| **DeploymentType**        | Specifies how you want to deploy the api. The possible values are "DeployAsZip" or "DeployAsContainer".    Depending of the value you choose it will create a different deployment pipeline.    If you choose to not create nor a GitHub Action neither an Azure Pipeline this parameter is useless. | _DeployAsZip_             |
+| **AcrName**               | An Azure ACR registry name. Only used if you are going to be deploying with container.                                                                                                                                                                                                                     | _acrcponsndev_            |
+| **AzureSubscriptionName** | An Azure DevOps Service Endpoint subscription. Only used if you are going to be deploying with Azure Pipelines.                                                                                                                                                                                            | _cponsn-dev-subscription_ |
+| **AppServiceName**        | The name of the Azure App Service where the code will be deployed.                                                                                                                                                                                                                                         | _app-svc-demo-dev_        |
+| **Authorization**         | Enables the use of authorization using Microsoft.Identity.Web                                                                                                                                                                                                                                              | _true_                    |
+| **AzureAdTenantId**       | Azure Active Directory Tenant Id. Only necessary if Authorization is enabled.                                                                                                                                                                                                                              | _8a0671e2-3a30-4d30-9cb9-ad709b9c744a_                       |
+| **AzureAdDomain**         | Azure Active Directory Domain Name. Only necessary if Authorization is enabled.                                                                                                                                                                                                                            | _carlosponsnoutlook.onmicrosoft.com_                       |
+| **AzureAdClientId**       | Azure Active Directory App Client Id. Only necessary if Authorization is enabled.                                                                                                                                                                                                                          | _fdada45d-8827-466f-82a5-179724a3c268_                       |
+| **AzureAdSecret**         | Azure Active Directory App Secret Value. Only necessary if Authorization is enabled.                                                                                                                                                                                                                       | _1234_                       |
+| **HealthCheck**           | Enables the use of healthchecks.                                                                                                                                                                                                                                                                           | true                    |
+| **HealthCheckPath**       | HealthCheck path. Only necessary if HealthCheck is enabled.                                                                                                                                                                                                                                                | _/health_                 |
+| **Swagger**               | Enables the use of Swagger.                                                                                                                                                                                                                                                                                | _true_                    |
+| **SwaggerPath**           | Swagger path. Do not add a backslash. Only necessary if Swagger is enabled.                                                                                                                                                                                                                                | _api-docs_                |
+| **Contact**               | The contact details to use if someone wants to contact you. Only necessary if Swagger is enabled.                                                                                                                                                                                                          | _user@example.com_        |
+| **CompanyName**           | The name of the company. Only necessary if Swagger is enabled.                                                                                                                                                                                                                                             | _mytechramblings_         |
+| **CompanyWebsite**        | The website of the comany. Only necessary if Swagger is enabled.                                                                                                                                                                                                                                           | _www.mytechramblings.com_ |
+| **ApiDescription**        | The description of the api. Only necessary if Swagger is enabled.                                                                                                                                                                                                                                          | _Put your api info here._  |
+
+
+As you see it's a pretty long list, but it tackles a lot of scenarios.
+- If you are working with Docker just set the ``Docker`` parameter to true and a ready to go dockerfile will be created alongside with your api.
+- If you want tests in you solution set the ``Tests`` parameter to true.
+- If the api is going to be deployed with Azure Devops set the ``AzurePipelines`` attribute to true.
+- If the api is going to be deployed with GitHub set the ``GitHub`` attribute to true.
+- Depending of how the api is going to be deployed set the ``DeploymentType`` attribute and the pipelines will changed accordingly.
+- Enable or disable features like ``HealthChecks``or ``Swagger``.
+- If you are using Authorization with Azure Active Directory, set the ``Authorization`` attribute to true and set the ``AzureAdTenantId``, ``AzureAdDomain``, ``AzureAdClientId``, ``AzureAdSecret`` attributes accordingly.
+
+There is a default value for each attribute. You can put a default value that matches with your most common scenario so you won't need to set all those values every time you want to create a new app.
+
+## 2.2. Convert the NET 5 Worker Service in a .NET template
+
+## 2.3. Convert the Azure Function in a .NET template
+
+## 2.4. Create the MyTechRamblings.Templates NuGet package
+
+## 2.5. Install and use the MyTechRamblings.Templates  with the .NET CLI
+
+## 2.6. Use the MyTechRamblings.Templates within Visual Studio
+
 
 # **Some useful links**
 
