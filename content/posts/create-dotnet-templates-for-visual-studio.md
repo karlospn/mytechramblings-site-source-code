@@ -179,6 +179,14 @@ dotnet new -i <FILE_SYSTEM_DIRECTORY>
 dotnet new -u <NUGET_PACKAGE_ID>
 ```
 
+- To check if you template has been installed successfully:
+```bash
+dotnet new -l
+```
+The ``dotnet new -l`` command will list all the templates you have installed in your machine. If your custom template has beed installed successfully it will appear on the list.
+
+![dotnet-list-templates](/img/dotnet-list-installed-templates.png)
+
 ## **1.4. Using your custom templates with the .NET CLI**
 
 After you have installed your template you are good to go, you can create a project using your custom template running the ``dotnet new <TEMPLATE_NAME>`` command.
@@ -249,10 +257,10 @@ Here's an example:
     ]
 }
 ```
-
-Also you can add an icon that will be displayed when you create a new project using your template, To achieve it you just need to put and ``icon.png`` file inside the ``.template.confg`` folder.
-
-<ADD-IMG>
+- The ``order`` attribute is used to specify the order of the template as shown in the New Project dialog.
+- You can customize your template's appearance in the template list with an icon.  If it is not provided, a default generic icon will be associated with your project template. To add your own icon you just need to put an   ``icon.png`` file inside the ``.template.confg`` folder.
+- The ``symbolInfo`` array contains all the command options we want to show in the Visual Studio dialog.
+- The ``symbolInfo.isVisible`` property enables the parameter visibility. The default value of the ``isVisible`` property is ``false``.You need to change it to ``true`` or is not going to show in the Visual Studio dialog.
 
 
 ## **1.6. Using your templates within in Visual Studio**
@@ -260,14 +268,18 @@ Also you can add an icon that will be displayed when you create a new project us
 > - **This feature is only available in Visual Studio 16.8 or higher**.    
 > - **If you're creating a solution template you need at least VS 16.10 or higher.**
 
-Right now there is no way to install a template package within Visual Studio, to install the templates on your machine you need to do it using the .NET CLI. _More info about how you can do it on section 1.3._
+Right now there is **no way to install a template package within Visual Studio**, to install the templates on your machine **you need to do it using the .NET CLI**. _More info about how you can do it on section 1.3._
 
 After you have installed the templates via .NET CLI you need to enable the use of templates within Visual Studio.
 
 To enable this option visit the "Preview Features" options in the ``Tools > Options`` menu and look for the ``Show all .NET Core templates in the New Project dialog`` checkbox.
 
 After enabling this option and choosing to create a new project you’ll see your custom templates in the list of  available templates.
+![list-templates](/img/dotnet-vs-list-templates.png)
 
+
+And if you try to create a new project using your custom template a nice dialog will show up with all the options you have set in the ``ide.host.json`` file. Here's an example about how it looks:
+![api-vs-dialog](/img/dotnet-api-template-vs-dialog.png)
 ---
 
 I think that's enough concepts for now. Let's start building something.
