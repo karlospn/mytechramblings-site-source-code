@@ -1,5 +1,5 @@
 ---
-title: "How to pack multiple .NET Core templates in a single NuGet package and use it within Visual Studio or the .NET CLI"
+title: "How to convert a few .NET apps into .NET templates, package them in a single NuGet and use them within Visual Studio. Part 2: Creating the MyTechRamblings.Templates package"
 date: 2021-06-10T14:25:29+02:00
 draft: true
 tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
@@ -9,302 +9,27 @@ tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
 As always if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/pack-dotnet-templates-example).   
 Also I have upload the NuGet package to [nuget.org](https://www.nuget.org/packages/MyTechRamblings.Templates).
 
-When you install the .NET SDK you receive over a dozen built-in templates for creating projects  like console apps, web apis, class libraries, unit test projects, etc.
+# **Creating the MyTechRamblings.Templates package**
 
-You can also create custom templates and install them using a NuGet package. In fact packaging .NET templates inside a NuGet it's nothing new, it's been around for quite a long time and it's a nice way to quickly scaffold your own applications.   
-
-Everytime you need to create a new application you have to setup each and everytime a set of common features like: logging, swagger, healthchecks, authentication, create the dockerfile, create CI/CD pipelines, etc.  
-That is in fact very time consuming and super boring, so a better approach is to create a template a reuse it everytime time that you need to create that type of application.
-
-Anyways as I stated before, creating .NET templates and using NuGet to package them it's nothing new. _But then, why writing this post right now?_
-
-Just hear me out...
-
-A few years ago the experience to create and package reusable .NET templates was pretty bare bones, but little by little the experience has been enhanced.   
-
-In fact a couple of weeks ago Microsoft anounced the release of Visual Studio 2019 version 16.10. This version add the capabilit of creating entire solutions from a .NET template, so even nowadays Microsoft keeps improving the templating experience.
-
-Right now if you want to create a .NET template, the template engine offers features like:
-- Replace values.
-- Include and exclude files.
-- Preprocessor directive to include or exclude entire blocks of code.
-- Execute custom processing operations when your template is used.
-
-When you want to use your own .NET template you can use it within Visual Studio and it doesn't matter if it's a project or a solution template. And also it's also fully integrated with the .NET CLI.
-
-I think right now the experience when you want to create a template is quite good so it is a good moment to write about it.   
-
-### **In this post I want to focus on the process of converting a few application in templates, package them in a NuGet and re-use it within Visual Studio.**   
-
-But first let's talk about a few key concepts that you need to know.
-
-# **1. Key Concepts**
-
-## 1.1. **.template.config folder**
-
-Templates are recognized by a special folder that exist at the root of your template. This  folder needs to be named specifically: _".template.config."_
-
-When you create a template, all files and folders in the template folder are included as part of the template except for the .template.config folder. 
-
-You create a NuGet with multiple templates, but each template needs to have a .template.config folder at root level.
-
-Here's an example:
-
-```bash
----src
-    +---AzureFunctionTimerProjectTemplate
-    |   +---.template.config
-    |   +---src
-    |   \---test
-    +---HostedServiceNet5RabbitConsumerTemplate
-    |   +---.template.config
-    |   +---src
-    |   \---test
-    \---WebApiNet5Template
-        +---.template.config
-        +---src
-        \---test
-```
-
-In this example the ``/src`` folder contains 3 templates and each template contains a .template.config folder.
-
-Inside the .template.config folder you need **AT LEAST** a file named "template.json"
-
-### **template.json**
-
-The template.json file provides configuration information to the template engine. The minimum configuration requires the members shown in the following table, which is sufficient to create a functional template.
-
-Here's a brief example about how a ``template.json`` looks like:
-
-```javascript
-{
-  "$schema": "http://json.schemastore.org/template",
-  "author": "Travis Chau",
-  "classifications": [ "Common", "Console" ],
-  "identity": "AdatumCorporation.ConsoleTemplate.CSharp",
-  "name": "Adatum Corporation Console Application",
-  "shortName": "adatumconsole"
-}
-```
-
-I will walk you through a few template.json files on **section 2**.
-
-> If you want to know more about it, this page describes in-depth the attributes and the options that are available when creating a template.json file.   
-https://github.com/dotnet/templating/wiki/Reference-for-template.json
-
-## **1.2. Packaging your templates into a nuget package**
-
-A template pack, in the form of a .nupkg NuGet package, requires that **all templates be stored in the content folder** within the package. 
-
-There are a couple of ways of doing the packing:
-- With the ``dotnet pack`` command and a .csproj file.
-- With ``nuget pack`` command of Nuget.exe and a .nuspec file.
-
-If you use the ``.csproj file`` approach you need to know that the .csproj is slightly different from a traditional code-project .csproj file. Here's an example:
-
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>
-    <PackageType>Template</PackageType>
-    <PackageVersion>1.0.0</PackageVersion>
-    <PackageId>Someone.Templates</PackageId>
-    <Title>The Templates</Title>
-    <Authors>Me</Authors>
-    <Description>Templates to use when creating an application</Description>
-    <PackageTags>dotnet;templates;foo</PackageTags>
-    <TargetFramework>netstandard2.0</TargetFramework>
-
-    <IncludeContentInPack>true</IncludeContentInPack>
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <ContentTargetFolders>content</ContentTargetFolders>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <Content Include="src\**\*" Exclude="src\**\bin\**;src\**\obj\**" />
-    <Compile Remove="**\*" />
-  </ItemGroup>
-</Project>
-```
-Note the following settings:
-- The ``<PackageType>`` setting is added and set to Template.
-- The ``<PackageVersion>`` setting is added and set to a valid NuGet version number.
-- The ``<PackageId>`` setting is added and set to a unique identifier. This identifier is used to uninstall the template pack and is used by NuGet feeds to register your template pack.
-- The ``<TargetFramework>`` setting must be set, even though the binary produced by the template process isn't used. In the example below it's set to netstandard2.0.
-- The ``<IncludeContentInPack>`` setting is set to true to include any file the project sets as content in the NuGet package.
-The ``<IncludeBuildOutput>`` setting is set to false to exclude all binaries generated by the compiler from the NuGet package.
-The ``<ContentTargetFolders>`` setting is set to content. This makes sure that the files set as content are stored in the content folder in the NuGet package. This folder in the NuGet package is parsed by the dotnet template system.
-  
-If you use the ``.nuspec file`` approach, the current nuspec.xsd schema file can be found [here](https://github.com/NuGet/NuGet.Client/blob/dev/src/NuGet.Core/NuGet.Packaging/compiler/resources/nuspec.xsd)   
-Here's an example:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<package>
-  <metadata>
-    <id>Someone.Templates</id>
-    <version>1.0.0</version>
-    <description>Templates to use when creating an application</description>
-    <authors>Me</authors>
-    <title>The Templates</title>
-    <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <license type="expression">MIT</license>
-    <tags>dotnet templates</tags>
-    <language>en-US</language>
-	<packageTypes>
-      <packageType name="Template" />
-    </packageTypes>
-  </metadata>
-  <files>
-    <file src="**" exclude="**\bin\**\*;**\obj\**\*;**\*.user;**\*.lock.json;_rels\**\*;package\**\*" />
-  </files>
-</package>
-```
-
-## **1.3. Installing the templates package**
-
-Template packages are represented by a NuGet package (.nupkg) file. 
-Like any NuGet package, you can upload the template pack to a NuGet feed. The dotnet new -i command supports installing template pack from a NuGet package feed or you can install a template pack from a .nupkg file directly.
-
-- To install a template from a NuGet package stored at nuget.org:
-```bash
-dotnet new -i <NUGET_PACKAGE_ID>
-```
-
-- To install a template from a file system directory:
-```bash
-dotnet new -i <FILE_SYSTEM_DIRECTORY>
-```
-
-- To uninstall a template:
-```bash
-dotnet new -u <NUGET_PACKAGE_ID>
-```
-
-- To check if you template has been installed successfully:
-```bash
-dotnet new -l
-```
-The ``dotnet new -l`` command will list all the templates you have installed in your machine. If your custom template has beed installed successfully it will appear on the list.
-
-![dotnet-list-templates](/img/dotnet-list-installed-templates.png)
-
-## **1.4. Using your custom templates with the .NET CLI**
-
-After you have installed your template you are good to go, you can create a project using your custom template running the ``dotnet new <TEMPLATE_NAME>`` command.
-
-If your template needs some command options you can rely on the template engine to pick the values for you or you can customize it.   
-If you want to customize the options you can add a ``dotnetcli.host.json`` file inside the ``.template.config`` folder.   
-It's a pretty simple file were you can specify the custom short and long names for each of the options.
-
-Here's an example:
-```javascript
-{
-    "$schema": "http://json.schemastore.org/dotnetcli.host",
-    "symbolInfo": {
-        "FunctionName": {
-            "longName": "function-name",
-            "shortName": "fn"
-        },
-        "LogLevel": {
-            "longName": "log-level",
-            "shortName": "log"
-        },
-        "AcrName": {
-            "longName": "acr-name",
-            "shortName": "an"
-        }
-    }
-}
-```
-
-With this ``dotnetcli.host.json`` file in place I can create my template running the following command:
-
-```bash
-dotnet new <TEMPLATE_NAME> -fn "MyFunc" -log "Debug" -an "acrappdev"
-dotnet new <TEMPLATE_NAME> --function-name "MyFunc" --log-level "Debug" --acr-name "acrappdev"
-```
-
-If you don't create a ``dotnetcli.host.json`` the template engine will pick the command options for you, so you might like it or not.
-
-
-## **1.6. Configure your template to work with Visual Studio**
-
-If your template needs some command options you need to create a file named ``ide.host.json`` and place it inside the ``.template.config`` folder.   
-This file will allow us to set up all of our command options to show up in the Visual Studio project dialog.
-
-Here's an example:
-```javascript
-{
-    "$schema": "http://json.schemastore.org/vs-2017.3.host",
-    "order": 0,
-    "icon": "icon.png",
-    "symbolInfo": [
-      {       
-        "id": "Docker",
-        "name": 
-        {
-          "text": "Adds a Dockerfile."
-        },
-        "isVisible": true      
-      },
-      {       
-        "id": "ReadMe",
-        "name": 
-        {
-          "text": "Adds a Readme."
-        },
-        "isVisible": true      
-      }
-    ]
-}
-```
-- The ``order`` attribute is used to specify the order of the template as shown in the New Project dialog.
-- You can customize your template's appearance in the template list with an icon.  If it is not provided, a default generic icon will be associated with your project template. To add your own icon you just need to put an   ``icon.png`` file inside the ``.template.confg`` folder.
-- The ``symbolInfo`` array contains all the command options we want to show in the Visual Studio dialog.
-- The ``symbolInfo.isVisible`` property enables the parameter visibility. The default value of the ``isVisible`` property is ``false``.You need to change it to ``true`` or is not going to show in the Visual Studio dialog.
-
-
-## **1.6. Using your templates within in Visual Studio**
-
-> - **This feature is only available in Visual Studio version 16.8 or higher**.    
-> - **If you're creating a solution template you need at least Visual Studio version 16.10 or higher.**
-
-Right now there is **no way to install a template package within Visual Studio**, to install the templates on your machine **you need to do it using the .NET CLI**. _More info about how you can do it on section 1.3._
-
-After you have installed the templates via .NET CLI you need to enable the use of templates within Visual Studio.
-
-To enable this option visit the "Preview Features" options in the ``Tools > Options`` menu and look for the ``Show all .NET Core templates in the New Project dialog`` checkbox. 
-
-After enabling this option and choosing to create a new project you’ll see your custom templates in the list of  available templates.
-![list-templates](/img/dotnet-vs-list-templates.png)   
-
-If you try to create a new project using your custom template a nice dialog will show up with all the options you have set in the ``ide.host.json`` file.    
-Here's an example about how it looks:   
-![api-vs-dialog](/img/dotnet-api-template-vs-dialog.png)
-
-I think that's more than enough theory for now. Let's start building our package tenplates.
-
-# **2. Creating the MyTechRamblings.Templates package**
-
-I'll be creating some solution templates a some project templates and use it within Visual Studio, so remember what I said before:
+I'll be creating 2 solution templates a also a project template, and I will try to use them within Visual Studio.   
+You need to remember what I said in part 1:
 
 > - **Using .NET CLI templates in Visual Studio is only available in Visual Studio version 16.8 or higher**.    
 > - **Also if you're creating a solution template you need at least Visual Studio version 16.10 or higher.**
 
-## Prerequisites:
+## 1. Prerequisites:
 
-**I have develop 3 apps beforehand**, that's because in this post I want to focus on the process of converting those 3 apps in templates, package them in a NuGet and use it within Visual Studio.
+**I have develop 3 apps beforehand**, that's because in this post I want to focus on the process of converting these 3 apps in templates, package them in a NuGet and use it within Visual Studio.
 
-Those 3 apps are the following ones:
+The 3 apps I have built are the following ones:
 - **NET 5 Web Api**
-  - It is an entire solution application. It uses a N-layer architecture with 3 layers:
+  - It is an entire solution app. It uses a N-layer architecture with 3 layers:
     - ``WebApi`` layer.
     - ``Library`` layer.
     - ``Repository`` layer.
   - It uses the ``Microsoft.Build.CentralPackageVersions`` MSBuild SDK. This SDK allows us to manage all the NuGet package versions in a single file. The file can be found in the ``/build`` folder.
-  - The api also has the following features already built-in:
-    -  ``Azure Pipelines`` YAML file.
+  - The api has the following features already built-in:
+    - ``Azure Pipelines`` YAML file.
     - ``GitHub Action`` file.
     - ``HealthChecks``
     - ``Swagger``
@@ -313,22 +38,27 @@ Those 3 apps are the following ones:
     - ``Microsoft.Identity.Web``
   - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action`` that allow us to deploy the api into an Azure App Service.
 
+  >If you want to take a look at the source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/WebApiNet5Template)
+
 - **NET 5 Worker Service that consumes RabbitMq messages**
-  - It is an entire solution application. It creates a ``BackgroundService`` that consumes messages from a RabbitMq server. It uses a N-layer architecture with 3 layers:
+  - It is an entire solution app. It creates a ``BackgroundService`` that consumes messages from a RabbitMq server. It uses a N-layer architecture with 3 layers:
     - ``WebApi`` layer.
     - ``Library`` layer.
     - ``Repository`` layer.
   - It uses the ``Microsoft.Build.CentralPackageVersions`` MSBuild SDK. This SDK allows us to manage all the NuGet package versions in a single file. The file can be found in the ``/build`` folder.
-  - The service also has the following features already built-in:
+  - The service has the following features already built-in:
     - ``Serilog``
     - ``AutoMapper``
     - ``Microsoft.Extensions.Hosting.Systemd``
     - ``Microsoft.Extensions.Hosting.WindowsServices``
   - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action``that allow us to deploy the service into an Azure App Service.
 
+  >If you want to take a look at the source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/HostedServiceNet5RabbitConsumerTemplate)
+
 - **NET Core 3.1 Azure Function that gets triggered by a timer**
-  - It is a single project. It creates a NET Core 3.1 Azure Function that is triggered by a timer.
-  - The apps also has the following features already built-in:
+  - This one is not an entire solution, instead  it is a single project. 
+  - It creates a NET Core 3.1 Azure Function that is triggered by a timer.
+  - The function has the following features already built-in:
     - HealthChecks
     - Swagger
     - Serilog
@@ -339,11 +69,15 @@ Those 3 apps are the following ones:
     - ``Logging``
   - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action`` that allow us to deploy the function.
 
-In the following sections I'm going to convert these 3 apps in .NET templates, package them in a single NuGet package named "MyTechRamblings.Templates" and start using them.
+  >If you want to take a look at the source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/AzureFunctionTimerProjectTemplate)
 
-## 2.1. Convert the NET 5 Web API in a template
+---
 
-###  **Create the template.json file**
+In the following sections I will be converting these 3 apps into templates, package them in a  NuGet file named ``MyTechRamblings.Templates`` and showing you how to use them within Visual Studio.
+
+## 2. Convert the NET 5 Web Api into a template
+
+### 2.1. **Create the template.json file**
 
 The first step will be to create the ``template.json`` file, but before start building it you need to know what you want to parameterize in the template.
 
@@ -705,22 +439,25 @@ As you can see I'm using _"ApplicationName"_ as the sourceName. Also  I'm naming
 
 - ``primaryOutputs``: TEST
 
+- ``specialCustomOperations``: The templating engine only supports conditional operators in a certain list of file types. If you need to add conditionals operators in another file types you need to add it here.    
+In my template I want to add conditional operators on the YAML files, so that's why I'm adding an custom operation on any yml file.
+
 - ``sources.modifiers`` : The sources.modifiers allows us to include or exclude files based on a condition.
 
 - ``symbols``: The symbols section is where you specify the template inputs and define what those inputs should do. 
 
 In our case the ``symbols`` section and the ``source.modifiers`` section are intertwined.
-- You define a symbol in the ``symbol section`` and  the value from the symbol is used as a condition in the ``source.modifier`` section.
+- I'm defining symbol in the ``symbol`` section and the value from the symbol is used as a condition in the ``source.modifier`` section.
 
-This is the meat of the ``template.json`` file so let's take a more in-depth look.
+The ``symbols`` and the ``sources.modifiers`` section is the meat of the ``template.json`` file, so let's enumerate the different scenarios you can find.
 
 ### **Symbol replacement**
 
-- It replaces a value with the symbol value.
+- Replaces a fixed string with the value of the symbol.
 
-Example: 
+**Example:** 
 
-I have the symbol "HealthCheckPath" of type "parameter" with a default value of "/health" and a replace value of "HEALTHCHECK-VALUE". 
+Here I have the symbol ``HealthCheckPath`` of type ``parameter``. It has a default value of ``/health`` and a replace value of ``HEALTHCHECK-VALUE``. 
 ```javascript
   "HealthCheckPath": {
     "type": "parameter",
@@ -730,8 +467,10 @@ I have the symbol "HealthCheckPath" of type "parameter" with a default value of 
     "description": "HealthCheck path. Only necessary if HealthCheck is enabled."
   }
 ```
-This symbol will try to find the "HEALTHCHECK-PATH" string anywhere in the template, and if they find it, it will be replaced either by the user input or the default value (/health) 
-If you take a look in the ``Startup.cs``, you'll see the "replace" value.
+When you try to create a new solution using the template:
+
+- The template engine will try to find the "HEALTHCHECK-PATH" string anywhere in the template and if it finds it, it will be replaced either by the user input or the default value (/health) 
+If you take a look in the ``Startup.cs``, you'll see the ``replaces`` value hard-coded in the template.
 
 ```csharp
    endpoints.MapHealthChecks("HEALTHCHECK-PATH", new HealthCheckOptions
@@ -740,13 +479,16 @@ If you take a look in the ``Startup.cs``, you'll see the "replace" value.
     });
 ```
 
+When the user creates a new solution using the template the magic string ``HEALTHCHECK-PATH`` will be replaced by the user input.
 
-### **Removing entire blocks of code based on the symbol value**
+If you take a look at the ``template.json`` file a lot of symbols are using this concrete approach.
 
-- This feature allows us to skip entire chunks of code based on a symbol value.
+### **Use conditional operators based on the symbol value**
 
-Example:
-I have the symbol "Authorization" of type "bool" with the default value of "true".
+- It allows us to skip entire chunks of code based on a symbol value.
+
+**Example:**
+Here I have the symbol ``Authorization`` of type ``bool`` with the default value of ``true``.
 
 ```javascript
   "Authorization": {
@@ -757,10 +499,10 @@ I have the symbol "Authorization" of type "bool" with the default value of "true
   },
 ```
 
-- If the user sets the symbol to "false" we need to remove any "Microsoft.Web.Identity" reference from the source code.
-- If the user sets this symbol to "true" we keep the references to the "Microsoft.Web.Identity" Nuget.
+- If the user sets the value to ``false``, the template engine needs to remove any ``Microsoft.Web.Identity`` reference from the solution created.
+- If the user sets this symbol to ``true``, the template engine needs to keep the references to the ``Microsoft.Web.Identity``.
 
-If you take a look again at the  ``Startup.cs``:
+If you take a look at the  ``Startup.cs``, you'll see that all the ``Microsoft.Web.Identity`` references are being wrapped in a conditional.
 
 ```csharp
 #if Authorization
@@ -781,7 +523,7 @@ using Microsoft.Identity.Web;
 #endif
 ```
 
-As you can see we are keeping the "Microsoft.Web.Identity" code only if the symbol is set to true. Also we need to remove the references from the ``appsettings.json`` file.
+We are keeping the ``Microsoft.Web.Identity`` code only if the symbol is set to ``true``. But that's not enough, we need to remove the ``Microsoft.Web.Identity`` references from the ``appsettings.json`` file too.
 
 ```javascript
 {
@@ -803,7 +545,7 @@ As you can see we are keeping the "Microsoft.Web.Identity" code only if the symb
 }
 ```
 
-And from the controller itself:
+And also from the api controller:
 
 ```csharp
 #if Authorization
@@ -822,13 +564,13 @@ And from the controller itself:
 
 ```
 
-## Use a symbol value to compute another symbol value
+## Use a symbol value to compute another one
 
-- Given a specific value of a symbol you can set another symbol value.
+- Given a value of a symbol, you can set the value of another one.
 
-Example:
+**Example:**
 
-The "DeploymentType" symbol is of type "choice" and with the symbol value you can setup the "DeployContainer" symbol and the "DeployZip" symbol.
+The ``DeploymentType`` symbol is of type ``choice`` and with its value you can set the ``DeployContainer`` symbol value and the ``DeployZip`` symbol value.
 
 ```javascript
  "DeploymentType": {
@@ -857,9 +599,11 @@ The "DeploymentType" symbol is of type "choice" and with the symbol value you ca
   },
 ```
 
-Those 2 symbols can be used to tailor the deployment pipeline. If you take a look at the Azure DevOps pipeline YAML you'll see the following steps:
-- If the symbol "DeploymentContainer" is set to true, use a container image build pipeline.
-- If the symbol "DeployZip" is set to true, use an artifact build pipeline.
+The ``DeployContainer`` symbol and  the ``DeployZip`` symbol will be used to tailor the deployment pipeline. 
+- If the symbol ``DeploymentContainer`` is set to ``true``, the deployment pipeline will build and deploy a docker image.
+- If the symbol ``DeployZip`` is set to ``true``, the deployment pipeline will build and deploy zipped artifact.   
+
+This is how the Azure Pipelines YAML file looks like:
 
 ```yaml
 trigger:
@@ -954,11 +698,11 @@ steps:
 
 ## Excluding files based on a symbol value:
 
-- You can combine the ``source.modifiers`` section with the ``symbols`` section to remove files from the template based on a symbol value.
+- You can combine the ``source.modifiers`` section with the ``symbols`` section to remove existing files based on a symbol value.
 
-Example 1:
+**Example 1:**
 
-The "Dockerfile" symbol is of type "parameter" and the default value is "true"
+The ``Dockerfile`` symbol is of type ``parameter`` and the default value is ``true``.
 
 ```javascript
   "Docker": {
@@ -966,14 +710,13 @@ The "Dockerfile" symbol is of type "parameter" and the default value is "true"
       "datatype": "bool",
       "description": "Adds an optimised Dockerfile to add the ability to build a Docker image.",
       "defaultValue": "true"
-  },
-
+  }
 ```
 
-- If the symbol value is set to "false", we need to remove the "Dockerfile" file from the template.
-- If the symbol value is set to "true", we need to keep the "Dockerfile" file.
+- If the symbol value is set to ``false``, the template engine needs to remove the "Dockerfile" file from the template.
+- If the symbol value is set to ``true``, the template engine needs to keep the "Dockerfile" file.
 
-We can achieve it adding the following object in ``source.modifiers`` array.
+To achieve this behaviour, you can add the following object in ``source.modifiers`` array.
 
 ```javascript
   {
@@ -985,9 +728,12 @@ We can achieve it adding the following object in ``source.modifiers`` array.
   }
 ```
 
-Example 2:
+The template engine will remove the "Dockerfile" file if the symbol "Docker" equals to false.
 
-The "Test" symbol is of type "parameter" and the default value is "true"
+
+**Example 2:**
+
+This is a more interesting example. The ``Test`` symbol is of type ``parameter`` and the default value is ``true``
 
 ```javascript
   "Tests": {
@@ -998,10 +744,10 @@ The "Test" symbol is of type "parameter" and the default value is "true"
   }
 ```
 
-- If the symbol value is set to "false", we need to remove the entire Unit Test and Integration Test from the solution.
-- If the symbol value is set to "true", we need to keep the Test projects.
+- If the symbol value is set to ``false``, the template engine needs to remove the entire folder that contains the unit test project and also the folder that contains the integration test. It also needs to remove the references from the solution file.
+- If the symbol value is set to ``true``, the template engines needs to keep the both test projects.
 
-We can achieve it adding the following object in ``source.modifiers`` array.
+To achieve this behaviour, you can add the following object in ``source.modifiers`` array.
 
 ```javascript
   {
@@ -1013,7 +759,8 @@ We can achieve it adding the following object in ``source.modifiers`` array.
       ]
   },
 ```
-But also we need to exclude the test project from the ``.sln`` file, we can achieve it using a conditional check
+
+The template engine also needs to exclude the test project references from the ``.sln`` file.  To do it we can use a conditional check.
 
 ```csharp
 #if (Tests)
@@ -1027,15 +774,20 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ApplicationName.Library.Impl.UnitTest", "test\ApplicationName.Library.Impl.UnitTest\ApplicationName.Library.Impl.UnitTest.csproj", "{C22AA50D-81CC-4A9B-9926-7AB8445246A9}"
 EndProject
 #endif
-
 ```
+### 2.2. **Create the dotnetcli.host.json file**
 
+### 2.3. **Create the ide.host.json file**
 
-## 2.2. Convert the NET 5 Worker Service in a .NET template
+## 3. Convert the remaining 2 apps into templates
 
-## 2.3. Convert the Azure Function in a .NET template
+- We still need to convert the ``Worker Service`` application  and the ``Azure Function`` into a .NET template.
 
-## 2.4. Create the MyTechRamblings.Templates NuGet package
+But the conversion process looks exactly the same.   
+The ``template.json`` file is almost identical with few different parameters, so I'm not going to bother writing about it. 
+If you're interested in the end result, take a look at the GitHub repository.
+
+## 4. Create the MyTechRamblings.Templates NuGet package
 
 In **section 1.2** I described a couple of ways to package a template NuGet. 
 
@@ -1105,7 +857,7 @@ As you can see it's a quite simple script.
 - Download nuget.exe and run ``nuget.exe pack`` command using the ``.nuspec`` file.
 
 
-## 2.5. Install and use the MyTechRamblings.Templates with the .NET CLI
+## 5. Install and use the MyTechRamblings.Templates with the .NET CLI
 
 
 To Install the package you can run this command:
@@ -1137,7 +889,7 @@ Or you can create an Azure Function project using the azure function template ru
 - ``dotnet new mtr-az-func-timer``
 
 
-## 2.6. Use the MyTechRamblings.Templates within Visual Studio
+## 6. Use the MyTechRamblings.Templates within Visual Studio
 
 > Be sure to have enabled the following option in Visual Studio: ``Tools > Options > Preview Features > Show all .NET Core templates in the New Project dialog``
 
