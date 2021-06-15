@@ -1,5 +1,5 @@
 ---
-title: "Build a few .NET apps, convert them into .NET templates, package them together in a NuGet and use them as templates within Visual Studio. Part 1: Key Concepts"
+title: "How to build a .NET template and use it within Visual Studio. Part 1: Key concepts"
 date: 2021-06-14T00:07:29+02:00
 draft: false
 tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
