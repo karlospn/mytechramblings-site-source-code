@@ -1,47 +1,57 @@
 ---
-title: "How to convert a few .NET apps into .NET templates, package them in a single NuGet and use them within Visual Studio. Part 2: Creating the MyTechRamblings.Templates package"
+title: "How to build a .NET template and use it within Visual Studio. Part 2: Creating a template package"
 date: 2021-06-10T14:25:29+02:00
 draft: true
 tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
 ---
 
-> **Show me the code**   
+> This is a 2 part-series.
+> - In **part 1** I talked about some key concepts that you should know when creating a .NET template.    
+>   - If you want to read it, click [**HERE**](https://www.mytechramblings.com/posts/create-dotnet-templates-for-visual-studio-part-1/)
+> - In **part 2** I will show you the process of converting a few .NET apps into a .NET templates, package them together in a single NuGet file and use them as template within Visual Studio.
+
+
+**Just show me the code**   
 As always if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/pack-dotnet-templates-example).   
 Also I have upload the NuGet package to [nuget.org](https://www.nuget.org/packages/MyTechRamblings.Templates).
 
+
 # **Creating the MyTechRamblings.Templates package**
 
-I'll be creating 2 solution templates a also a project template, and I will try to use them within Visual Studio.   
-You need to remember what I said in part 1:
+In the following sections I will be converting these 3 apps into templates, package them in a  NuGet file named ``MyTechRamblings.Templates`` and showing you how to use them within Visual Studio.
 
-> - **Using .NET CLI templates in Visual Studio is only available in Visual Studio version 16.8 or higher**.    
+The MyTechRamblings.Templates package will contain a couple of solution templates and a project template. 
+
+Before start coding you need to remember what I said in part 1:
+
+> - **Using .NET CLI templates within Visual Studio is only available in Visual Studio version 16.8 or higher**.    
 > - **Also if you're creating a solution template you need at least Visual Studio version 16.10 or higher.**
 
-## 1. Prerequisites:
+# 1. Prerequisites:
 
-**I have develop 3 apps beforehand**, that's because in this post I want to focus on the process of converting these 3 apps in templates, package them in a NuGet and use it within Visual Studio.
+**I have develop 3 apps beforehand**, that's because in this post I want to focus on the process of converting these 3 apps in templates, package them in a NuGet package and use it within Visual Studio.
 
 The 3 apps I have built are the following ones:
 - **NET 5 Web Api**
-  - It is an entire solution app. It uses a N-layer architecture with 3 layers:
+  - It is an entire solution application. It uses a N-layer architecture with 3 layers:
     - ``WebApi`` layer.
     - ``Library`` layer.
     - ``Repository`` layer.
   - It uses the ``Microsoft.Build.CentralPackageVersions`` MSBuild SDK. This SDK allows us to manage all the NuGet package versions in a single file. The file can be found in the ``/build`` folder.
   - The api has the following features already built-in:
-    - ``Azure Pipelines`` YAML file.
-    - ``GitHub Action`` file.
     - ``HealthChecks``
     - ``Swagger``
     - ``Serilog``
     - ``AutoMapper``
     - ``Microsoft.Identity.Web``
-  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action`` that allow us to deploy the api into an Azure App Service.
+    - ``Dockerfile``
+  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action`` YAML file to deploy the app into Azure App Service, thereby when you create a new solution using the template a ready-to-go deployment pipeline will be created.
 
-  >If you want to take a look at the source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/WebApiNet5Template)
+  >If you want to take a look at the api source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/WebApiNet5Template)
 
 - **NET 5 Worker Service that consumes RabbitMq messages**
-  - It is an entire solution app. It creates a ``BackgroundService`` that consumes messages from a RabbitMq server. It uses a N-layer architecture with 3 layers:
+  - It is an entire solution application. 
+  - The application is a ``BackgroundService`` that consumes messages from a RabbitMq server. It uses a N-layer architecture with 3 layers:
     - ``WebApi`` layer.
     - ``Library`` layer.
     - ``Repository`` layer.
@@ -51,13 +61,14 @@ The 3 apps I have built are the following ones:
     - ``AutoMapper``
     - ``Microsoft.Extensions.Hosting.Systemd``
     - ``Microsoft.Extensions.Hosting.WindowsServices``
-  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action``that allow us to deploy the service into an Azure App Service.
+    - ``Dockerfile``
+  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action`` YAML file to deploy the app into Azure App Service, thereby when you create a new solution using the template a ready-to-go deployment pipeline will be created.
 
-  >If you want to take a look at the source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/HostedServiceNet5RabbitConsumerTemplate)
+  >If you want to take a look at the worker source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/HostedServiceNet5RabbitConsumerTemplate)
 
 - **NET Core 3.1 Azure Function that gets triggered by a timer**
-  - This one is not an entire solution, instead  it is a single project. 
-  - It creates a NET Core 3.1 Azure Function that is triggered by a timer.
+  - This one will not create an entire solution, instead it is just a single project. 
+  - It is a NET Core 3.1 Azure Function that is triggered by a timer.
   - The function has the following features already built-in:
     - HealthChecks
     - Swagger
@@ -67,21 +78,18 @@ The 3 apps I have built are the following ones:
   - The function also has the following features already built-in:
     - ``Dependency Injection``
     - ``Logging``
-  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action`` that allow us to deploy the function.
+  - I have also included an ``Azure Pipelines`` YAML file and a ``GitHub Action`` YAML file to deploy the function into Azure Functions, thereby when you create a new solution using the template a ready-to-go deployment pipeline will be created.
 
-  >If you want to take a look at the source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/AzureFunctionTimerProjectTemplate)
+  >If you want to take a look at the function source code, click [HERE](https://github.com/karlospn/pack-dotnet-templates-example/tree/main/src/AzureFunctionTimerProjectTemplate)
 
----
 
-In the following sections I will be converting these 3 apps into templates, package them in a  NuGet file named ``MyTechRamblings.Templates`` and showing you how to use them within Visual Studio.
+# 2. Convert the NET 5 Web Api into a template
 
-## 2. Convert the NET 5 Web Api into a template
+## 2.1. **Create the template.json file**
 
-### 2.1. **Create the template.json file**
+The first step is to create the ``template.json`` file, but before start building it you need to know what you want to parameterize in the template.
 
-The first step will be to create the ``template.json`` file, but before start building it you need to know what you want to parameterize in the template.
-
-After taking a look at the different features I have built on the api, I have come with a list of features that I want to parameterize:
+After taking a look at the different features I have built on the api, I have come with a list of features that I want to parameterize.
 
 | Parameter             | Description                                                                                                                                                                                                                                                                                                | Default value           |
 |-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
@@ -96,7 +104,7 @@ After taking a look at the different features I have built on the api, I have co
 | **AppServiceName**        | The name of the Azure App Service where the code will be deployed.                                                                                                                                                                                                                                         | _app-svc-demo-dev_        |
 | **Authorization**         | Enables the use of authorization using Microsoft.Identity.Web                                                                                                                                                                                                                                              | _true_                    |
 | **AzureAdTenantId**       | Azure Active Directory Tenant Id. Only necessary if Authorization is enabled.                                                                                                                                                                                                                              | _8a0671e2-3a30-4d30-9cb9-ad709b9c744a_                       |
-| **AzureAdDomain**         | Azure Active Directory Domain Name. Only necessary if Authorization is enabled.                                                                                                                                                                                                                            | _carlosponsnoutlook.onmicrosoft.com_                       |
+| **AzureAdDomain**         | Azure Active Directory Domain Name. Only necessary if Authorization is enabled.                                                                                                                                                                                                                            | _cpnoutlook.onmicrosoft.com_                       |
 | **AzureAdClientId**       | Azure Active Directory App Client Id. Only necessary if Authorization is enabled.                                                                                                                                                                                                                          | _fdada45d-8827-466f-82a5-179724a3c268_                       |
 | **AzureAdSecret**         | Azure Active Directory App Secret Value. Only necessary if Authorization is enabled.                                                                                                                                                                                                                       | _1234_                       |
 | **HealthCheck**           | Enables the use of healthchecks.                                                                                                                                                                                                                                                                           | true                    |
@@ -109,19 +117,17 @@ After taking a look at the different features I have built on the api, I have co
 | **ApiDescription**        | The description of the api. Only necessary if Swagger is enabled.                                                                                                                                                                                                                                          | _Put your api info here._  |
 
 
-
-
 - If you are working with Docker just set the ``Docker`` parameter to true and a dockerfile will be placed alongside your api.
-- If you want to add some tests in you solution set the ``Tests`` parameter to true. A unit test project and a integration test project will be placed in your ``/test`` folder.
+- If you want to add some tests in your solution set the ``Tests`` parameter to true. A unit test project and a integration test project will be placed inside the ``/test`` folder.
 - If the api is going to be deployed with Azure Devops set the ``AzurePipelines`` attribute to true. A YAML pipeline and a ``/pipelines`` folder will be created inside your solution. 
 - If the api is going to be deployed with GitHub set the ``GitHub`` attribute to true. A YAML file containing a GitHub Action and a ``/.github`` folder will be created inside your solution.
-- Depending of how the api is going to be deployed set the ``DeploymentType`` attribute accordingly. This attribute will change the pipelines accordingly.
-  - If you deploy using containers it will give you a container deployment pipeline.
-  - If you deploy using a zip file it will give you an artifact deployment pipeline.
+- Depending of how the api is going to be deployed set the ``DeploymentType`` attribute accordingly. 
+  - If you deploy using containers, it will create a container deployment pipeline.
+  - If you deploy using a zip file, it will create an artifact deployment pipeline.
 - You can enable or disable features like ``HealthChecks``or ``Swagger``.
 - If you are using Authorization with Azure Active Directory, set the ``Authorization`` attribute to true and set the ``AzureAdTenantId``, ``AzureAdDomain``, ``AzureAdClientId``, ``AzureAdSecret`` attributes accordingly. 
 
-There is a default value for each attribute. You can put a default value that matches with your most common scenario so you won't need to set all those values every time you want to create a new app.
+There is a default value for each attribute. If you use a default value that matches with your most used scenario, you won't need to set all those values every time you want to scaffold a new app.
 
 After listing which features I want to parameterize, here's the ``template.json`` file:
 
@@ -411,52 +417,47 @@ After listing which features I want to parameterize, here's the ``template.json`
 }
 ```
 
-Let make an in-depth rundown of what's the meaning of every value:
+Let me make an in-depth rundown of what's the meaning of every value:
 
 - ``author``: The author of the template.
-- ``classifications``: Zero or more characteristics of the template that a user might search for it by. This classifications will appear as the template tags in the .NET CLI and in VS.
+- ``classifications``: Zero or more characteristics of the template that a user might search for it by. This classifications will appear as the template tags in the .NET CLI and in Visual Studio.
 - ``name``: The name of the template. That's the name that will appear in the .NET CLI and in VS.
-- ``description``:  The description of the template. The description will appear in the .NET CLI when you ran the ``dotnet new <TEMPLATE_NAME> -h`` command. In VS it will appear in the "Create new project dialog".
+- ``description``:  The description of the template. The description will appear in the .NET CLI when you ran the ``dotnet new <TEMPLATE_NAME> -h`` command. In VS it will appear in the ``Create new project dialog``.
 - ``groupIdentity``: The ID of the group this template belongs to.
 - ``identity``: A unique name for this template.
-- ``shortName``: A short name used for selecting the template in the .NET CLI. This is the name that shows when you run ``dotnet new -l`` and is the one that you will use when you want to create a new solution using the template. It has no use in Visual Studio.
+- ``shortName``: A short name used for selecting the template in the .NET CLI. This is the name that shows when you run ``dotnet new -l`` and is the one that you will use when you want to create a new solution using the template using the ``dotnet new mtr-api`` command.   
+Right now it has no use in Visual Studio.
 - ``defaultName``: The name that will be used when you create a new solution using the template if no name has been specified. 
 - ``tags``: You can add multiple tags but at least you have to specify the ``language`` tag and the ``type`` tag.
   - The language tag specifies the programming language. 
-  - The type tag specifies the type of the template project. The possible values are: project, solution, item. 
-- ``sourceName``: The template engine will look for any occurrence of the ``sourceName`` and replace it. It will rename files it there is an occurrence. It will also replace file content if there is an occurrence.   
-As you can see I'm using _"ApplicationName"_ as the sourceName. Also  I'm naming every csproj with the "ApplicationName" prefix:
-  - ApplicationName.sln
-  - ApplicationName.WebApi.csproj
-  - ApplicationName.Library.Contracts.csproj
-  - ApplicationName.Library.Impl.csproj
-  - ApplicationName.Repository.Contracts.csproj
-  - ApplicationName.Repository.Impl.csproj   
+  - The type tag specifies the type of the template project. The possible values are: ``project``, ``solution``, ``item``. 
+- ``sourceName``: The template engine will look for any occurrence of the ``sourceName`` and replace it. It will rename files if there is an occurrence. It will also replace file content if there is an occurrence.   
+I'm using  ``ApplicationName`` as the sourceName and naming every ``.csproj`` with the ``ApplicationName`` prefix:
+  - ``ApplicationName.sln``
+  - ``ApplicationName.WebApi.csproj``
+  - ``ApplicationName.Library.Contracts.csproj``
+  - ``ApplicationName.Library.Impl.csproj``
+  - ``ApplicationName.Repository.Contracts.csproj``
+  - ``ApplicationName.Repository.Impl.csproj``
 
-  When you create a new solution using the template you will be asked to specify the "sourceName" for this new solution and every csproj and sln will be renamed with the name chosen by the user.
+  When you create a new solution using this template every .csproj and .sln will be renamed by the template engine from ``ApplicationName`` to the name chosen by the user.
 
-- ``preferNameDirectory``: Indicates whether to create a directory for the template. If you set the value to ``false`` the content will be created in the current directory.
+- ``preferNameDirectory``: Indicates whether to create a directory for the template. If you set the value to ``false`` the solution will be placed in your current directory.
 
-- ``primaryOutputs``: TEST
+- ``specialCustomOperations``: The templating engine supports conditional operators but it only supports them in a certain file types. If you need to add conditionals operators in another file types you need to add them here.    
+In my template I want to add conditional operators on the YAML files, that  why I'm adding a custom operation that applies to all the yml files (``**/*.yml``)
 
-- ``specialCustomOperations``: The templating engine only supports conditional operators in a certain list of file types. If you need to add conditionals operators in another file types you need to add it here.    
-In my template I want to add conditional operators on the YAML files, so that's why I'm adding an custom operation on any yml file.
+- ``sources.modifiers`` : The sources.modifiers allows us to include or exclude files from the solution based on a condition.
 
-- ``sources.modifiers`` : The sources.modifiers allows us to include or exclude files based on a condition.
+- ``symbols``: The symbols section is where you specify the inputs you want to parameterize and also define the behaviour of those inputs. 
 
-- ``symbols``: The symbols section is where you specify the template inputs and define what those inputs should do. 
+The ``symbols`` and the ``sources.modifiers`` section is the meat of the ``template.json`` file, so let's review the different scenarios present.
 
-In our case the ``symbols`` section and the ``source.modifiers`` section are intertwined.
-- I'm defining symbol in the ``symbol`` section and the value from the symbol is used as a condition in the ``source.modifier`` section.
-
-The ``symbols`` and the ``sources.modifiers`` section is the meat of the ``template.json`` file, so let's enumerate the different scenarios you can find.
-
-### **Symbol replacement**
+## **Symbol replacement**
 
 - Replaces a fixed string with the value of the symbol.
 
-**Example:** 
-
+**Example:**   
 Here I have the symbol ``HealthCheckPath`` of type ``parameter``. It has a default value of ``/health`` and a replace value of ``HEALTHCHECK-VALUE``. 
 ```javascript
   "HealthCheckPath": {
@@ -467,10 +468,10 @@ Here I have the symbol ``HealthCheckPath`` of type ``parameter``. It has a defau
     "description": "HealthCheck path. Only necessary if HealthCheck is enabled."
   }
 ```
-When you try to create a new solution using the template:
+When you try to create a new solution using this template:
 
-- The template engine will try to find the "HEALTHCHECK-PATH" string anywhere in the template and if it finds it, it will be replaced either by the user input or the default value (/health) 
-If you take a look in the ``Startup.cs``, you'll see the ``replaces`` value hard-coded in the template.
+- The template engine will try to find the ``HEALTHCHECK-PATH`` string anywhere anywhere in the template and if it finds it, it will be replaced either by the user input or the default value (``/health``).    
+If you take a look at the ``Startup.cs``, you'll see the _``replaces``_ value hard-coded in the template.
 
 ```csharp
    endpoints.MapHealthChecks("HEALTHCHECK-PATH", new HealthCheckOptions
@@ -479,15 +480,15 @@ If you take a look in the ``Startup.cs``, you'll see the ``replaces`` value hard
     });
 ```
 
-When the user creates a new solution using the template the magic string ``HEALTHCHECK-PATH`` will be replaced by the user input.
+When the user creates a new solution using this template the magic string ``HEALTHCHECK-PATH`` will be replaced either by the user input or the ``defaultValue``.
 
-If you take a look at the ``template.json`` file a lot of symbols are using this concrete approach.
+If you take a quick look at the symbols section from the  ``template.json`` file I have built, you will find a lot of symbols that uses this scenario with different placeholder value, this is because that's the easiest way to replace values inside the source code.
 
-### **Use conditional operators based on the symbol value**
+## **Use conditional operators based on the symbol value**
 
 - It allows us to skip entire chunks of code based on a symbol value.
 
-**Example:**
+**Example:**   
 Here I have the symbol ``Authorization`` of type ``bool`` with the default value of ``true``.
 
 ```javascript
@@ -498,11 +499,10 @@ Here I have the symbol ``Authorization`` of type ``bool`` with the default value
     "description": "Enables the use of authorization with Microsoft.Identity.Web."
   },
 ```
-
-- If the user sets the value to ``false``, the template engine needs to remove any ``Microsoft.Web.Identity`` reference from the solution created.
+- If the user sets the value to ``false``, the template engine needs to remove any ``Microsoft.Web.Identity`` reference from the solution.
 - If the user sets this symbol to ``true``, the template engine needs to keep the references to the ``Microsoft.Web.Identity``.
 
-If you take a look at the  ``Startup.cs``, you'll see that all the ``Microsoft.Web.Identity`` references are being wrapped in a conditional.
+If you take a look at the  ``Startup.cs``, you'll see that all the ``Microsoft.Web.Identity`` references are being wrapped in a conditional operator.
 
 ```csharp
 #if Authorization
@@ -523,7 +523,8 @@ using Microsoft.Identity.Web;
 #endif
 ```
 
-We are keeping the ``Microsoft.Web.Identity`` code only if the symbol is set to ``true``. But that's not enough, we need to remove the ``Microsoft.Web.Identity`` references from the ``appsettings.json`` file too.
+The ``Microsoft.Web.Identity`` references are only being kept if the symbol ``Authorization`` is set to ``true``.    
+That's not enough, we need to remove the ``Microsoft.Web.Identity`` references from the ``appsettings.json`` file too.
 
 ```javascript
 {
@@ -564,9 +565,10 @@ And also from the api controller:
 
 ```
 
-## Use a symbol value to compute another one
 
-- Given a value of a symbol, you can set the value of another one.
+## **Use a symbol value to compute another one**
+
+- Given the value of a symbol, you can set the value of another one.
 
 **Example:**
 
@@ -599,11 +601,12 @@ The ``DeploymentType`` symbol is of type ``choice`` and with its value you can s
   },
 ```
 
-The ``DeployContainer`` symbol and  the ``DeployZip`` symbol will be used to tailor the deployment pipeline. 
-- If the symbol ``DeploymentContainer`` is set to ``true``, the deployment pipeline will build and deploy a docker image.
-- If the symbol ``DeployZip`` is set to ``true``, the deployment pipeline will build and deploy zipped artifact.   
+The ``DeployContainer`` symbol and the ``DeployZip`` symbol are used to tailor the deployment pipeline. 
+- If the user sets the ``DeploymentType`` symbol to ``DeployAsContainer``,  then the ``DeployContainer`` symbol is set to ``true``. The ``DeploymentContainer`` symbol value is used to create a deployment pipeline that will build and deploy a docker image.
+- If the user sets the ``DeploymentType`` symbol to ``DeployAsZip``,  then the ``DeployZip`` symbol is set to ``true``. The ``DeployZip`` symbol value is used to create a deployment pipeline that will build and deploy a zipped artifact.
 
-This is how the Azure Pipelines YAML file looks like:
+In the ``symbol`` section there is a symbol named ``AzurePipelines`` that allows us to choose if we want to add an Azure Pipelines YAML into the solution.    
+This is how the Azure Pipelines YAML file looks like if the user set the symbol to ``true``
 
 ```yaml
 trigger:
@@ -696,9 +699,98 @@ steps:
 #endif
 ```
 
-## Excluding files based on a symbol value:
+In the ``symbol`` section there is a symbol named ``GitHub`` that allows us to choose if we want to add a GitHub Action into the solution.   
+This is how the GitHub Action looks like if the user set the symbol to true.
 
-- You can combine the ``source.modifiers`` section with the ``symbols`` section to remove existing files based on a symbol value.
+
+```yaml
+name: .NET App Deploy to App Service
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+#if (DeployContainer)
+env:
+  AZURE_WEBAPP_NAME: APP-SERVICE-NAME   
+  CONTAINER_REGISTRY: ACR-REGISTRY-NAME.azurecr.io 
+
+jobs:
+  build-and-deploy-to-dev:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+    # Checkout the repo
+    - uses: actions/checkout@master
+
+    # Authenticate to Azure
+    - name: Azure authentication
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+ 
+    # Authenticate to ACR
+    - name: ACR authentication
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.CONTAINER_REGISTRY }}
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }} 
+
+    # Build and push the Docker image
+    - name: Docker Build & Push to ACR
+      run: |
+        docker build . -t ${{ env.CONTAINER_REGISTRY }}/ApplicationName:${{ github.sha }}
+        docker push ${{ env.CONTAINER_REGISTRY }}/ApplicationName:${{ github.sha }} 
+    # Deploy to Azure
+    - name: 'Deploy to Azure Web App for Container'
+      uses: azure/webapps-deploy@v2
+      with: 
+        app-name: ${{ env.AZURE_WEBAPP_NAME }} 
+        images: ${{ env.CONTAINER_REGISTRY }}/ApplicationName:${{ github.sha }}
+#endif
+
+#if (DeployZip)
+env:
+  AZURE_WEBAPP_NAME: APP-SERVICE-NAME  
+  AZURE_WEBAPP_PACKAGE_PATH: '.'      
+  DOTNET_VERSION: '5.0.4'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      # Checkout the repo
+      - uses: actions/checkout@master
+      
+      # Setup .NET Core SDK
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }} 
+      
+      # Run dotnet build and publish
+      - name: dotnet build and publish
+        run: |
+          dotnet restore
+          dotnet build --configuration Release
+          dotnet publish -c Release -o '${{ env.AZURE_WEBAPP_PACKAGE_PATH }}/myapp' 
+          
+      # Deploy to Azure Web apps
+      - name: 'Run Azure webapp deploy action using publish profile credentials'
+        uses: azure/webapps-deploy@v2
+        with: 
+          app-name: ${{ env.AZURE_WEBAPP_NAME }} 
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE  }} 
+          package: '${{ env.AZURE_WEBAPP_PACKAGE_PATH }}/myapp'
+```
+
+## **Excluding files based on a symbol value**
+
+- Can combine the ``source.modifiers`` section with the ``symbols`` section to include or exclude existing files based on a symbol value.
 
 **Example 1:**
 
@@ -716,7 +808,8 @@ The ``Dockerfile`` symbol is of type ``parameter`` and the default value is ``tr
 - If the symbol value is set to ``false``, the template engine needs to remove the "Dockerfile" file from the template.
 - If the symbol value is set to ``true``, the template engine needs to keep the "Dockerfile" file.
 
-To achieve this behaviour, you can add the following object in ``source.modifiers`` array.
+To achieve the desired behaviour, you can add the following object insinde ``source.modifiers`` array.   
+As you can see the ``Docker`` symbol value is used as the condition to exclude the file.
 
 ```javascript
   {
@@ -728,7 +821,7 @@ To achieve this behaviour, you can add the following object in ``source.modifier
   }
 ```
 
-The template engine will remove the "Dockerfile" file if the symbol "Docker" equals to false.
+The template engine will remove the "Dockerfile" file, if the symbol "Docker" equals to false.
 
 
 **Example 2:**
@@ -744,10 +837,14 @@ This is a more interesting example. The ``Test`` symbol is of type ``parameter``
   }
 ```
 
-- If the symbol value is set to ``false``, the template engine needs to remove the entire folder that contains the unit test project and also the folder that contains the integration test. It also needs to remove the references from the solution file.
-- If the symbol value is set to ``true``, the template engines needs to keep the both test projects.
+- If the symbol value is set to ``false``, the template engine needs to:
+  - Remove the entire folder that contains the unit test project
+  - Remove the entire folder that contains the integration test
+  - Remove the references from the ``.sln`` file.
+- If the symbol value is set to ``true``, the template engines needs to keep the test projects.
 
-To achieve this behaviour, you can add the following object in ``source.modifiers`` array.
+To achieve the desired behaviour, you can add the following object in ``source.modifiers`` array.   
+As you can see the ``Tests`` symbol value is used as the condition to exclude both test folders.
 
 ```javascript
   {
@@ -760,7 +857,7 @@ To achieve this behaviour, you can add the following object in ``source.modifier
   },
 ```
 
-The template engine also needs to exclude the test project references from the ``.sln`` file.  To do it we can use a conditional check.
+To remove the test project references from the ``.sln`` file  we can use a conditional check.
 
 ```csharp
 #if (Tests)
@@ -775,23 +872,331 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ApplicationName.Library.Imp
 EndProject
 #endif
 ```
-### 2.2. **Create the dotnetcli.host.json file**
 
-### 2.3. **Create the ide.host.json file**
+I'm not going to try to explain the meaning of each and every symbol defined on the symbols section.    
+Instead of that I have given you a rundown of every possible scenario, so every symbol from the symbol section will drop in one of the scenarios described in the previous section. 
 
-## 3. Convert the remaining 2 apps into templates
 
-- We still need to convert the ``Worker Service`` application  and the ``Azure Function`` into a .NET template.
+## 2.2. **Create the dotnetcli.host.json file**
 
-But the conversion process looks exactly the same.   
-The ``template.json`` file is almost identical with few different parameters, so I'm not going to bother writing about it. 
-If you're interested in the end result, take a look at the GitHub repository.
+If your template needs some command line parameters you can customize them by adding a ``dotnetcli.host.json`` file inside the ``.template.config`` folder.
 
-## 4. Create the MyTechRamblings.Templates NuGet package
+In the ``dotnetcli.host.json`` file you can specify the short and long names for each of the command line parameters.  
 
-In **section 1.2** I described a couple of ways to package a template NuGet. 
+This step is not mandatory and in my case I have quite a sizeable list of parameters to customize, but nonetheless  I prefer to customize each parameter name as I see fit.   
+Here's how the ``dotnetcli.host.json`` looks:
 
-I'm using a ``.nuspec`` file at the root level. It looks like this:
+```javascript
+{
+    "$schema": "http://json.schemastore.org/dotnetcli.host",
+    "symbolInfo":
+    {
+        "Docker": {
+            "longName": "dockerfile",
+            "shortName": "d"
+        },
+        "ReadMe": {
+            "longName": "readme",
+            "shortName": "r"
+        },
+        "Tests": {
+            "longName": "tests",
+            "shortName": "t"
+        },
+        "GitHub": {
+            "longName": "github",
+            "shortName": "ga"
+        },
+        "AzurePipelines": {
+            "longName": "azure-pipelines",
+            "shortName": "ap"
+        },
+        "DeploymentType": {
+            "longName": "deploy-type",
+            "shortName": "dt"
+        },
+        "AcrName": {
+            "longName": "acr-name",
+            "shortName": "acr"
+        },
+        "AzureSubscriptionName": {
+            "longName": "azure-subscription",
+            "shortName": "az"
+        },
+        "AppServiceName": {
+            "longName": "app-service-name",
+            "shortName": "asn"
+        },
+        "Authorization": {
+            "longName": "authorization",
+            "shortName": "auth"
+        },
+        "AzureAdTenantId":{
+            "longName": "aad-tenant-id",
+            "shortName": "at"
+        },
+        "AzureAdDomain":{
+            "longName": "aad-domain-name",
+            "shortName": "ad"
+        },
+        "AzureAdClientId":{
+            "longName": "aad-client-id",
+            "shortName": "ac"
+        },
+        "AzureAdSecret":{
+            "longName": "aad-secret-value",
+            "shortName": "as"
+        },
+        "HealthCheck": {
+            "longName": "healthcheck",
+            "shortName": "hck"
+        },
+        "HealthCheckPath": {
+            "longName": "healthcheck-path",
+            "shortName": "hp"
+        },
+        "Swagger": {
+            "longName": "swagger",
+            "shortName": "s"
+        },
+        "SwaggerPath": {
+            "longName": "swagger-path",
+            "shortName": "sp"
+        },
+        "Contact": {
+            "longName": "contact-mail",
+            "shortName": "cm"
+        },
+        "CompanyName": {
+            "longName": "company-name",
+            "shortName": "cn"
+        },
+        "CompanyWebsite": {
+            "longName": "company-website",
+            "shortName": "cw"
+        },
+        "ApiDescription": {
+            "longName": "api-description",
+            "shortName": "desc"
+        }
+    }
+}
+```
+
+Remember that there are default values defined in the ``template.json`` file for each parameter, so you don't have to specify each command line parameter if you don't need to. 
+
+If I want to create the solution using the default values an override only a couple of paramenters I could totally do it.   
+For example if I execute this command: ``dotnet new mtr-api --github true --azure-pipelines false``, it will create a solution app using the default values for every command line parameter except the ``github`` and ``azure-pipelines`` parameters.
+
+## 2.3. **Create the ide.host.json file**
+
+If your template needs some command line parameters and you want to use it within Visual Studio you need to add  ``ide.host.json`` file inside the ``.template.config`` folder.
+
+This file will be used to show the command line parameters inside a project dialog when you try to create a new project.   
+
+You can customize your templates appearance in the VS template list with an icon. If it is not provided, a default icon will be associated with your project template.
+
+Here's how the ``ide.host.json`` looks:
+
+```javascript
+{
+    "$schema": "http://json.schemastore.org/vs-2017.3.host",
+    "order": 0,
+    "icon": "icon.png",
+    "symbolInfo": [
+      {       
+        "id": "Docker",
+        "name": 
+        {
+          "text": "Adds a Dockerfile."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "ReadMe",
+        "name": 
+        {
+          "text": "Adds a Readme."
+        },
+        "isVisible": true      
+      },
+      {
+        "id": "Tests",
+        "name": 
+        {
+          "text": "Adds a Unit Test and a Integration Test project."
+        },
+        "isVisible": true
+      },
+      {       
+        "id": "GitHub",
+        "name": 
+        {
+          "text": "Adds a GitHub action to deploy the application."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "AzurePipelines",
+        "name": 
+        {
+          "text": "Adds an Azure Pipeline YAML to deploy the application."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "DeploymentType",
+        "isVisible": true      
+      },
+      {       
+        "id": "AcrName",
+        "name": 
+        {
+          "text": "Name of the ACR Registry, only used if deploying with container."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "AzureSubscriptionName",
+        "name": 
+        {
+          "text": "Azure subscription name."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "AppServiceName",
+        "name": 
+        {
+          "text": "Azure Application Service Name."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "Authorization",
+        "name": 
+        {
+          "text": "Enable the use of authorization with Microsoft.Identity.Web."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "AzureAdTenantId",
+        "name": 
+        {
+          "text": "Azure Active Directory Tenant Id. Only necessary if Authorization is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "AzureAdDomain",
+        "name": 
+        {
+          "text": "Azure Active Directory Domain Name. Only necessary if Authorization is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "AzureAdClientId",
+        "name": 
+        {
+          "text": "Azure Active Directory App Client Id. Only necessary if Authorization is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "AzureAdSecret",
+        "name": 
+        {
+          "text": "Azure Active Directory App Secret Value. Only necessary if Authorization is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "HealthCheck",
+        "name": 
+        {
+          "text": "Enable the use of healthchecks."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "HealthCheckPath",
+        "name": 
+        {
+          "text": "HealthCheck path. Only necessary if HealthCheck is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "Swagger",
+        "name": 
+        {
+          "text": "Enable the use of Swagger."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "SwaggerPath",
+        "name": 
+        {
+          "text": "Swagger UI Path. Only necessary if Swagger is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "Contact",
+        "name": 
+        {
+          "text": "The contact details to use if someone wants to contact you. Only necessary if Swagger is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "CompanyName",
+        "name": 
+        {
+          "text": "The name of the company. Only necessary if Swagger is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "CompanyWebsite",
+        "name": 
+        {
+          "text": "The website of the company. Only necessary if Swagger is enabled."
+        },
+        "isVisible": true      
+      },
+      {       
+        "id": "ApiDescription",
+        "name": 
+        {
+          "text": "The description of the WebAPI. Only necessary if Swagger is enabled."
+        },
+        "isVisible": true      
+      }
+    ]
+}
+```
+
+# 3. Convert the remaining 2 apps into templates
+
+- We still need to convert the ``Worker Service`` application and the ``Azure Function`` into a .NET template.
+
+The conversion process is exactly the same as the one described for the webapi, so I'm not going to bother writing about it.    
+
+The ``template.json`` file is very similar in both cases, if you're interested in the end result:
+- Here`s the [link](https://github.com/karlospn/pack-dotnet-templates-example/blob/main/src/HostedServiceNet5RabbitConsumerTemplate/.template.config/template.json) to the ``template.json`` file for the Worker Service app.
+- Here's the [link](https://github.com/karlospn/pack-dotnet-templates-example/blob/main/src/AzureFunctionTimerProjectTemplate/.template.config/template.json) to the ``template.json`` file for the Azure Function.
+
+# 4. Create the MyTechRamblings.Templates NuGet package
+
+In **Part 1** I told you that there are a couple of ways for creating a template pack:
+- Using a ``.csproj`` file and the ``dotnet pack`` command.
+- Using a ``.nuspec`` file and the ``nuget pack`` command from ``nuget.exe``.
+
+I have built a ``.nuspec``. It looks like this:
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -820,7 +1225,7 @@ I'm using a ``.nuspec`` file at the root level. It looks like this:
 ```
 
 A template pack, in the form of a .nupkg NuGet package, requires that **all templates be stored in the content folder** within the package.    
-So I have created a powershell that does exactly this and also bundles everything together using the ``nuget.exe`` executable.
+I have also built a Powershell script that fetches nuget.exe from internet, bundles everything together and creates the package using the ``nuget pack`` command.
 
 ```powershell
 Set-StrictMode -Version Latest
@@ -852,52 +1257,58 @@ $cmdArgList = @( "pack", "$templatePath\MyTechRamblings.Templates.nuspec",
 				 "-OutputDirectory", "$nugetOut", "-NoDefaultExcludes")
 & $nugetPath $cmdArgList 
 ```
-As you can see it's a quite simple script.
-- Move the 3 templates inside a ``/content`` folder.
-- Download nuget.exe and run ``nuget.exe pack`` command using the ``.nuspec`` file.
 
+After running the script you will find the .nupkg inside  the ``/template/nuget`` folder.
 
-## 5. Install and use the MyTechRamblings.Templates with the .NET CLI
+# 5. Install and use the MyTechRamblings.Templates with the .NET CLI
 
 
 To Install the package you can run this command:
 
 -  ``dotnet new -i MyTechRamblings.Templates::0.1.0``   
 
-It will try to fetch the template NuGet from nuget.org and install it. 
+The command will try to fetch the NuGet from nuget.org and install it. 
 
-Or if you have the nupkg in your local directory, just ran this other one:
+Or if you have the .nupkg in your local filesystem, you can ran this command:
 
 -  ``dotnet new -i .\MyTechRamblings.Templates.0.1.0.nupkg``
 
-After installing the templates pack you should run the ``dotnet new -l`` command and verify that the 3 templates appear on the list.
+After installing the templates pack you should run the ``dotnet new -l`` command and verify that the 3 templates appear on the list (mtr-api, mtr-rabbit-worker, mtr-az-func-timer)
 
 ![dotnet-list-templates](/img/dotnet-list-installed-templates.png)
 
-Now you can create a new solution using the api templates just running:
+Now you can create a new solution using the api template running the command:
 
 -  ``dotnet new mtr-api``
 
-This command will create a solution with all the default values. If you want to specify a concrete value just execute the ``dotnet new mtr-api -h`` command to list all the possible options.
+This command will create a solution with all the default values. If you want to specify a concrete value just execute the ``dotnet new mtr-api -h`` command to list every available command line option.
 
-Or you can create a new solution using the worker service template running:
+Or you can create a new solution using the worker service template running the command:
 
 - ``dotnet new mtr-rabbit-worker``
 
-Or you can create an Azure Function project using the azure function template running:
+This command will create a solution with all the default values. If you want to specify a concrete value just execute the ``dotnet new mtr-rabbit-worker -h`` command to list every available command line option.
+
+Or you can create an Azure Function project using the azure function template running the command: 
 
 - ``dotnet new mtr-az-func-timer``
 
+This command will create a solution with all the default values. If you want to specify a concrete value just execute the ``dotnet new mtr-az-func-timer -h`` command to list every available command line option.
 
-## 6. Use the MyTechRamblings.Templates within Visual Studio
+# 6. Use the MyTechRamblings.Templates within Visual Studio
 
-> Be sure to have enabled the following option in Visual Studio: ``Tools > Options > Preview Features > Show all .NET Core templates in the New Project dialog``
+> Be sure to enable the following option in Visual Studio: ``Tools > Options > Preview Features > Show all .NET Core templates in the New Project dialog``.   
+> And remember:
+> - **Using .NET CLI templates within Visual Studio is only available in Visual Studio version 16.8 or higher**.    
+> - **Also if you're creating a solution template you need at least Visual Studio version 16.10 or higher.**
 
-Try to create a new project a the new templates should appear in ``Create new project`` dialog.
+
+Try to create a new project withing Visual Studio and the new templates should appear in the``Create new project`` dialog.   
+If the templates doesn't show up, just search for them in the search box.
 
 ![list-templates](/img/dotnet-vs-list-templates.png)
 
-If you select any of the template you have created a dialog will show up a dialog will pop-up and it will contain every parameter that you have specified in the ``ide.host.json``
+If you select any of the templates a dialog will show up and it will contain every parameter that you have specified in the ``ide.host.json``
 
 - WebAPI Visual Studio dialog:
 
