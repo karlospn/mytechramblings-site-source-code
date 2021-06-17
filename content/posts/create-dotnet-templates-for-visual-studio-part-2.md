@@ -1,7 +1,7 @@
 ---
 title: "How to build a .NET template and use it within Visual Studio. Part 2: Creating a template package"
 date: 2021-06-17T10:01:29+02:00
-draft: true
+draft: false
 tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
 ---
 
