@@ -5,9 +5,9 @@ draft: false
 tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
 ---
 
-> This is a 2 part-series.    
-> - In **part 1** I will talk about some key concepts that you should know when creating a .NET template.
-> - In **part 2** I will show you the process of converting a .NET app into a .NET template. 
+> This is a 2 part-series.
+> - **Part 1**: Key concepts that you should know when creating a .NET template.
+> - **Part 2**: How to convert a few .NET apps into .NET templates, package them together in a single NuGet pack and use them as templates within Visual Studio. If you want to read it, click [**here**](https://www.mytechramblings.com/posts/create-dotnet-templates-for-visual-studio-part-2/)
 
 When you install the .NET SDK you receive a handful of built-in templates for creating projects  like console apps, web apis, class libraries, unit test projects, etc.   
 But you can also create your own templates and install them using a NuGet package.    
