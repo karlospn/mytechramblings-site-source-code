@@ -1,5 +1,5 @@
 ---
-title: "Few gotchas when deploying a dotnet gRPC app to AWS ECS"
+title: "Common mistakes when trying to deploy a dotnet gRPC app to AWS ECS"
 date: 2021-07-19T15:32:32+02:00
 tags: ["dotnet", "grpc", "containers", "aws", "ecs"]
 draft: true
@@ -11,14 +11,14 @@ As always if you don’t care about the post I have upload a few examples on my 
 Nowadays creating a new dotnet gRPC application is pretty straightforward. From the developer standpoint the experience of creating a gRPC app it's quite similar as creating an API. 
 Visual Studio also offers Intellisense support for gRPC services and proto files.
 
-Lately I've been deploying a sizable amount of gRPC services to AWS ECS Fargate so I thought it might be useful to talk a little bit about some gotchas you might encounter.   
-Some of the problems are specific of the dotnet implementation of gRPC and another ones are from the AWS side.
+Lately I've been deploying a sizable amount of gRPC services to AWS ECS so I thought it might be useful to talk a little bit about some gotchas you might encounter.   
+Some of the problems are specific of the dotnet implementation of gRPC and another ones are on the AWS side.
 
-If people are interested in the gRPC theme maybe in the future I write a more in-depth post about gRPC and AWS, but for now I want to focus in a few gotchas I have encountered this past weeks.   
-In this post I will focus on the following themes:
-- **gRPC healtchecks**: How to implement a gRPC HealtCheck service on a dotnet gRPC app and how to use it as the Target Group healthcheck endpoint.
-- **Adding a gRPC endpoint into an existing HTTP REST WebApi**: It is really easy to add a gRPC service into an Http REST WebApi, but when you deploy this service into ECS it won't work. Why is that? What's the workaround?
-- **The package attribute on the .proto file and how the ALB uses it for path routing**: The ``package`` attribute on the .proto file might seem useless on dotnet mainly because the ``csharp_namespace`` option takes precendence over it, but the gRPC implementation for the ALB uses the package attribute to route the gRPC calls to the appropriate target.
+If people are interested in the gRPC theme maybe in the near future I write a more in-depth post about dotnet gRPC apps and AWS, but for now I want to focus in a few gotchas I have encountered this past weeks.   
+In this post I will talk about these 4 themes:
+- **gRPC healtchecks**: How to implement a gRPC health checking service on a dotnet gRPC app and how to use it as the ALB Target Group healthcheck endpoint.
+- **Adding a gRPC endpoint into an existing HTTP REST WebApi**: It is really easy to add a gRPC service into an Http REST Api, but when you deploy this service into ECS it probably won't work. Why is that? What's the workaround?
+- **What's the package attribute on the .proto file for**: The ``package`` attribute on the .proto file might seem useless on dotnet mainly because the ``csharp_namespace`` option takes precendence over it, but the gRPC implementation for the ALB uses the package attribute to route the gRPC calls to the appropriate target.
 - **gRPC Reflection**: What is the easiest way to test a gRPC service that has been deployed into AWS ECS?
 
 # 1. gRPC Healthchecks
@@ -29,7 +29,7 @@ gRPC Health checks are used to probe whether the server is able to handle rpcs.
 
 A gRPC service is used as the health checking mechanism for both client-to-server scenario and other control systems such as load-balancing. Since it is a GRPC service itself, doing a health check is in the same format as a normal rpc.
 
-If you want to follow the [gRPC protocol standards](https://github.com/grpc/grpc/blob/master/doc/health-checking.md).    
+If you want to read the gRPC protocol standards, click [here](https://github.com/grpc/grpc/blob/master/doc/health-checking.md).    
 This is the standard .proto file that a gRPC healthcheck service needs to implement:
 
 ```csharp
@@ -66,12 +66,11 @@ If the service name is not registered, the server returns a ``NOT_FOUND`` gRPC s
 
 - A client can also call the ``Watch`` method to perform a streaming health-check. The server will immediately send back a message indicating the current serving status. It will then subsequently send a new message whenever the service's serving status changes.
 
-We could implement the healthchecking proto definition by ourselves but it also exists the ``Grpc.HealthCheck`` NuGet package that does some heavy lifting for us.   
-This nuget package contains a implementation of the ``Check`` and ``Watch`` methods and also contains the definitions used to send a request and reply to the healthcheck service.   
-If you want you could use directly the package, but in .NET Core we have a rich offering of healthcheck implementations (https://github.com/Xabaril/AspNetCore.Diagnostics.HealthChecks) that uses the ``AspNetCore.Diagnostics.HealthChecks``  NuGet and I want to keep using them. 
+We could implement the healthchecking proto definition by ourselves, but it also exists the ``Grpc.HealthCheck`` NuGet package that does some heavy lifting for us. This nuget package contains a implementation of the ``Check`` and ``Watch`` methods and also contains the definitions used to send a request and reply to the healthcheck service.  
 
-To use the ``AspNetCore.Diagnostics.HealthChecks`` in combination with the ``Grpc.HealthCheck`` package you have to reimplement the healthchecking service by yourself.   
-If you take a look at the implementation of the ``Check`` method in the ``Grpc.Healthcheck`` package, you'll see that the method can be override
+We could install and start using the package directly, but in .NET Core we have a rich offering of healthcheck implementations (https://github.com/Xabaril/AspNetCore.Diagnostics.HealthChecks) that uses the ``AspNetCore.Diagnostics.HealthChecks``  NuGet as a base and I want to keep using them.   
+To use the ``AspNetCore.Diagnostics.HealthChecks`` in combination with the ``Grpc.HealthCheck`` package you have to override the gRPC healthchecking service that the ``Grpc.HealthCheck`` NuGet offers.   
+If you take a look at the implementation of the ``Check`` method in the ``Grpc.Healthcheck`` package, you'll see that the method can be overriden
 
 ```csharp
 /// <summary>
@@ -87,7 +86,7 @@ public override Task<HealthCheckResponse> Check(HealthCheckRequest request, Serv
     return Task.FromResult(response);
 }
 ```
-We can override the ``Check`` method and use the ``HealthCheckService`` from the ``AspNetCore.Diagnostics.HealthChecks`` to execute the .NET Core healthchecks.   
+So we can override the ``Check`` method and use the ``HealthCheckService`` from the ``AspNetCore.Diagnostics.HealthChecks`` to execute the .NET Core healthchecks.   
 Here's the result:
 
 ```csharp
@@ -146,7 +145,7 @@ namespace Server.gRPC
     }
 }
 ```
-## Use of gRPC healthchecks behind an AWS Load Balancer
+## Using the gRPC healthchecks as the ALB Target Group HealthCheck
 
 As I have stated in the previous section this is what the gRPC healthcheck protocol says about the ``Check`` Method:
 
@@ -154,14 +153,14 @@ As I have stated in the previous section this is what the gRPC healthcheck proto
 For each request received a response must be sent back with an ``OK`` status and the status field should be set to ``SERVING`` or ``NOT_SERVING`` accordingly.   
 If the service name is not registered, the server returns a ``NOT_FOUND`` gRPC status.
 
-The protocol is saying that you should return an ``OK`` status code (status code = 0) if the service is healthy and also an ``OK`` status code (status code = 0) if the service is unhealthy. And you should use the status field to specify if the service is healthy or not.  
+The protocol says that you should return an ``OK`` status code (gRPC status code = 0) if the service is healthy and also an ``OK`` status code (gRPC status code = 0) if the service is unhealthy. And you should use the status field to specify if the service is healthy or not.  
 
-If you want to add a Load Balancer in front of your ECS Fargate Service the gRPC standard won't stand. A load balancer routes requests and performs health checks to the targets using a Target Group and the Target Group uses the health check Status Code to ascertain that a service is healthy.     
-The protocol is saying that you should respond with the same status code if the service is healthy or unhealthy. You see the problem?
+If you want to use the gRPC health check implementation from the previous section as the healthcheck endpoint for the Target Group, it won't work.  
 
-We need to modify a little bit the implementation that I posted in the previous section. The main difference is that we are going to return different status code based on the healthcheck status response.
-- If the service is healthy return an ``OK`` status (status code = 0)
-- If the service is unhealthy return a ``Unavailable`` status (status code = 14)
+The healthcheck protocol says that you should respond with the same status code if the service is healthy or unhealthy. You see the problem? The target group healthcheck uses the status code to ascertain that a service is healthy.   
+We need to modify a little bit the implementation that I posted in the previous section. We are going to return a different status code based on the healthcheck status response.
+- If the service is healthy return an ``OK`` status (gRPC status code = 0)
+- If the service is unhealthy return a ``Unavailable`` status (gRPC status code = 14)
 
 Here's a snippet of code showing the end result:
 
@@ -218,12 +217,12 @@ namespace Server.gRPC
     }
 }
 ```
+After this little modification, we are ready to start using this healthcheck service as a Target group healthcheck endpoint.
 
 # 2. Adding a gRPC endpoint into an existing HTTP REST WebApi
 
-That's a pretty common scenario: 
-- Image you have an existing .NET Http REST WebApi and now you want to add a gRPC service into this API.    
-gRPC uses HTTP/2 as its transfer protocol, but you need to maintain support for HTTP/1.1 for your current clients.
+Image you have an existing dotnet HTTP WebApi and now you want to add a gRPC service into this API, so your clients can consume your api via JSON REST or via gRPC.       
+gRPC uses HTTP/2 as its transfer protocol, but obviously you need to maintain support for HTTP/1.1 for your current clients.
 
 ## Kestrel HTTP protocols
 
@@ -233,7 +232,7 @@ The possible values are the following ones:
 
 - ``Http1``: Accept HTTP/1.1 only. Can be used with or without TLS.
 - ``Http2``: Accept HTTP/2 only. May be used without TLS only if the client supports a Prior Knowledge mode.
-- ``Http1AndHttp2``: Accept HTTP/1.1 and HTTP/2. **HTTP/2 requires the client to select HTTP/2 in the TLS Application-Layer Protocol Negotiation (ALPN) handshake; otherwise, the connection defaults to HTTP/1.1.**
+- ``Http1AndHttp2``: Accept HTTP/1.1 and HTTP/2.*HTTP/2 requires the client to select HTTP/2 in the TLS Application-Layer Protocol Negotiation (ALPN) handshake; otherwise, the connection defaults to HTTP/1.1.
   
 The default ``Protocols`` value for any endpoint is ``HttpProtocols.Http1AndHttp2``
 
@@ -275,18 +274,18 @@ Protocols specified in code override values set by configuration.
 
 ## Configuring Kestrel to work with HTTP/1.1 and HTTP/2
 
-After reading the previous section you'll probably try to set Kestrel ``Protocols`` attribute to ``HttpProtocols.Http1AndHttp2`` and after deploying the application to Fargate it will work for the clients that are using HTTP/1.1 to communicate with your API but it won't work for the clients that are using HTTP/2.
+After reading the previous section you'll think that the solution is quite obvious: set on Kestrel the ``Protocols`` attribute to ``HttpProtocols.Http1AndHttp2``. After deploying the application to AWS ECS you'll find that it works for the clients that are using HTTP/1.1 to communicate with your API but it won't work for the clients that are using HTTP/2.    
 
 Why is that? This is because when you set Kestrel to ``Http1AndHttp2``, it requires the client to select HTTP/2 in the TLS ALPN handshake; otherwise, the connection defaults to HTTP/1.1.   
 Simply put if you set Kestrel to ``Http1AndHttp2``  and want to communicate via HTTP/2 you'll need to use TLS end-to-end.   
-We're doing a TLS termination in the Load Balancer, so the communication between the ALB and the ECS Service is unencrypted.
+With AWS ECS we are doing a TLS termination in the Load Balancer, so the communication between the ALB and the ECS Service is not using TLS, so it will default to HTTP/1.1 and it won't work.
 
 There are a few workarounds available:
-- Use TLS end-to-end. I discarded this option because I don't want to manage TLS certificates at Kestrel level.
+- **Use TLS end-to-end**. I discarded immediately this option because I don't want to manage TLS certificates at Kestrel level.
   
-- Use HTTP/2 only. If you set Kestrel as ``Http2`` you don't need to use TLS, but this is not an option because we are breaking compatibility with the clients that are using HTTP/1.1.
+- **Use HTTP/2 only**. If you set Kestrel as ``Http2`` you don't need to use TLS because ALPN is not required, but this is not a feasible option because we are breaking compatibility with the clients that are using HTTP/1.1.
   
-- Set Kestrel to listen for 2 differents ports. Each port will use a different Http protocol. To use this option you'll need to modify the ``Program.cs`` like this:
+- **Set Kestrel to listen for 2 differents ports. Each port will use a different Http protocol**. This is probably the best of the 3 options. To use this option you'll need to modify the ``Program.cs`` like this:
 
 ```csharp
 public class Program
@@ -315,11 +314,31 @@ public class Program
             });
 }
 ```
-- Kestrel listens on port 5001 for Http/1.1 connections and on port 5002 for Http/2 connections.
+- Kestrel will listen on port 5001 for Http/1.1 connections and on port 5002 for Http/2 connections.
 
 ## Hosting gRPC services and HTTP services using a single ALB
 
-When you try to deploy this WebApi you'll find that you need to create 2 Target Groups. Both Target Groups will be routing requests to the same ECS service:
+In the previous section we have set Kestrel to use 2 differents ports.
+
+- Kestrel will listen on port 5001 for Http/1.1 connections and on port 5002 for Http/2 connections.
+
+To host the WebApi you'll find that you need to create 2 Target Groups.
+
+- One target group that routes the HTTP requests.
+- One target group that routes the gRPC requests.
+  
+ Both Target Groups will be routing requests to the same ECS service.
+
+ ![alb-route-grpc-http-requests](/img/alb-route-grpc-http-requests.png)
+
+
+The clients will send both HTTP/1.1 and HTTP/2 requests to the same listener of the Application Load Balancer and using the path routing we will route the traffic to the Http or the gRPC target group.
+
+Here's how the ALB Listener rule looks like:
+- If the path is /api/* route the requests to the Http Target Group
+- If the path is /greet.* route the requests to the gRPC Target Group.
+
+![http-grpc-alb-rules.png](/img/http-grpc-alb-rules.png)
 
 
 # 3. The Package attribute on proto files and ALB path routing.
@@ -328,9 +347,8 @@ When you create a new gRPC service you need to be aware of the package atribute.
 
 - The load balancer parses gRPC requests and routes the gRPC calls to the appropriate target groups based on the package, service, and method.
 
-Example:
-
-Given the basic .proto file:
+Let's use the default greet proto file as an example.    
+Here's the content of the greet proto file:
 
 ```csharp
 syntax = "proto3";
@@ -355,6 +373,7 @@ message HelloReply {
   string message = 1;
 }
 ```
+You can build 
 
 /greet.* - routes all requests to the greet package.
 /greet.Greeter/* - routes all the requests to the Greeter service in the greet package.
@@ -363,12 +382,16 @@ message HelloReply {
 
 # 4. gRPC Reflection
 
-gRPC reflection is an extension for servers to assist clients in runtime construction of requests without having stub information precompiled into the client.
+Testing a gRPC application is far more troubling than testing a JSON HTTP Api and that's exactly what gRPC reflection could solve for us.
+
+gRPC reflection is an extension for gRPC servers to assist clients in runtime construction of requests without having the proto files precompiled into the client.
 
 gRPC reflection tries to answer the following questions:
 
 - What methods does a service export?
-- For a particular method, how do we call it? Specifically, what are the names of the methods, are those methods unary or streaming, and what are the types of the argument and result?
+- For a particular method, how do we call it? 
+- What are the names of the methods, are those methods unary or streaming?
+- What are the types of the argument and result?
 
 In dotnet you can enable gRPC Reflection using the ``Grpc.AspNetCore.Server.Reflection`` package.
 To configure reflection in an app:
@@ -378,28 +401,56 @@ To configure reflection in an app:
   - ``MapGrpcReflectionService`` to add a reflection service endpoint.
 
 ```csharp
-public void ConfigureServices(IServiceCollection services)
+namespace Server.Grpc
 {
-    services.AddGrpc();
-    services.AddGrpcReflection();
-}
-
-public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
-{
-    app.UseRouting();
-    
-    app.UseEndpoints(endpoints =>
+    public class Startup
     {
-        endpoints.MapGrpcService<GreeterService>();
-
-        if (env.IsDevelopment())
+        public void ConfigureServices(IServiceCollection services)
         {
-            endpoints.MapGrpcReflectionService();
+            services.AddGrpc();
+            services.AddGrpcReflection();
         }
-    });
+
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        {
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            app.UseRouting();
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapGrpcService<GreeterService>();
+                endpoints.MapGrpcReflectionService();
+
+                endpoints.MapGet("/", async context =>
+                {
+                    await context.Response.WriteAsync("Communication with gRPC endpoints must be made through a gRPC client.");
+                });
+            });
+        }
+    }
 }
 ```
 When gRPC reflection is set up:
 - A gRPC reflection service is added to the server app.
-- Client apps that support gRPC reflection can call the reflection service to discover services hosted by the server.
 - gRPC services are still called from the client. Reflection only enables service discovery and doesn't bypass server-side security. Endpoints protected by authentication and authorization require the caller to pass credentials for the endpoint to be called successfully.
+
+Now we can invoke our gRPC server using client tools that support gRPC reflection. Those tools will call the reflection service to discover services hosted by the server.
+
+Here's a short list of tools that you might be interested in trying:
+- gRPCurl: https://github.com/fullstorydev/grpcurl
+- gRPC UI: https://github.com/fullstorydev/grpcui
+- BloomRPC: https://github.com/uw-labs/bloomrpc
+- dotnet-grpc-cli: https://github.com/bjorkstromm/dotnet-grpc-cli
+
+
+# Useful links
+
+- https://codevalue.com/grpc-health-checks-with-net-core-kubernetes/
+- https://exampleloadbalancer.com/albgrpc_demo.html
+- https://grpc.io/
+
+_I want to give a special thanks to the creator of the codevalue blog page, because the gRPC healthcheck implementation is based on his work._
