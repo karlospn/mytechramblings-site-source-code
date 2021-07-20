@@ -1,6 +1,6 @@
 ---
-title: "Common gotchas when trying to deploy a dotnet gRPC app to AWS ECS"
-date: 2021-07-19T15:32:32+02:00
+title: "Some common gotchas when trying to deploy a dotnet gRPC app to AWS ECS"
+date: 2021-07-21T10:10:32+02:00
 tags: ["dotnet", "grpc", "containers", "aws", "ecs"]
 draft: true
 ---
