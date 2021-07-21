@@ -1,8 +1,8 @@
 ---
 title: "Some common gotchas when trying to deploy a dotnet gRPC app to AWS ECS"
-date: 2021-07-21T10:10:32+02:00
+date: 2021-07-21T10:05:32+02:00
 tags: ["dotnet", "grpc", "containers", "aws", "ecs"]
-draft: true
+draft: false
 ---
 
 > **Just show me the code**   
@@ -10,7 +10,7 @@ As always if you don’t care about the post I have upload a few examples on my 
 
 Nowadays creating a new dotnet gRPC application is pretty straightforward. From the developer standpoint the experience of creating a gRPC app it's quite similar to creating an API, furthermore, Visual Studio also offers Intellisense support for gRPC services and proto files.
 
-Nowadays developing a dotnet gRPC app is a really easy feat, but when you try to deploy it in some cloud provider that's when some wrinkles might appear.
+As I stated before developing a dotnet gRPC app right now is an easy feat, but when you try to deploy it in some cloud provider that's when some wrinkles might appear.
 
 Lately I've been deploying a sizable amount of gRPC services to AWS ECS so I thought it might be useful to talk a little bit about some gotchas I have encountered.   
 Some of the problems are specific of the dotnet implementation of gRPC and another ones are from the AWS side.
