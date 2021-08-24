@@ -1,8 +1,8 @@
 ---
 title: "Securing a graphQL API with Azure Active Directory"
-date: 2021-08-22T15:51:33+02:00
+date: 2021-08-24T10:21:33+02:00
 tags: ["dotnet", "csharp", "aad", "graphql", "azure"]
-draft: true
+draft: false
 ---
 
 > **Just show me the code**   
@@ -10,7 +10,7 @@ As always if you don’t care about the post I have upload the source code on my
 
 In today's post I want to talk about how you can secure a .NET graphQL API using Azure Active Directory (AAD).    
 
-If you want to build a graphQL API in .NET right now, there are a couple of options available: the graphQL.NET implementation (https://graphql-dotnet.github.io/) or the HotChocolate one (https://chillicream.com/).    
+If you want to build a graphQL API in .NET right now, the most well-known options available are the graphQL.NET implementation (https://graphql-dotnet.github.io/) and the HotChocolate one (https://chillicream.com/).    
 
 After tinkering quite a bit with both of them I decided to use the HotChocolate implementation. HotChocolate has more features, some off them are really useful like schema stitching. It is also faster and has a smaller memory footprint. And to top it off it has an steady update frequency.    
 
@@ -25,14 +25,14 @@ The main talking points in this post are going to be the following ones:
 
 # 1. How to secure a graphQL api using the Microsoft.Web.Identity nuget package
 
-First thing is to register a couple of apps on AAD. In my case I have registered an app called  ``GraphQL.WebApi`` and another one called ``GraphQL.Client``.    
-Also the ``GraphQL.WebApi`` app exposes a scope and that scope is consumed by the ``GraphQL.Client`` app.
+First thing is to register a couple of apps on AAD. In this case I have registered an app called  ``GraphQL.WebApi`` and another one called ``GraphQL.Client``.    
+Also the ``GraphQL.WebApi`` app exposes an scope and the ``GraphQL.Client`` app is authorized to ask for this scope.
 
 Now it's time to install and set up the ``Microsoft.Identity.Web`` nuget package. To install it run the command: ``dotnet add package Microsoft.Identity.Web --version 1.16.0``
 
 After the library is installed there are a few thing you need to do:
 
-1. On the ``appsettings.json``  configure how the library is going to work with my AAD:
+1. On the ``appsettings.json``  configure how the library is going to work with AAD:
 
 ```javascropt
 "AzureAd": {
@@ -47,7 +47,7 @@ After the library is installed there are a few thing you need to do:
       "ValidAudiences": [ "api://2afa13f1-6873-4629-a072-c6a5792e55c3" ]
     }
 ```
- ``2afa13f1-6873-4629-a072-c6a5792e55c3`` is the ``GraphQL.WebApi`` clientID.    
+ The ``2afa13f1-6873-4629-a072-c6a5792e55c3`` GUID is the ``GraphQL.WebApi`` clientID.    
  Also it is a good practice to always validate the ``iss`` and the ``aud`` attributes from the JWT Token, that way you can ascertain that the token has been issued by your own identity provider and the target for the token is your API.
 
 2. On the ``Startup.cs`` register the library dependencies using the ``AddMicrosoftIdentityWebApi`` extension method.
@@ -61,7 +61,7 @@ public void ConfigureServices(IServiceCollection services)
     ...
 }
 ```
-With the ``Microsoft.Web.Identity`` package put in place the API is capable to authenticate and validate your calls using the AAD.
+With the ``Microsoft.Web.Identity`` package put in place the API is capable to authorize your calls using the AAD.
 
 3. Now you need to install the ``HotChocolate.AspNetCore.Authorization`` nuget package. To install it run the command: ``dotnet add package HotChocolate.AspNetCore.Authorization --version 11.3.5``
 
@@ -76,7 +76,7 @@ Once the ``HotChocolate.AspNetCore.Authorization`` is installed you need to regi
 ```
 The only thing left is to choose what part of your graphQL API you want to secure. There are 4 options available here:
 
-**Option 1.** You can protect the entire set of queries or mutations. To do it you simply need to add the ``Authorize`` attribute at class level.
+**Option 1.** You can protect the entire set of queries or mutations. To do it you need to add the ``Authorize`` attribute at class level.
 
 > Be careful! The ``Authorize`` attribute that you need is the one from the ``HotChocolate.AspNetCore.Authorization`` assembly. Do not get confused with the other one that comes from the ``Microsoft.AspNetCore.Authorization`` assembly.
 
@@ -102,8 +102,8 @@ public class BookQuery
 }
 ```
 
-**Option 2.** You can protect concrete queries or mutations. To do it you need to add the ``Authorize`` attribute at method level.
-In this example only the ``GetBooks`` method is protected.
+**Option 2.** You can protect concrete queries or mutations. To do it you need to add the ``Authorize`` attribute at method level.   
+In this example only the ``GetBooks`` query is protected.
 
 ```csharp
 [GraphQLDescription("Represents the available Book queries.")]
@@ -223,6 +223,43 @@ public class BookType : ObjectType<Book>
 }
 ```
 
+## Testing the graphQL API
+
+If we try to invoke the graphQL API without the authorization header:
+```bash
+curl -g -k -X POST -H "Content-Type: application/json" \
+-d '{"query":"query{ books { title author}}"}' \ 
+https://localhost:5001/graphql
+```
+Then the API responds with an error: 
+```bash
+{"errors":[{"message":"The current user is not authorized to access this resource.","locations":[{"line":1,"column":8}],"path":["books"],"extensions":{"code":"AUTH_NOT_AUTHENTICATED"}}],"data":{"books":null}}
+```
+
+Now let's fetch a token from the AAD. One of fastest ways to do it is by starting an implicit flow by building the URI.
+
+```bash
+https://login.microsoftonline.com/8a0671e2-3a30-4d30-9cb9-ad709b9c744a/oauth2/v2.0/authorize
+?client_id=a895c416-cfb9-4df0-9051-190febbbdf64
+&redirect_uri=https%3A%2F%2Foidcdebugger.com%2Fdebug
+&scope=api%3A%2F%2F2afa13f1-6873-4629-a072-c6a5792e55c3%2Fissuer.readwrite
+&response_type=token
+&response_mode=form_post&nonce=w6esugjg4wf
+```
+
+And when invoking the API with the Authorization header
+```bash
+curl -g -k -X POST -H "Content-Type: application/json" \
+-H "Authorization: Bearer add-your-token-here" \
+-d '{"query":"query{ books { title author}}"}' \ 
+https://localhost:5001/graphql
+```
+It responds with the expected result:
+```bash
+{"data":{"books":[{"title":"Learning Go","author":"Jon Bodner"},{"title":"Python Crash Course","author":"Eric Matthes"},{"title":"Clean Architecture","author":"Robert C Martin"}]}}
+```
+
+
 # 2. What are the introspection queries and how to secure them.
 
 
@@ -280,7 +317,7 @@ services.AddGraphQLServer()
             .AddIntrospectionAllowedRule()
             .AddHttpRequestInterceptor(_ => new ConditionalIntrospectionHttpRequestInterceptor(configuration));
 ```
-The ``AddIntrospectionAllowedRule()`` extension method by default is blocking each and everyone of the introspection queries that the server receives. And with the ``ConditionalIntrospectionHttpRequestInterceptor`` only the introspection queries that contains our custom header are getting through the interceptor.
+The ``AddIntrospectionAllowedRule()`` extension method is blocking each and every one of the introspection queries that the server receives. And with the ``ConditionalIntrospectionHttpRequestInterceptor`` we are only letting through the introspection queries that contains our custom header.
 
 **Option 2. Protect the introspection query with AAD.**
 
@@ -308,7 +345,7 @@ public class BookQuery
 }
 ```
 
-Placing the ``Authorize`` attribute at class level will protect the entire query set including including the introspection query.
+Placing the ``Authorize`` attribute at class level will protect the entire query set including the introspection query.
 
 
 # 3. How to call a protected graphQL api using the Microsoft.Web.Client nuget package.
@@ -326,11 +363,11 @@ I'm not a big fan of ``Strawberry.Shake``, usually I prefer to use the ``GraphQL
 
 To show you how to call a protected graphQL API I have created a secondary web API and I'll use it to call the protected graphQL server. 
 
-To call the protected graphQ server I will be using an OAth2 Client Credentials flow and for that purpose I need to install the ``Microsoft.Identity.Client`` package. 
+To call the protected graphQ server I will be using an OAuth2 Client Credentials flow and for that purpose I need to install the ``Microsoft.Identity.Client`` package. 
 
 After the library is installed there are a few thing you need to do:
 
-1. On the ``appsettings.json``  I need to configure how the library is going to work with my AAD:
+1. On the ``appsettings.json``  I need to configure how the library is going to work with AAD:
 
 ```javascript
   "AzureAd": {
@@ -342,7 +379,7 @@ After the library is installed there are a few thing you need to do:
 ```
 
 As I have stated in the previous section I have registered in my AAD an app called  ``GraphQL.WebApi`` and another one called ``GraphQL.Client``.    
-The ``a895c416-cfb9-4df0-9051-190febbbdf64`` is the ``GraphQL.Client`` ClientId and the ``api://2afa13f1-6873-4629-a072-c6a5792e55c3/.default`` is the exposed scope from the ``GraphQL.WebApi``.
+The ``a895c416-cfb9-4df0-9051-190febbbdf64`` is the ``GraphQL.Client`` ClientId and the ``api://2afa13f1-6873-4629-a072-c6a5792e55c3/.default`` is the default scope from the ``GraphQL.WebApi``.
 
 2. Register the ``Microsoft.Identity.Client`` configuration and the ``graphQL.Client`` implementation into the DI container:
 
@@ -394,7 +431,7 @@ public class AuthorizationHandler : DelegatingHandler
 }
 ```
 
-3. Create a graphQL query:
+With everything put in place it's time to create a graphQL query, like this one:
 
 ```csharp
 public static class GetBooksByAuthor
@@ -412,8 +449,7 @@ public static class GetBooksByAuthor
 }
 ```
 
-4. And use it
-
+And try to call the protected graphQL API, like this:
 ```csharp
 [ApiController]
 [Route("[controller]")]
@@ -459,7 +495,6 @@ public class BooksController : ControllerBase
             _logger.LogError("Something went wrong", e);
             return StatusCode(StatusCodes.Status500InternalServerError, "Something went wrong");
         }
-
     }
 }
 ```
