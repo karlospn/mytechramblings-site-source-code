@@ -1,6 +1,6 @@
 ---
-title: "Setting up a SonarQube scan when building a .NET Core container image"
-date: 2021-09-13T11:37:09+02:00
+title: "Setting up the SonarQube scanner when building a .NET Core container image"
+date: 2021-09-14T10:10:09+02:00
 draft: true
 ---
 
@@ -18,8 +18,7 @@ In a typical development process:
 
 To analyze your code you need to install and configure a SonarQube scanner. The scanner can either run on your build or as part of your continuous integration pipeline performing a scan whenever your build process is triggered.   
 
-If you're using containers quite probably you're doing the build, test and analysis steps when creating the docker image.    
-Setting up a SonarQube scan when building a .NET Core docker image can be little more cumbersome than usual, and that's why I wanted to write a little bit about it.
+If you're using containers quite probably you're doing the build, test and analysis steps inside the Dockerfile, and setting up the SonarQube scanner when building the image can be a little more cumbersome than usual, and that's why I wanted to write a little bit about it.
 
 # Prerequisites
 
@@ -40,15 +39,15 @@ With multi-stage builds, you use multiple FROM statements in your Dockerfile. Ea
 These are the steps we're going to do in each stage:
 - **Stage 1**
   - Install Java.
-  - Install dotnet-sonarscanner.
-  - Install dotnet-reportgenerator-globaltool.
-  - Start sonarscanner.
+  - Install the ``dotnet-sonarscanner`` global tool.
+  - Install the ``dotnet-reportgenerator-globaltool`` global tool.
+  - Start the SonarQube scanner.
   - Restore the dependencies.
   - Build the app.
   - Run the tests.
-  - Get the code coverage report from the tests and convert it into a supported sonarqube format report.
+  - Get the code coverage report from the tests and convert it into a SonarQube report.
   - Publish the app.
-  - Stop sonarscanner.
+  - Stop the SonarQube scanner.
 
 - **Stage 2**
   - Get the artifact from the stage 1.
@@ -86,11 +85,11 @@ ENV PATH="${PATH}:/root/.dotnet/tools"
 
 ## Start scanner
 RUN dotnet sonarscanner begin \
-        /o:"$SONAR_ORG" \
-        /k:"$SONAR_PRJ_KEY" \
-        /d:sonar.host.url="$SONAR_HOST" \
-        /d:sonar.login="$SONAR_TOKEN" \ 
-        /d:sonar.coverageReportPaths="coverage/SonarQube.xml"
+	/o:"$SONAR_ORG" \
+	/k:"$SONAR_PRJ_KEY" \
+	/d:sonar.host.url="$SONAR_HOST" \
+	/d:sonar.login="$SONAR_TOKEN" \ 
+	/d:sonar.coverageReportPaths="coverage/SonarQube.xml"
 
 ## Copy the applications .csproj
 COPY /src/WebApp/*.csproj ./src/WebApp/
@@ -101,6 +100,9 @@ RUN dotnet restore "./src/WebApp/WebApp.csproj" -s "https://api.nuget.org/v3/ind
 ## Copy everything else
 COPY . ./
 
+## Build the app
+RUN dotnet build "./src/WebApp/WebApp.csproj" -c Release --no-restore
+
 ## Run dotnet test setting the output on the /coverage folder
 RUN dotnet test test/WebApp.Tests/*.csproj --collect:"XPlat Code Coverage" --results-directory ./coverage
 
@@ -108,7 +110,7 @@ RUN dotnet test test/WebApp.Tests/*.csproj --collect:"XPlat Code Coverage" --res
 RUN reportgenerator "-reports:./coverage/*/coverage.cobertura.xml" "-targetdir:coverage" "-reporttypes:SonarQube"
 
 ## Publish the app
-RUN dotnet publish src/WebApp/*.csproj -c Release -o /app/publish
+RUN dotnet publish src/WebApp/*.csproj -c Release -o /app/publish --no-build --no-restore
 
 ## Stop scanner
 RUN dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
@@ -125,13 +127,7 @@ ENTRYPOINT ["dotnet", "WebApp.dll"]
 
 Now let me explain bit by bit what the Dockerfile is doing.
 
-**Step 1.** Defining which arguments should be passed at runtime and which not.
-
-The ``"SONAR_TOKEN"`` argument contains the SonarQube server credentials, so it should not be hardcoded into the Dockerfile.
-
-The ``"SONAR_PRJ_KEY`` argument contains the project key name.
-
-The ``"SONAR_ORG"`` and ``SONAR_HOST`` parameters don't contain sensitive data and are not going to change so I can set both of them as environment variables. 
+- **Step 1:**  Define which arguments should be passed at runtime and which not.
 
 ```yaml
 ## Arguments for setting the Sonarqube Token and the Project Key
@@ -142,8 +138,22 @@ ARG SONAR_PRJ_KEY
 ENV SONAR_ORG "karlospn"
 ENV SONAR_HOST "https://sonarcloud.io"
 ```
+The ``"SONAR_TOKEN"`` argument contains the SonarQube server credentials, so it should not be hardcoded into the Dockerfile.
 
-**Step 2.** Install Java. The sonar scanner won't work without it.
+The ``"SONAR_PRJ_KEY`` argument contains the project key name.
+
+The ``"SONAR_ORG"`` and ``SONAR_HOST`` parameters don't contain sensitive data and are not going to change so I can set both of them as environment variables. 
+
+
+- **Step 2:** Install Java. 
+
+```yaml
+## Install Java, because the sonarscanner needs it.
+RUN mkdir /usr/share/man/man1/
+RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y openjdk-11-jre
+```
+
+This is a must, because the sonar scanner won't work without it.
    
 I'm using ``mcr.microsoft.com/dotnet/sdk:5.0-buster-slim`` as a base image, this image is based on Debian 10 and if you try to install a Java Runtime Environment package, you' ll get this error:
 
@@ -157,18 +167,8 @@ E: Sub-process /usr/bin/dpkg returned an error code (1)
 
 To fix the issue you need execute the command ``mkdir -p /usr/share/man/man1``. It seems that java packages require that folder to exist. Installing the man package doesn't fix the issue, you need to create the folder manually.
 
-```yaml
-## Install Java, because the sonarscanner needs it.
-RUN mkdir /usr/share/man/man1/
-RUN apt-get update && apt-get dist-upgrade -y && apt-get install -y openjdk-11-jre
-```
 
-**Step 3.** Install ``dotnet-sonarscanner`` and ``dotnet-reportgenerator-globaltool``
-
-The ``dotnet-sonarscanner`` global tool is the recommended way to launch an analysis for projects/solutions using the dotnet commandline as a build tool.
-
-
-The ``dotnet-reportgenerator-globaltool``  global tool converts coverage reports generated by coverlet, OpenCover, dotCover, Visual Studio, NCover, Cobertura, JaCoCo, Clover, gcov or lcov into other formats, and one of this formats is the SonarQube format.
+- **Step 3:** Install ``dotnet-sonarscanner`` and ``dotnet-reportgenerator-globaltool``
 
 ```yaml
 ## Install sonarscanner
@@ -181,9 +181,12 @@ RUN dotnet tool install --global dotnet-reportgenerator-globaltool --version 4.8
 ENV PATH="${PATH}:/root/.dotnet/tools"
 ```
 
-**Step 4.**  Start Sonar Scanner.
+The ``dotnet-sonarscanner`` global tool is the recommended way to launch an analysis for projects using the dotnet command line as a build tool.
 
-The ``coverageReportPaths`` attribute points to the folder where the code coverage file will be placed.
+The ``dotnet-reportgenerator-globaltool``  global tool converts coverage reports generated by coverlet, OpenCover, dotCover, Visual Studio, NCover, Cobertura, JaCoCo, Clover, gcov or lcov into another formats, and one of this formats is the SonarQube format.
+
+
+- **Step 4:**  Start Sonar Scanner.
 
 ```yaml
 ## Start scanner
@@ -195,14 +198,9 @@ RUN dotnet sonarscanner begin \
         /d:sonar.coverageReportPaths="coverage/SonarQube.xml"
 ```
 
-**Step 5.**  Copy the ``.csproj`` files, restore the NuGet packages and run the tests.
+The ``coverageReportPaths`` attribute needs to point to the code coverage report. _(More info on Step 6)_
 
-I could run a ``dotnet build``  command before the ``dotnet test`` command, but by default the ``dotnet test`` command already does one.
-
-When running the  ``dotnet test`` command outputs you need to specify the "XPlat Code Coverage" argument, this argument is a friendly name that corresponds to the data collectors from Coverlet and it will ouput a coverage.cobertura.xml file in the ``results-directory`` folder.
-
-As an alternative, you could use the MSBuild package if your build system already makes use of MSBuild. To run the tests use the ``dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura``  dotnet test command
-
+- **Step 5:**  Copy the ``.csproj`` files, restore, build and run the tests.
 
 ```yaml
 ## Copy the applications .csproj
@@ -214,32 +212,40 @@ RUN dotnet restore "./src/WebApp/WebApp.csproj" -s "https://api.nuget.org/v3/ind
 ## Copy everything else
 COPY . ./
 
+## Build the app
+RUN dotnet build "./src/WebApp/WebApp.csproj" -c Release --no-restore
+
 ## Run dotnet test setting the output on the /coverage folder
 RUN dotnet test test/WebApp.Tests/*.csproj --collect:"XPlat Code Coverage" --results-directory ./coverage
 ```
 
-**Step 6.** Generate code coverage report in Sonarqube format.
+When running the  ``dotnet test`` command you need to specify the "XPlat Code Coverage" argument, this argument is a friendly name that enables the Coverlet data collector and it will output a ``coverage.cobertura.xml`` file in the ``results-directory`` folder.
 
-The code coverage file generated by the ``dotnet test`` command is not compatible with SonarQube.
-With the report generator tool we're converting the Coverlet code coverage report into a compatible SonarQube report.
+As an alternative, you could use the MSBuild package if your build system already makes use of MSBuild. In this case you need run the tests using the ``dotnet test/WebApp.Tests/*.csproj /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura``  command
+
+- **Step 6:** Generate the code coverage report in a format compatible for SonarQube.
 
 ```yaml
 ## Create the code coverage file in sonarqube format using the cobertura file generated from the dotnet test command
 RUN reportgenerator "-reports:./coverage/*/coverage.cobertura.xml" "-targetdir:coverage" "-reporttypes:SonarQube"
-
 ```
 
-**Step 7.** Publish the application and stop the SonarQube scanner
+The code coverage file generated by the ``dotnet test`` command is not compatible with SonarQube, with the report generator tool we're converting the Coverlet code coverage report into a compatible SonarQube report.
+
+The ``targetdir`` attribute specifies the folder where the resulting report will be placed. 
+
+
+- **Step 7:** Publish the application and stop the SonarQube scanner
 
 ```bash
 ## Publish the app
-RUN dotnet publish src/WebApp/*.csproj -c Release -o /app/publish
+RUN dotnet publish src/WebApp/*.csproj -c Release -o /app/publish --no-build --no-restore
 
 ## Stop scanner
 RUN dotnet sonarscanner end /d:sonar.login="$SONAR_TOKEN"
 ```
 
-**Step 8.** Get the artifact from the stage 1 and execute the run command.
+- **Step 8:** Get the artifact from the stage 1 and execute the run command.
 
 ```bash
 #############
