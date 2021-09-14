@@ -1,7 +1,8 @@
 ---
 title: "Setting up the SonarQube scanner when building a .NET Core container image"
-date: 2021-09-14T10:10:09+02:00
-draft: true
+date: 2021-09-14T10:10:06+02:00
+tags: ["sonarqube", "docker", "containers", "csharp", "dotnet"]
+draft: false
 ---
 
 > **Just show me the code**   
