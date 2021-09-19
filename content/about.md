@@ -8,7 +8,7 @@ draft: false
 
 Greetings!   
 
-I'm a software engineer based on Barcelona and I like to write some randoms things about software development and cloud computing.   
+I'm a software engineer based on Barcelona and I like to write some random things about software development and cloud computing.   
 
 If you want to contact me, just send me a message on Linkedin and I will reply back as soon as possible.   
 
