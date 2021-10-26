@@ -1,7 +1,7 @@
 ---
 title: "Testing how to use some container vulnerabilities scanners with Azure pipelines"
 date: 2021-10-25T10:45:14+02:00
-tags: ["docker", "devops", "azure", "aws", "security", "containers"]
+tags: ["docker", "devops", "azure", "aws", "security", "containers", "devops", "pipelines"]
 draft: true
 ---
 
@@ -15,7 +15,7 @@ Image scanning is a key function of a Secure DevOps workflow. Image scanning ref
 
 Image scanning can be easily integrated into your DevOps workflow. For example, you could integrate it in a CI/CD pipeline to block vulnerabilities from ever reaching a registry, in a registry to protect from vulnerabilities in third-party images, or at runtime to protect from newly discovered CVEs.
 
-<add-img>
+![container-img-scanning-workflow](/img/image-scanning-workflow.png)
 
 Image scanning is easy to implement and automate. **In this post, I will be covering how you can plug and use a few of the most well-known image scanners into you Azure DevOps CI/CD YAML pipelines.**
 
@@ -28,7 +28,7 @@ Right now on the market there are a lot of image scanners available: Snyk, Clair
 
 # 1- AWS Elastic Container Registry integrated scanner featuring Clair
 
-Amazon Elastic Container Register (ECR) is a fully managed container registry offered by AWS.   
+Elastic Container Register (ECR) is a fully managed container registry offered by AWS.   
 It uses the Common Vulnerabilities and Exposures (CVEs) database from the open-source [Clair](https://github.com/quay/clair) project and provides a list of scan findings.
 
 You can manually scan container images stored in ECR oe you can configure your repositories to scan images when you push them to a repository, that might be an issue for some companies because in a secure DevOps workflow you might want to scan the image **BEFORE** being pushed to the registry.
@@ -123,7 +123,8 @@ steps:
         echo Docker image contains medium or lower vulnerabilities.
       fi
 ```
-Let's explain what the pipeline is doing. First of all, create the app image.
+Let's explain what the pipeline is doing.
+- Create the app image.
 ```yaml
 - task: Bash@3
   displayName: Create application image
@@ -134,7 +135,9 @@ Let's explain what the pipeline is doing. First of all, create the app image.
     workingDirectory: '$(System.DefaultWorkingDirectory)'
 ```
 
-Create the ECR repository if it doesn't exist, when creating the ECR repository it is very important setting the attribute ``scanOnPush=true``.   
+- Create the ECR repository if it doesn't exist.
+
+When creating the ECR repository it is very important setting the attribute ``scanOnPush=true``.   
 If ``scanOnPush`` is enabled, images are scanned after being pushed to a repository. If ``scanOnPush`` is disabled on a repository, then you must manually start each image scan to get the scan results.
 
 ```yaml
@@ -148,7 +151,7 @@ If ``scanOnPush`` is enabled, images are scanned after being pushed to a reposit
       aws ecr describe-repositories --repository-names ${{ lower(variables.appName) }} || aws ecr create-repository --repository-name ${{ lower(variables.appName) }} --image-scanning-configuration scanOnPush=true
 ```
 
-Push the image to ECR
+- Push the image to ECR
 
 ```yaml
 - task: AWSShellScript@1
@@ -163,6 +166,8 @@ Push the image to ECR
       docker push $(awsAccount).dkr.ecr.$(awsRegion).amazonaws.com/${{ lower(variables.appName) }}:$(tag)
 ```
 
+- Analyze the scan results.
+  
 The ``aws ecr wait image-scan-complete`` command waits until the image scan is complete and findings can be accessed.   
 It will poll every 5 seconds until a successful state has been reached. This will exit with a return code of 255 after 60 failed checks.
 
@@ -205,6 +210,15 @@ _I didn't write the script used to check the vulnerabilities, I'm using a script
 
 # 2- Azure Defender for ACR scan featuring Qualys
 
+Azure Container Registry (ACR) is a managed, private Docker registry service for storing container images.   
+
+You'll **need to enable Azure Defender for container registries at the subscription level** if you plan to use the image vulnerability scanning capabilities.  The scanner is powered by [Qualys](https://www.qualys.com/).  
+
+Azure Defender works exactly like AWS ECR, that means that it will only scan the images when they’re pushed to the registry.   
+
+With AWS ECR we'll had to build a script that fetches the scanning results and analyze the results, but in this case Microsoft has already built an Azure DevOps YAML pipeline and a Powershell script that does exactly those steps, so you can just copy-paste it and you are good to go. You can find it in the following [link](https://github.com/Azure/Azure-Security-Center/tree/main/Container%20Image%20Scan%20Vulnerability%20Assessment/Image%20Scan%20Automation%20Enrichment%20Security%20Gate)
+
+I grabbed the pipeline built by Microsoft and made some slight modifications. Here's how it looks: 
 ```yaml
 trigger:
   branches:
@@ -285,6 +299,81 @@ stages:
           scriptPath: '$(Build.SourcesDirectory)/acr-image-scan.ps1'
           arguments: '-registryName $(registryName) -repository $(imageName) -tag $(tag)'
 ```
+
+This pipeline is using multiple jobs because the ``Delay@1`` task is an agentless task, and you can't use steps that requires an agent with step that don't in the same job.
+
+Let's make a quick review about the steps involved in this pipeline.
+
+
+- Build and push the image into ACR.
+
+The ``az acr build`` command creates a container image, tags it, and pushes it to the registry. It does it all with just a single command.
+To be have to push the image into ACR we need to log in to an ACR, and that's exactly what we're doing with the ``az acr login`` command.
+
+```yaml
+  - job: BuildAndPush
+    displayName: BuildAndPush
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: AZ ACR Login
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: 'az acr login --name $(registryName)'
+    - task: AzureCLI@2
+      displayName: AZ ACR Build
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: 'az acr build -t $(imageName):$(tag) -t $(imageName):latest -r $(registryName) -f Dockerfile .'
+        useGlobalConfig: true
+        workingDirectory: '$(Build.SourcesDirectory)'
+```
+
+- Stop the pipeline a fixed period of time.
+
+The delay task is stopping the pipeline execution a fixed amount of time. The vulnerability scan takes a few minutes, so this step is needed to ensure that the results are available and we can can continue on.
+
+```yaml
+  - job: WaitForScanResults
+    displayName: Wait for scan results
+    pool: 'Server'
+    dependsOn: 
+    - BuildAndPush
+    steps:
+    - task: Delay@1
+      inputs:
+        delayForMinutes: '$(waitForScanResultsAfterPushInMinutes)'
+```
+
+- Get the scan results and analyze them
+
+
+Invoke the PowerShell script that fetches the scan result and assess the vulnerabilities.
+
+```yaml
+  - job: ImageScanCheck
+    displayName: Check for image vulnerabilities
+    pool:
+      vmImage: 'ubuntu-latest'
+    dependsOn: 
+    - BuildAndPush
+    - WaitForScanResults
+    steps:
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: $(azureSubscription)
+          scriptType: 'pscore'
+          scriptLocation: 'scriptPath'
+          scriptPath: '$(Build.SourcesDirectory)/acr-image-scan.ps1'
+          arguments: '-registryName $(registryName) -repository $(imageName) -tag $(tag)'
+```
+
+I have not modified this script at all, because it is good enough as it is. But, let's check it out anyways. Here's how it looks:
 
 ```powershell
 <#  
@@ -435,6 +524,15 @@ else
 	Write-Error "Unknown scan result returned"
 }
 ```
+The script is using the Azure Resource Graph to query Azure Security Center to obtain the vulnerability scan results.
+
+Azure Resource Graph is a service in Azure that is designed to extend ARM by providing the ability to query across a given set of subscriptions.
+
+To use Resource Graph, you must have at least read access to the resources you want to query. Without at least read permissions to the Azure object or object group, results won't be returned.
+
+> If you're curious about using Azure Resource Graph to query ASC, the following link has a bunch of sample queries: https://docs.microsoft.com/en-us/azure/security-center/resource-graph-samples?tabs=azure-cli
+
+After obtaining the scan results for Graph, the script checks is there the scan status is Unhealthy and if so it breaks the pipeline execution using the ``Write-Error`` ps1 command.
 
 # 3- Sysdig
 
@@ -533,7 +631,7 @@ The ``sysdig-token`` and the ``sysdig-url`` need to be retrieved from the Sysdig
         ${{ lower(variables.appName) }}:$(tag)
 ```
 When the inline scanner has completed the image analysis, it will send the result to the Sysdig SaaS to perform a Policy evaluation.    
-If the Policy evaluation fails the pipeline will break, otherwise the pipeline will go on and now you could push the image into your trusted repository.
+If the Policy evaluation fails the pipeline will break, otherwise the pipeline will go on and now you can add another step to push the image into your trusted repository.
 
 # 4- AquaSec Trivy
 
@@ -620,6 +718,8 @@ In this step the scan will ran twice, but it will fail only when a critical vuln
       trivy --exit-code 0 --severity LOW,MEDIUM,HIGH --no-progress ${{ lower(variables.appName) }}:$(tag)
       trivy --exit-code 1 --severity CRITICAL --no-progress ${{ lower(variables.appName) }}:$(tag) 
 ```
+
+If the scanner finds any critical vulnerability the script will exit with an exit code 1 and the pipeline will break, otherwise the pipeline will go on and now you can add another step to push the image into your trusted repository.
 
 # Useful links
 - https://docs.microsoft.com/en-us/azure/security-center/defender-for-container-registries-introduction
