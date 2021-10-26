@@ -17,24 +17,28 @@ Image scanning can be easily integrated into your DevOps workflow. For example, 
 
 ![container-img-scanning-workflow](/img/image-scanning-workflow.png)
 
-Image scanning is easy to implement and automate. **In this post, I will be covering how you can plug and use a few of the most well-known image scanners into you Azure DevOps CI/CD YAML pipelines.**
+Image scanning is easy to implement and automate. **In this post, I will be covering how you can use some of the most well-known scanners alongside with your Azure DevOps CI/CD YAML pipelines.**
 
-Right now on the market there are a lot of image scanners available: Snyk, Clair, Qualys, Sysdig, Trivy amongst many others. In this post I'll be focusing on the following ones:
+Right now on the market there are a ton of great choices when you want to use a container vulnerability scanners. Snyk, Clair, Qualys, Sysdig or Trivy are some of the most well-known.
+
+In this post I'll be focusing on those 4 image scanners:
 
 - AWS Elastic Container Registry integrated scanner featuring Clair.
 - Azure Defender for ACR scan featuring Qualys.
 - Sysdig
 - AquaSec Trivy.
 
+
 # 1- AWS Elastic Container Registry integrated scanner featuring Clair
 
-Elastic Container Register (ECR) is a fully managed container registry offered by AWS.   
-It uses the Common Vulnerabilities and Exposures (CVEs) database from the open-source [Clair](https://github.com/quay/clair) project and provides a list of scan findings.
+Elastic Container Register (ECR) is a fully managed container registry offered by AWS, it uses the Common Vulnerabilities and Exposures (CVEs) database from the open-source [Clair](https://github.com/quay/clair) project.
 
-You can manually scan container images stored in ECR oe you can configure your repositories to scan images when you push them to a repository, that might be an issue for some companies because in a secure DevOps workflow you might want to scan the image **BEFORE** being pushed to the registry.
+You can manually scan container images stored in ECR or you can configure your repositories to scan images when you push them to a repository, that might be an issue for some companies because in a secure DevOps workflow you might want to scan the image **BEFORE** pushing it into the registry.
 In that case you have 2 options available:
 - **Option 1:** Run another security scanner like Trivy or Sysdig before pushing the image to ECR.
-- **Option 2:** After pushing the image to ECR, get the security report from ECR and if there are some vulnerabilities remove the image from ECR.
+- **Option 2:** After pushing the image, get the security report from ECR and if there are any vulnerability delete the image.
+
+_If you're interested in option 1, go to section 3 or section 4._   
 
 Here's a code snippet showing how you can achieve Option 2 using Azure YAML Pipelines:
 
@@ -123,8 +127,8 @@ steps:
         echo Docker image contains medium or lower vulnerabilities.
       fi
 ```
-Let's explain what the pipeline is doing.
-- Create the app image.
+Let's review what the pipeline is doing.
+- Create the image of your app.
 ```yaml
 - task: Bash@3
   displayName: Create application image
@@ -138,7 +142,7 @@ Let's explain what the pipeline is doing.
 - Create the ECR repository if it doesn't exist.
 
 When creating the ECR repository it is very important setting the attribute ``scanOnPush=true``.   
-If ``scanOnPush`` is enabled, images are scanned after being pushed to a repository. If ``scanOnPush`` is disabled on a repository, then you must manually start each image scan to get the scan results.
+If ``scanOnPush`` is enabled, images are scanned after being pushed. If ``scanOnPush`` is disabled on a repository, then you must manually start each image scan to get the scan results.
 
 ```yaml
 - task: AWSShellScript@1
@@ -168,12 +172,10 @@ If ``scanOnPush`` is enabled, images are scanned after being pushed to a reposit
 
 - Analyze the scan results.
   
-The ``aws ecr wait image-scan-complete`` command waits until the image scan is complete and findings can be accessed.   
-It will poll every 5 seconds until a successful state has been reached. This will exit with a return code of 255 after 60 failed checks.
+The ``aws ecr wait image-scan-complete`` command waits until the image scan is complete and findings can be accessed, it will poll every 5 seconds until a successful state has been reached or will exit with a return code of 255 after 60 failed checks.
 
-After retrieving and parsing the scanner results, the script checks for HIGH or CRITICAL vulnerabilities and if there are any, it deletes the image from ECR and breaks the pipeline execution.   
-
-If the scripts finds any MEDIUM, LOW or INFORMATIONAL vulnerabilities, it writes a message onto the STDOUT and continues the execution.
+After retrieving and parsing the scanner results, the script checks for HIGH or CRITICAL vulnerabilities and if there are any, it deletes the image from ECR and breaks the pipeline execution.    
+If the scripts finds only MEDIUM, LOW or INFORMATIONAL vulnerabilities continues the execution.
 
 _I didn't write the script used to check the vulnerabilities, I'm using a script from Sahan [Ruwanga Gunathilaka post](https://medium.com/@sahangunathilaka/scan-docker-images-in-amazon-ecr-and-retrieve-scan-findings-e5a3fe4e7afa), so kudos to him._
 
@@ -212,13 +214,15 @@ _I didn't write the script used to check the vulnerabilities, I'm using a script
 
 Azure Container Registry (ACR) is a managed, private Docker registry service for storing container images.   
 
-You'll **need to enable Azure Defender for container registries at the subscription level** if you plan to use the image vulnerability scanning capabilities.  The scanner is powered by [Qualys](https://www.qualys.com/).  
+If you plan to use the image vulnerability scanning capabilities, you'll need to **enable Azure Defender for container registries at the subscription level**.  The scanner is powered by [Qualys](https://www.qualys.com/).  
 
 Azure Defender works exactly like AWS ECR, that means that it will only scan the images when they’re pushed to the registry.   
 
-With AWS ECR we'll had to build a script that fetches the scanning results and analyze the results, but in this case Microsoft has already built an Azure DevOps YAML pipeline and a Powershell script that does exactly those steps, so you can just copy-paste it and you are good to go. You can find it in the following [link](https://github.com/Azure/Azure-Security-Center/tree/main/Container%20Image%20Scan%20Vulnerability%20Assessment/Image%20Scan%20Automation%20Enrichment%20Security%20Gate)
+With AWS ECR we had to build a script that fetch and analyze the scanning results, but in this case Microsoft has already built it, so you can just copy-paste it and you are good to go.   
+You can find it in the following [link](https://github.com/Azure/Azure-Security-Center/tree/main/Container%20Image%20Scan%20Vulnerability%20Assessment/Image%20Scan%20Automation%20Enrichment%20Security%20Gate)
 
-I grabbed the pipeline built by Microsoft and made some slight modifications. Here's how it looks: 
+I grabbed the Azure Pipeline and the script built by Microsoft and made some slight modifications.   
+Here's how it looks: 
 ```yaml
 trigger:
   branches:
@@ -300,15 +304,14 @@ stages:
           arguments: '-registryName $(registryName) -repository $(imageName) -tag $(tag)'
 ```
 
-This pipeline is using multiple jobs because the ``Delay@1`` task is an agentless task, and you can't use steps that requires an agent with step that don't in the same job.
+This pipeline is using multiple jobs because the ``Delay@1`` task is an agentless task and on a single job you can't mix steps that requires an agent with step that don't.
 
 Let's make a quick review about the steps involved in this pipeline.
 
-
 - Build and push the image into ACR.
 
-The ``az acr build`` command creates a container image, tags it, and pushes it to the registry. It does it all with just a single command.
-To be have to push the image into ACR we need to log in to an ACR, and that's exactly what we're doing with the ``az acr login`` command.
+The ``az acr build`` command creates a container image, tags it, and pushes it to the registry. It does all those steps with just a single command.   
+To be able to push the image to ACR we need to log in first, and that's exactly what we're doing with the ``az acr login`` command.
 
 ```yaml
   - job: BuildAndPush
@@ -336,7 +339,7 @@ To be have to push the image into ACR we need to log in to an ACR, and that's ex
 
 - Stop the pipeline a fixed period of time.
 
-The delay task is stopping the pipeline execution a fixed amount of time. The vulnerability scan takes a few minutes, so this step is needed to ensure that the results are available and we can can continue on.
+The delay task is stopping the pipeline execution a fixed amount of time because the vulnerability scan takes a few minutes. This step is needed to ensure that the results are available and we can can continue on.
 
 ```yaml
   - job: WaitForScanResults
@@ -351,7 +354,6 @@ The delay task is stopping the pipeline execution a fixed amount of time. The vu
 ```
 
 - Get the scan results and analyze them
-
 
 Invoke the PowerShell script that fetches the scan result and assess the vulnerabilities.
 
@@ -373,9 +375,9 @@ Invoke the PowerShell script that fetches the scan result and assess the vulnera
           arguments: '-registryName $(registryName) -repository $(imageName) -tag $(tag)'
 ```
 
-I have not modified this script at all, because it is good enough as it is. But, let's check it out anyways. Here's how it looks:
+I have not touched this script at all, because it is good enough as it is. But, let's check it out anyways. Here's how it looks:
 
-```powershell
+```csharp
 <#  
 .SYNOPSIS  
   Automation script to include ASC vulnerability assessment scan summary for provided image as a gate. 
@@ -524,25 +526,24 @@ else
 	Write-Error "Unknown scan result returned"
 }
 ```
-The script is using the Azure Resource Graph to query Azure Security Center to obtain the vulnerability scan results.
+The script is using the ``Azure Resource Graph`` to query ``Azure Security Center`` to obtain the vulnerability scan results.
 
-Azure Resource Graph is a service in Azure that is designed to extend ARM by providing the ability to query across a given set of subscriptions.
+``Azure Resource Graph`` is a service in Azure that is designed to extend ARM by providing the ability to query across a given set of subscriptions.
 
-To use Resource Graph, you must have at least read access to the resources you want to query. Without at least read permissions to the Azure object or object group, results won't be returned.
+To use ``Resource Graph``, you must have at least read access to the resources you want to query. Without at least read permissions to the Azure object or object group, results won't be returned.
 
-> If you're curious about using Azure Resource Graph to query ASC, the following link has a bunch of sample queries: https://docs.microsoft.com/en-us/azure/security-center/resource-graph-samples?tabs=azure-cli
+> If you're curious about using ``Azure Resource Graph`` to query ASC, the following link has a bunch of sample queries: https://docs.microsoft.com/en-us/azure/security-center/resource-graph-samples?tabs=azure-cli
 
-After obtaining the scan results for Graph, the script checks is there the scan status is Unhealthy and if so it breaks the pipeline execution using the ``Write-Error`` ps1 command.
+After obtaining the scan results from Graph, the script checks if the scan status is unhealthy and if so it breaks the pipeline execution using the ``Write-Error``  command.
 
 # 3- Sysdig
 
 Sysdig is a SaaS (Software-as-a-Service) platform. It is built on an open source stack that includes Falco and sysdig OSS.   
-It provides a stand-alone inline scanner that can perform local analysis on container images and post the result of the analysis to Sysdig Secure.
+It provides a stand-alone inline scanner that can perform local analysis on container images and post the result of the analysis to the SaaS backend.
 
 The Sysdig inline scanner works as an independent container, without any Docker dependency, and can analyze images using different image formats and sources.   
-When the inline scanner has completed the image analysis, it sends the metadata to the Sysdig Secure backend to perform a Policy evaluation step.
-
-A policy is a combination of rules about activities an enterprise wants to detect in an environment, the actions that should be taken if the policy rule is breached and the notifications that should be sent. 
+When the inline scanner has completed the image analysis, it sends the metadata to the Sysdig SaaS to perform a Policy evaluation step.   
+A policy is a combination of rules and actions that should be taken if the policy rule is breached. 
 
 Here's a code snippet showing how you can run the Sysdig inline scanner with ``Azure Pipelines``:
 ```yaml
@@ -592,8 +593,9 @@ steps:
         ${{ lower(variables.appName) }}:$(tag)
 ```
 
-As you can see, it is a pretty straightforward pipeline, but anyways let's review the pipeline steps.
-As always the first step is to create the app image.
+As you can see, it is a pretty straightforward pipeline, but anyways let's review the steps.
+
+- Create the image of your app.
 ```yaml
 - task: Bash@3
   displayName: Create application image
@@ -603,17 +605,19 @@ As always the first step is to create the app image.
       docker build -t  ${{ lower(variables.appName) }}:$(tag) .
     workingDirectory: '$(System.DefaultWorkingDirectory)'
 ```
-Step 2, run the Sysdig secure-inline-scan container image.   
- When running the Sysdig scan there are multiple execution possibilities available:
+- Run the Sysdig secure-inline-scan container image.   
+ 
+When running the scanner there are multiple execution possibilities available:
 - Scan a local image build (``storage-type="docker-daemon``)
 - Scan a image tarball (``storage-type="docker-archive``)
 - Scan a OCI tarball (``storage-type="oci-archive``)
 - Scan a OCI directory (``storage-type="oci-dir``)
 
-We  built a docker image in the previous step, so we're going to scan a local image ``storage-type="docker-daemon``.   
-Also when scanning a local image build , as in our case, mounting the host Docker socket is required.
+In the previous step we built a docker image, so we're going to choose to scan a local image build, which means that the ``storage-type`` attribute needs to be set to ``docker-daemon``.  
 
-The ``sysdig-token`` and the ``sysdig-url`` need to be retrieved from the Sysdig SaaS itself.
+Also when scanning a local image build, as in our case, mounting the host Docker socket is required.
+
+The ``sysdig-token`` is the API token from the Sysdig SaaS and the ``sysdig-url`` is the url of your SaaS instance.
 
 ```yaml
 - task: Bash@3
@@ -630,12 +634,12 @@ The ``sysdig-token`` and the ``sysdig-url`` need to be retrieved from the Sysdig
         --storage-path /var/run/docker.sock \
         ${{ lower(variables.appName) }}:$(tag)
 ```
-When the inline scanner has completed the image analysis, it will send the result to the Sysdig SaaS to perform a Policy evaluation.    
-If the Policy evaluation fails the pipeline will break, otherwise the pipeline will go on and now you can add another step to push the image into your trusted repository.
+When the inline scanner has completed the image analysis, it will send the result to the Sysdig SaaS to perform the policy evaluation step.    
+If the Policy evaluation fails the pipeline will break, otherwise the pipeline will go on and now you can add an extra step that pushes the image into your trusted repository.
 
 # 4- AquaSec Trivy
 
-Trivy is an open-source vulnerability scanner for containers and other artifacts. Using it with ``Azure Pipelines`` it's easy and quite straightforward.
+Trivy is an OSS vulnerability scanner for containers and other artifacts, using it with ``Azure Pipelines`` it's easy and quite straightforward.
 
 Here's a code snippet showing how you can run the Trivy scanner with ``Azure Pipelines``:
 ```yaml
@@ -694,7 +698,7 @@ Let's review the pipeline steps.
     workingDirectory: '$(System.DefaultWorkingDirectory)'
 ```
 
-- Download and install the Trivy scanner.
+- Download and install the scanner.
 ```yaml
 - task: Bash@3
   displayName: Download Trivy Scanner
