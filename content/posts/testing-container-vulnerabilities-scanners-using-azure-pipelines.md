@@ -1,7 +1,7 @@
 ---
 title: "Testing how to use some container vulnerabilities scanners with Azure Pipelines"
 date: 2021-10-27T09:05:14+02:00
-tags: ["docker", "devops", "azure", "aws", "security", "containers", "devops", "pipelines"]
+tags: ["docker", "devops", "azure", "aws", "security", "containers"]
 draft: false
 ---
 
