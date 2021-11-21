@@ -2,7 +2,9 @@
 title: "Some common gotchas when trying to deploy a dotnet gRPC app to AWS ECS"
 date: 2021-07-21T10:05:32+02:00
 tags: ["dotnet", "grpc", "containers", "aws", "ecs"]
+description: "Lately I've been deploying a sizable amount of gRPC services to AWS ECS so I thought it might be useful to talk a little bit about some gotchas I have encountered. Some of the problems I'll be talking about on this post are specific of the .NET implementation of gRPC and another ones are from the AWS side."
 draft: false
+
 ---
 
 > **Just show me the code**   

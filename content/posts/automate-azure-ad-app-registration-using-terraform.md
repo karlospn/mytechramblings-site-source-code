@@ -3,6 +3,7 @@ title: "Trying to automate Azure Active Directory App Registration process using
 date: 2020-07-21T21:22:44+02:00
 Lastmod: 2020-12-08
 tags: ["azure", "terraform", "AAD", "graph"]
+description: "Today I want to try to use Terraform to automate the app registration process in Azure Active Directory."
 draft: false
 ---
 

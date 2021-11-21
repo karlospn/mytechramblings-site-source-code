@@ -2,6 +2,7 @@
 title: "An opinionated approach about how to create an AWS ECS Fargate cluster and deploy apps on it using Azure DevOps Pipelines"
 date: 2020-11-10T10:10:18+01:00
 tags: ["aws", "ecr", "ecs", "containers", "devops", "cdk", "azure"]
+description: "These past couple of weeks I've been tinkering with AWS ECS Fargate and after losing some time tackling different approaches I thought it might be useful to write down what I ended up building, so without further ado let's dig in."
 draft: false
 ---
 

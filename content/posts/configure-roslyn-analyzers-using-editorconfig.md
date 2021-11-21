@@ -2,6 +2,7 @@
 title: "How to configure your custom roslyn analyzer using an .editorconfig file"
 date: 2021-01-14T12:59:43+01:00
 tags: ["csharp", "dotnet", "roslyn", "editorconfig"]
+description: "Roslyn Analyzers are extensions that analyze source code and report violations. Some analyzers are built-into VS and some are third party ones which can be installed (like StyleCopyAnalyzers, FxCopAnalyzers, etc.). On today's post I will show you how you can configure your custom roslyn analyzers with an .editorconfig file."
 draft: false
 ---
 

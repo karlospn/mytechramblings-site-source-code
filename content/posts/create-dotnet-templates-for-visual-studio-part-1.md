@@ -2,6 +2,7 @@
 title: "How to build a .NET template and use it within Visual Studio. Part 1: Key concepts"
 date: 2021-06-14T00:07:29+02:00
 draft: false
+description: "This is a 2 part-series post. In part 1 I'll be talking about a few key concepts that you should know when creating a .NET template."
 tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
 ---
 

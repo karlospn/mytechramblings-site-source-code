@@ -2,6 +2,7 @@
 title: "Testing out the Azure Static Web Apps service. Let's try to deploy this blog into an static web app"
 date: 2020-11-24T10:04:40+01:00
 tags: ["azure", "static", "webapps", "github", "action"]
+description: "I been wanting to try Azure Static Web Apps for quite some time and I thought that instead of deploying some dummy static site I could use my blog as a test subject, so let's do it!"
 draft: false
 ---
 

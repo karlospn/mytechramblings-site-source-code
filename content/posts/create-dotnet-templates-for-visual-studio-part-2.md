@@ -2,6 +2,7 @@
 title: "How to build a .NET template and use it within Visual Studio. Part 2: Creating a template package"
 date: 2021-06-17T10:01:29+02:00
 draft: false
+description: "This is a 2 part-series post. In part 2 I'll show you how to convert a few .NET apps into .NET templates, package them together in a single NuGet pack and use them as templates within Visual Studio."
 tags: ["dotnet", "csharp", "templates", "vs", "visual", "studio"]
 ---
 

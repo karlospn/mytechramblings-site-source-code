@@ -2,6 +2,7 @@
 title: "Trying to setup an Azure DevOps organization using Terraform"
 date: 2021-03-18T10:00:02+01:00
 tags: ["azure", "devops", "terraform", "aad"]
+description: "On today's post I want to test the Azure DevOps Terraform provider and that's why I'll be trying to automate the setup of an Azure DevOps organization using it."
 draft: false
 ---
 

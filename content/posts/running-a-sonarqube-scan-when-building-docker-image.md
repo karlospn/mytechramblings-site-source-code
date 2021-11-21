@@ -2,6 +2,7 @@
 title: "Setting up the SonarQube scanner when building a .NET Core container image"
 date: 2021-09-14T10:05:00+02:00
 tags: ["sonarqube", "docker", "containers", "csharp", "dotnet"]
+description: "If you're using containers quite probably you're doing the build, test and analysis steps inside the Dockerfile, and setting up the SonarQube scanner when building the image can be a little more cumbersome than usual, and that's why I wanted to write a little bit about it."
 draft: false
 ---
 

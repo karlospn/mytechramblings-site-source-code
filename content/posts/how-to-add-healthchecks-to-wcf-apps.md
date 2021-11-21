@@ -2,6 +2,7 @@
 title: "Why and how you should add a healthcheck endpoint to your Wcf legacy applications"
 date: 2020-07-04T17:30:06+02:00
 tags: ["dotnet", ".NET", "wcf", "legacy", "csharp", "azure", "appservices"]
+description: "What I wanted to talk in these post is how easy is to add a healthcheck endpoint in a WCF application, and how you can use it in case you want to move the application into the Cloud in the near future."
 draft: false
 ---
 

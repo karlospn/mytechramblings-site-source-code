@@ -2,6 +2,7 @@
 title: "Securing a graphQL API with Azure Active Directory"
 date: 2021-08-24T10:21:33+02:00
 tags: ["dotnet", "csharp", "aad", "graphql", "azure"]
+description: "In today's post I want to talk about how you can secure a .NET graphQL API that uses HotChocolate (https://chillicream.com/) with Azure Active Directory."
 draft: false
 ---
 

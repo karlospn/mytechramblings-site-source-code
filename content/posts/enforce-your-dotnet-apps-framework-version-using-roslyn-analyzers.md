@@ -2,6 +2,7 @@
 title: "Enforce the use of a specific .NET Core version using Roslyn"
 date: 2020-06-24T15:25:42+02:00
 tags: ["dotnet", ".NET", "roslyn", "analyzers", "csharp", ".NETCore"]
+description: "In these past few years Microsoft has kept a steady flow of new .NET Core versions, and if you have hundreds of applications in your company it's almost impossible to keep them updated to the most recent version of the framework. If you want to enforce that everyone on your company is using the correct framework version when they create a new application you can use a Roslyn Analyzer."
 draft: false
 ---
 

@@ -2,6 +2,7 @@
 title: "A practical example of GitOps using Azure DevOps, Azure Container Registry, Helm, Flux and Kubernetes"
 date: 2020-07-29T22:10:21+02:00
 tags: ["azure", "acr", "kubernetes", "gitops", "helm"]
+description: "GitOps is a way of implementing Continuous Deployment. The core idea of GitOps is having a Git repository that always contains declarative descriptions of the desired infrastructure, and in this post I'll be building a practical example of GitOps using Azure."
 draft: false
 ---
 
@@ -11,7 +12,7 @@ GitOps is a term introduced by WeaveWorks a few years ago (https://www.weave.wor
 GitOps is a way of implementing Continuous Deployment. The core idea of GitOps is having a Git repository that always contains declarative descriptions of the infrastructure currently desired in the production environment and an automated process to make the production environment match the described state in the repository.   
 If you want to deploy a new application or update an existing one, you only need to update the repository - the automated process handles everything else.
 
-In these post I want to build a practical example of GitOps, it's not going to be a production-ready example but nonetheless it's going to be an interesting proof of concept, so let's try it.
+In this post I want to build a practical example of GitOps, it's not going to be a production-ready example but nonetheless it's going to be an interesting proof of concept, so let's try it.
 
 ## Components
 ---

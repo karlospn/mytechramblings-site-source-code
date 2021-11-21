@@ -2,6 +2,7 @@
 title: "Provisioning resources on AWS using AWS CDK and Azure DevOps Pipelines"
 date: 2020-09-30T10:02:21+02:00
 tags: ["aws","cdk", "azure", "devops"]
+description: "In today's post I will show you how you can deploy an AWS CDK application using Azure DevOps."
 draft: false
 ---
 

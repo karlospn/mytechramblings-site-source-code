@@ -2,6 +2,7 @@
 title: "Create and host a blog with Hugo and GitHub Pages in less than 30 minutes"
 date: 2020-06-21T18:28:38+02:00
 tags: ["hugo", "github", "actions", "go"]
+description: "Do you want to start a blog and don't want to lose a lot of time setting everything up?  That exactly why I'm going to show you how to build a blog site with Hugo and GitHub Pages."
 draft: false
 ---
 

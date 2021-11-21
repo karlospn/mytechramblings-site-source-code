@@ -2,6 +2,7 @@
 title: "How to centrally manage NuGet package versions within your solution"
 date: 2020-09-02T10:01:20+02:00
 tags: ["csharp", "dotnet", ".NET", "nuget"]
+description: "In this post I want to show you some of the different options available when you want to centrally manage NuGet versions within a solution."
 draft: false
 ---
 
@@ -14,7 +15,7 @@ And that problem is even worse if there are multiple applications inside a singl
 That's why in most cases I like to manage the package versions in a central point inside my solution and if the solution contains multiple applications then **every application uses the same nuget version** and every application is affected when I modify the package version but at least I don't have to navigate between the dependency mesh of multiples projects being referenced between them.   
 Also in case that I have multiple applications inside a single solution and I want to update a package version of only one of them I tend to move the application that I want to modify and place it in a new solution just by itself.
 
-Anyways, in these post I want to show you some of the different options available when you want to centrally manage nuget versions within a solution.
+Anyways, in this post I want to show you some of the different options available when you want to centrally manage nuget versions within a solution.
 
 
 # Option 1 : Using the Microsoft.Build.CentralPackageVersions SDK project

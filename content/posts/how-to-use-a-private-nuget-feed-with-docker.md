@@ -2,6 +2,7 @@
 title: "How to restore nuget packages from an Azure DevOps Private Feed when building a Docker image"
 date: 2020-07-14T19:12:41+02:00
 tags: ["csharp", "docker", "nuget", "containers", "windows"]
+description: "In this post I'll show you how to restore NuGet packages from an Azure DevOps private feed when building a Docker image."
 draft: false
 ---
 
