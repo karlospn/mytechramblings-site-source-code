@@ -1,7 +1,7 @@
 ---
 title: "Testing how to use some container vulnerabilities scanners with Azure Pipelines"
 date: 2021-10-25T10:45:14+02:00
-tags: ["docker", "devops", "azure", "aws", "security", "containers", "devops", "pipelines"]
+tags: ["docker", "devops", "azure", "aws", "security", "containers"]
 description: "Vulnerability scanning allows us to review the security state of the container images and take actions to fix issues identified during the scan, resulting in more secure deployments. In this post I will be covering how you can use some of the most well-known scanners alongside with your Azure DevOps CI/CD YAML Pipelines."
 draft: true
 ---
