@@ -1,9 +1,9 @@
 ---
-title: "Building an Async HTTP Api with Azure Durable functions and Python"
+title: "Building an Async HTTP Api with Azure Durable Functions and Python"
 date: 2021-12-13T13:47:04+01:00
 draft: true
-tags: ["azure", "functions", "durable", "serverless", "python"]
-description: "The async HTTP API pattern addresses the problem of coordinating the state of long-running operations with external clients. Azure Durable Functions provides built-in support for this pattern, and in this post I'm going to show you how to build an Async HTTP API with Azure Durable functions and Python."
+tags: ["azure", "functions", "serverless", "python"]
+description: "The async HTTP API pattern addresses the problem of coordinating the state of long-running operations with external clients. Azure Durable Functions provides built-in support for this pattern and in this post I'm going to show you how to build it using Python."
 ---
 
 > **Just show me the code**   
@@ -162,7 +162,7 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
     return func.HttpResponse(json.dumps(response), headers=headers, status_code=200 )
 
 def build_api_url(scheme, host, instance_id):
-    return f"{scheme}/{host}/api/status/{instance_id}"
+    return f"{scheme}://{host}/api/status/{instance_id}"
 ```
 # get-status-function
 
@@ -340,21 +340,50 @@ def get_azure_table_connection_string() -> str:
 
 # 6. Test
 
-Everything is put in place, let's test it:
+Everything is put in place, now let's test it.
+
+If I try to submit a new job with a few invalid parameters, it responds with an error:
 
 ```bash
-
+curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query"
+{"error": "Empty start date."}
+curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/08/2021&e=abcd"
+{"error": "Invalid end date format."}
+curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/08/2021&e=abcd"
+{"error": "Invalid end date format."}
+curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/08/2021&e=05/08/2021"
+{"error": "Invalid date range."}
 ```
+
+If I try to submit a new job with valid parameters, the client function responds with the status url function.
+```bash
+curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/10/2021&e=10/12/2021"
+{"statusUri": "https://func-sa-table-durable-dev.azurewebsites.net/api/status/433ebcfe85ec4012abe94dcda2aa6b00"}
+```
+
+If I query the status function right away, it returns that the job is still being executed.
+```bash
+curl "https://func-sa-table-durable-dev.azurewebsites.net/api/status/433ebcfe85ec4012abe94dcda2aa6b00"
+{"id": "433ebcfe85ec4012abe94dcda2aa6b00", "status": "Running", "result": null}
+```
+
+If I query the status function after a few minutes, the job has completed and we can see the result.
+```bash
+curl "https://func-sa-table-durable-dev.azurewebsites.net/api/status/433ebcfe85ec4012abe94dcda2aa6b00"
+{"id": "433ebcfe85ec4012abe94dcda2aa6b00", "status": "Completed", "result": 119}
+```
+
+
 
 # 7. Deployment to Azure
 
-I didn't plan to write about how to deploy these functions to Azure, but it might be useful to someone and I had to build it anyway.
+I didn't plan to write about how to deploy these functions to Azure, but it might be useful to someone.
 
-Here's an example about how you can deploy it using:
+Here's how you can deploy them using:
 - Azure DevOps pipelines
 - Github Actions
 
-## Azure Pipelines 
+## Using Azure Pipelines
 
 ```yaml
 trigger: none
@@ -400,4 +429,48 @@ steps:
     appName: '$(functionAppName)'
     package: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
     runtimeStack: 'PYTHON|3.8'
+```
+## Using Github Action
+
+```yaml
+name: Deploy Durable Functions to Azure Function App
+
+on:
+  push:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+env:
+  AZURE_FUNCTIONAPP_NAME: func-staccount-report-query-dev
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'   
+  PYTHON_VERSION: '3.8'
+                
+jobs:
+  build-and-deploy:
+    environment: dev
+    runs-on: ubuntu-latest
+    steps:
+    - name: 'Checkout GitHub Action'
+      uses: actions/checkout@master
+
+    - name: Setup Python ${{ env.PYTHON_VERSION }} Environment
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 'Resolve Project Dependencies Using Pip'
+      shell: bash
+      run: |
+        pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+        popd
+    - name: 'Run Azure Functions Action'
+      uses: Azure/functions-action@v1
+      id: fa
+      with:
+        app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+        package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        publish-profile: ${{ secrets.SCM_CREDENTIALS }}
 ```
