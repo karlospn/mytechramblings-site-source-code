@@ -1,37 +1,39 @@
 ---
 title: "Building an Async HTTP Api with Azure Durable Functions and Python"
-date: 2021-12-13T13:47:04+01:00
+date: 2021-12-15T09:00:04+01:00
 draft: true
 tags: ["azure", "functions", "serverless", "python"]
-description: "The async HTTP API pattern addresses the problem of coordinating the state of long-running operations with external clients. Azure Durable Functions provides built-in support for this pattern and in this post I'm going to show you how to build it using Python."
+description: "The async HTTP API pattern addresses the problem of coordinating the state of long-running operations with external clients. Azure Durable Functions provides built-in support for this pattern and in this post I'm going to show you how to implement it using Python."
 ---
 
 > **Just show me the code**   
 As always if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/az-durable-func-async-http-api-python).
 
 
-In today's post I'll be showing you how to build an Async HTTP API with Azure Durable functions. 
+In today's post I'll be showing you how to implement the Async HTTP Api pattern with Azure Durable functions. 
 
-Also, most of the online examples and documentation about Durable Functions are written using csharp so instead of using that I decided to run with Python.   
+Also, most of the online examples and documentation about Durable Functions are written with csharp so instead of that I have decided to use Python.   
 
-To begin with, let's do a brief explanation about the key concepts around Azure Durable Functions.
+To begin with, let's do a brief explanation about a few key concepts around Azure Durable Functions.
 
 # 1. Azure Durable Functions
 
 For those unaware of Azure Durable Functions, it is an extension of Azure Functions that lets you write stateful functions in a serverless compute environment.   
-The extension lets you define stateful workflows by writing orchestrator functions and stateful entities by writing entity functions using the Azure Functions programming model.
+The extension lets you define stateful workflows by writing orchestrator functions and stateful entities.
 
 The 4 main concepts you should know about are:
 
 - **Client functions**
 
-The Client Function is responsible for starting stopping and monitoring the orchestrator functions.
+The client function is responsible for starting, stopping and monitoring the orchestrator functions.
 
 - **Orchestrator functions**
 
-This function is the heart when building a durable function solution. In this function you write your workflow in code. The workflow can consist of code statements calling other functions like activity, or other orchestration functions, or waits for other events to occur or timers.
+This function is the heart when building a durable function solution. In this function you write your workflow in code. The workflow can consist of code statements calling other functions like activity functions, other orchestration functions or even wait for other events to occur.
 
-An orchestration is started by a client function, a function that on its turn can be triggered by a message in a queue, an HTTP request, or any other trigger mechanism you are familiar with. Every instance of an orchestration function will have an instance identifier, which can be auto-generated or user-generated. 
+An orchestration is started by a client function, a function that on its turn can be triggered by a message in a queue, an HTTP request, or any other trigger mechanism you are familiar with. 
+
+Every instance of an orchestration function will have an instance identifier, which can be auto-generated or user-generated. 
 
 - **Activity functions**
 
@@ -56,10 +58,9 @@ One of my clients has an HTTP API that uses an Azure Function as its backend, th
 
 ![audit-api](/img/audit-function-durable.png)
 
-The problem with this approach lies in the fact that the query takes between 3 and 7 minutes to complete, so most of the time the HTTP function times out, because 230 seconds is the maximum amount of time that an HTTP triggered function can take to respond to a request. This is because of the idle timeout of Azure Load Balancer. 
+The problem with this approach lies in the fact that the query takes between 3 and 7 minutes to complete, so most of the time the HTTP function times out because 230 seconds is the maximum amount of time that an HTTP triggered function can take to respond to a request. This is because of the idle timeout of Azure Load Balancer. 
 
-For longer processing times, we need to consider using an async pattern or defer the actual work and return an immediate response.
-
+For longer processing times, I needed to consider using an async pattern or defer the actual work and return an immediate response.   
 And Azure Durable Functions provides built-in support for the async http api pattern.
 
 # 3. Async HTTP API Pattern
@@ -75,15 +76,15 @@ The idea behind what we're going to build is the following one:
 
 - The customer submits a job by calling an Azure Function that has an HTTP endpoint trigger. This is the Client Function.
 - The submitted job is going to be picked up by the Orchestrator Function and it will call the Activity Function.
-- The Activity Function is going to run the query against the Azure Storage Table and return a result.
-- There is going to be an extra Azure Function that queries the orchestrator function and retrieves the status and the result of a submitted job.
+- The Activity Function is going to run the query against the Azure Storage Table and return the result.
+- There is going to be an extra Azure Function that queries the orchestrator function and retrieves the status and the result of a given job.
 
 Here's a diagram:
 
 ![async-http-api](/img/durable-function-async-http-api.png)
 
 - ``client-function``: submits the job that needs to be executed.
-- ``get-status-function``: it is used to retrieve the status and the result of a submitted job.
+- ``get-status-function``: it is used to retrieve the status and the result of a given job.
 - ``orchestrator-function``: Unwraps the parameters from the submitted job and calls the activity function.
 - ``query-storage-account-activity-function``: Runs a custom query in an Azure Storage Table.
 
@@ -104,7 +105,7 @@ The ``start_new`` method takes 3 parameters:
   - InstanceId: (Optional) The unique ID of the instance. If you don't specify this parameter, the method uses a random ID.
   - Input: Any JSON-serializable data that should be passed as the input to the orchestrator function.
 
-And lastly, it builds the URL from where the client can retrieve the status and the result of a submitted job.
+And lastly, it builds the URL from where the client can retrieve the status and the result of the submitted job.
 
 
 ```python
@@ -170,9 +171,9 @@ def build_api_url(scheme, host, instance_id):
 
 Before discussing the implementation of this Azure Function, I think it's important to talk a bit about if this function is really needed or not.
 
-Most of the examples that you are going to find don't build a function to retrieve the status of the submitted jobs. Instead of that they use directly the ``create_check_status_response`` method on the Client Function.  
+Most of the examples that you are going to find online don't use a custom function to retrieve the status of the jobs. Instead of that, they use the ``create_check_status_response`` method on the Client Function.  
 
-In the previous section I could have built the client function like this:
+That means that in the previous section I could have built the client function like this:
 
 ```python
     ...
@@ -187,7 +188,7 @@ In the previous section I could have built the client function like this:
     return client.create_check_status_response(req, instance_id)
 ```
 
-And here's an example of the response:
+And that's how the function would have responded:
 
 ```javascript
 {
@@ -200,21 +201,23 @@ And here's an example of the response:
   "restartPostUri": "http://localhost:7071/runtime/webhooks/durabletask/instances/b78244c9e19f43e89e7b1578f711940d/restart?taskHub=TestHubName&connection=Storage&code=V/xX4rraZaheGNwbMePOhhGtyHxGsgks4Q36WKBdS3WfiOjD5Sb5lw=="
 }
 ```
-As you can see the ``create_check_status_response`` method returns a response that contains links to the various management operations that can be invoked on an orchestration instance. These operations include querying the orchestration status, raising events or terminating the orchestration.
+As you can see the ``create_check_status_response`` method returns a response that contains links to the various management operations that can be invoked on an orchestration instance.   
+These operations include querying the orchestration status, raising events or terminating the orchestration.
 
->So, Why I'm building an extra Azure Function to retrieve the status of the job instead of directly using the ``create_check_status_response``?
+>So, why I'm building an extra Azure Function to retrieve the status of a job instead of directly using the ``create_check_status_response`` method?
 
 This is because the general public shouldn’t be able to query the Orchestration status endpoint directly.   
-As you can see the response payload includes the orchestrator management endpoints with their corresponding keys, by providing that, you would allow the clients not only to get the status of a running instance, but also to get the  execution history, send external events to the orchestration instance or terminate that instance.   
-If you don’t want your client messing around with the orchestrator function, you need to expose another azure function that returns only the minimum information required.
+As you can see the response payload includes the orchestrator management endpoints with their corresponding keys, by providing that, you would allow the clients not only to get the status of a running instance, but also to get the execution history, send external events to the orchestration instance or terminate that instance.   
 
-## Function implementation
+Basically if you don’t want your clients messing around with the heart of the function, you need to expose another azure function that returns only the minimum information required.
+
+## Implementation
 
 The ``get-status-function`` is an Http triggered function.
 
 This function needs the ``instance_id`` that the Client function generated when submitting the job to the orchestrator function.   
 
-To retrieve the status and the result of the submitted job you can use the ``get_status`` method. This method queries the orchestrator function to obtain the status of the job.
+To retrieve the status and the result of a submitted job you can use the ``get_status`` method. This method queries the orchestrator function to obtain the status of the job.
 
 The ``get_status``  returns an object with the following properties:
 
@@ -259,10 +262,12 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
 
 # orchestrator-function
 
-Nothing fancy here. In this application the orchestrator function is quite simple.
+Nothing fancy here. The orchestrator function in this application is really simple because there is no need to orchestrate multiple activies nor build a complex workflow.
 
-- Retrieves the parameters from the Client Function (These parameters are needed to build the query against the Azure Table Storage)
-- Calls the activity function passing the retrieved parameters.
+The function does the following steps:
+
+- Retrieves the inputs send from the Client Function (These parameters are needed to build the query against the Azure Table Storage)
+- Calls the activity function passing the retrieved inputs.
 - Waits for the activity function to end and returns the result.
 
 ```python
@@ -279,9 +284,9 @@ main = df.Orchestrator.create(orchestrator_function)
 
 # query-storage-account-activity-function
 
-The Activity Function is responsible to run the query against the Azure Table Storage.
+This Activity Function is responsible to run the query against the Azure Table Storage.
 
-The function retrieves the Storage Table connection string from an App Configuration with a Key Vault reference (https://docs.microsoft.com/en-us/azure/azure-app-configuration/overview), runs the query and returns the result.
+This function retrieves the Storage Table connection string from an App Configuration with a Key Vault reference (https://docs.microsoft.com/en-us/azure/azure-app-configuration/overview), runs the query and returns the result.
 
 As you can see this function is a single unit of work and does not contain any reference to the durable-functions library.
 
@@ -349,31 +354,27 @@ curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query"
 {"error": "Empty start date."}
 curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/08/2021&e=abcd"
 {"error": "Invalid end date format."}
-curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/08/2021&e=abcd"
-{"error": "Invalid end date format."}
 curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/08/2021&e=05/08/2021"
 {"error": "Invalid date range."}
 ```
 
-If I try to submit a new job with valid parameters, the client function responds with the status url function.
+If I try to submit a new job with valid parameters, the client function responds with the status endpoint.
 ```bash
 curl "https://func-sa-table-durable-dev.azurewebsites.net/api/submit/query?s=10/10/2021&e=10/12/2021"
 {"statusUri": "https://func-sa-table-durable-dev.azurewebsites.net/api/status/433ebcfe85ec4012abe94dcda2aa6b00"}
 ```
 
-If I query the status function right away, it returns that the job is still being executed.
+If I query the get-status function right away, it returns that the job is still being executed.
 ```bash
 curl "https://func-sa-table-durable-dev.azurewebsites.net/api/status/433ebcfe85ec4012abe94dcda2aa6b00"
 {"id": "433ebcfe85ec4012abe94dcda2aa6b00", "status": "Running", "result": null}
 ```
 
-If I query the status function after a few minutes, the job has completed and we can see the result.
+If I query the get-status function after a few minutes, the job has completed and we can see the result.
 ```bash
 curl "https://func-sa-table-durable-dev.azurewebsites.net/api/status/433ebcfe85ec4012abe94dcda2aa6b00"
 {"id": "433ebcfe85ec4012abe94dcda2aa6b00", "status": "Completed", "result": 119}
 ```
-
-
 
 # 7. Deployment to Azure
 
