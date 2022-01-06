@@ -1,9 +1,9 @@
 ---
 title: "Getting started with OpenTelemetry and distributed tracing in .NET Core"
 date: 2021-04-08T10:11:51+02:00
+Lastmod: 2022-01-06
 tags: ["opentelemetry", "tracing", "jaeger", "dotnet", "csharp"]
 description: "OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. On today's post I'm going to show you how you can start using OTEL and distributed tracing with .NET Core."
-Lastmod: 2021-01-06
 draft: false
 ---
 
