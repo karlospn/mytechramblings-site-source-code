@@ -3,11 +3,12 @@ title: "Getting started with OpenTelemetry and distributed tracing in .NET Core"
 date: 2021-04-08T10:11:51+02:00
 tags: ["opentelemetry", "tracing", "jaeger", "dotnet", "csharp"]
 description: "OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. On today's post I'm going to show you how you can start using OTEL and distributed tracing with .NET Core."
+Lastmod: 2021-01-06
 draft: false
 ---
 
-> **Show me the code**   
-> If you don't care about the post I have upload the code on my [Github](https://github.com/karlospn/opentelemetry-tracing-demo)
+> **Just show me the code**   
+> As always if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/opentelemetry-tracing-demo)
 
 A few months ago the first stable version of the OpenTelemetry client for dotnet was released and since then I have wanted to write a little bit about it.   
 
@@ -110,18 +111,18 @@ Here's the diagram:
 ![otel-diagram](/img/otel-components-diagram.png)
 
 
-- **App1.WebApi** is a **NET5 Web API** with 2 endpoints.
+- **App1.WebApi** is a **NET6 Web API** with 2 endpoints.
     - The **/http** endpoint makes an HTTP request to the App2 _"/dummy"_ endpoint.
     - The **/publish-message** endpoint queues a message into a Rabbit queue named _"sample"_.
     
-- **App2.RabbitConsumer.Console** is a **NET5 console** application. 
+- **App2.RabbitConsumer.Console** is a **NET6 console** application. 
   - Dequeues messages from the Rabbit _"sample"_ queue and makes a HTTP request to the **App3** _"/sql-to-event"_ endpoint with the content of the message.
 
-- **App3.WebApi** is a **NET5 Web API** with 2 endpoints
+- **App3.WebApi** is a **NET6 Web API** with 2 endpoints
     - The **/dummy** endpoint returns a fixed _"Ok"_ response.
     - The **/sql-to-event** endpoint receives a message via HTTP POST, stores it in a MSSQL Server and afterwards publishes the message as an event into a RabbitMq queue named _"sample_2"_.
 
-- **App4.RabbitConsumer.HostedService** is a **NET5 Worker Service**.
+- **App4.RabbitConsumer.HostedService** is a **NET6 Worker Service**.
   - A Hosted Service reads the messages from the Rabbitmq _"sample_2"_ queue and stores it into a Redis cache database.
 
 Those apps are not using OpenTelemetry right now, so in the next sections we're going to do a step-by-step guide about how to setup and use the OpenTelemetry client.
@@ -131,13 +132,13 @@ Those apps are not using OpenTelemetry right now, so in the next sections we're 
 To get started with OpenTelemetry we're going to need the following packages.
 
 ```xml
-<PackageReference Include="OpenTelemetry" Version="1.1.0-beta1" />
-<PackageReference Include="OpenTelemetry.Exporter.Jaeger" Version="1.1.0-beta1" />
-<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc3" />
-<PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.0.0-rc3" />
-<PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.0.0-rc3" />
-<PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.0.0-rc3" />
-<PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc3" />
+<PackageReference Include="OpenTelemetry" Version="1.2.0-rc1" />
+<PackageReference Include="OpenTelemetry.Exporter.Jaeger" Version="1.2.0-rc1" />
+<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc8" />
+<PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.0.0-rc8" />
+<PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.0.0-rc8" />
+<PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.0.0-rc8" />
+<PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc8" />
 ```
 
 - The _**OpenTelemetry**_ package is the core library.
@@ -156,7 +157,7 @@ In the near future I expect to see more and more instrumentation libraries like 
 **1 . Setup the OpenTelemetry library**
 
 ```csharp
-services.AddOpenTelemetryTracing((sp, builder) =>
+services.AddOpenTelemetryTracing(builder =>
 {
     builder.AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
@@ -166,6 +167,7 @@ services.AddOpenTelemetryTracing((sp, builder) =>
         {
             opts.AgentHost = Configuration["Jaeger:AgentHost"];
             opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
+            opts.ExportProcessorType = ExportProcessorType.Simple;
         });
 });
 ```
@@ -393,7 +395,7 @@ private static void AddActivityTags(Activity activity)
 **1 . Setup the OpenTelemetry library**
 
 ```csharp
- services.AddOpenTelemetryTracing((sp, builder) =>
+services.AddOpenTelemetryTracing(builder =>
 {
     builder.AddAspNetCoreInstrumentation()
         .AddSource(nameof(RabbitRepository))
@@ -422,27 +424,36 @@ This app is also queuing a message into a RabbitMq queue, but the code it's exac
 **1 . Setup the OpenTelemetry library**
 
 ```csharp
- services.AddOpenTelemetryTracing((sp, builder) =>
+services.AddOpenTelemetryTracing(builder =>
 {
-    IConfiguration config = sp.GetRequiredService<IConfiguration>();
-    RedisCache cache = (RedisCache)sp.GetRequiredService<IDistributedCache>();
+    var provider = services.BuildServiceProvider();
+    IConfiguration config = provider
+            .GetRequiredService<IConfiguration>();
+
     builder.AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
-        .AddRedisInstrumentation(cache.GetConnectionAsync())
+        .Configure((sp, builder) =>
+          {
+              RedisCache cache = (RedisCache)sp.GetRequiredService<IDistributedCache>();
+              builder.AddRedisInstrumentation(cache.GetConnection());
+          })
         .AddSource(nameof(Worker))
         .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App4"))
         .AddJaegerExporter(opts =>
-        {
+        {                    
+            
             opts.AgentHost = config["Jaeger:AgentHost"];
             opts.AgentPort = Convert.ToInt32(config["Jaeger:AgentPort"]);
+            opts.ExportProcessorType = ExportProcessorType.Simple;
         });
 });
 ```
 This app dequeues a message from a RabbitMq queue and stores the message content into a Redis cache database.
 
-The instrumentation part for dequeuing the message from RabbitMq looks exactly the same as the snippet I have put on the App2 section.   
+The instrumentation part for dequeuing the message from RabbitMq looks exactly the same as the snippet I have put on the App2 section, so I'm going to skip that part.
 
-The instrumentation for Redis is a little more problematic, the issue when trying to instrument Redis is that the `AddRedisInstrumentation()` extension method needs an instance of the Redis `ConnectionMultiplexer`.   
+The instrumentation for Redis is a little more problematic.    
+The issue when trying to instrument Redis is that the `AddRedisInstrumentation()` extension method needs an instance of the Redis `ConnectionMultiplexer`.   
 If you're using an `IDistributedCache` interface and the `AddStackExchangeRedisCache` extension method to configure the Redis connection, like this one: 
 
 ```csharp
@@ -459,7 +470,7 @@ You will realize that you can't access the `ConnectionMultiplexer` property beca
 ```csharp
 public static class RedisCacheExtensions
 {
-    public static ConnectionMultiplexer GetConnectionAsync(this RedisCache cache)
+    public static ConnectionMultiplexer GetConnection(this RedisCache cache)
     {
         //ensure connection is established
         typeof(RedisCache).InvokeMember("Connect", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.InvokeMethod, null, cache, new object[] { });
@@ -471,6 +482,8 @@ public static class RedisCacheExtensions
     }
 }
 ```
+Also, as you can see I'm not using directly the ``AddRedisInstrumentation()`` method, instead of that I'm wrapping the ``AddRedisInstrumentation()`` methood with the ``Configure()`` method.    
+The ``Configure()`` method is an overload method that allows to get a hold of the ``IServiceProvider`` instance.
 
 # Jaeger  
 
