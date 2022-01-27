@@ -1,5 +1,5 @@
 ---
-title: "Testing AWS Distro for OpenTelemetry and distributed tracing with .NET apps"
+title: "Testing distributed tracing with AWS Distro for OpenTelemetry in .NET apps"
 date: 2022-01-24T11:19:12+01:00
 tags: ["AWS", "dotnet", "OpenTelemetry"]
 description: "TBD"
@@ -11,19 +11,48 @@ As always if you don’t care about the post I have upload the source code on my
 
 # Introduction
 
-AWS OTEL is a secure, production-ready, AWS-supported distribution of the OpenTelemetry project.
+A few months ago I wrote a post about how to start using OpenTelemetry with .NET, if you're interested you can read more about it [here](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-and-dotnet-core/).   
+In that post I talked a little bit about the main concepts around OpenTelemetry and how to instrument a .NET app with the .NET OpenTelemetry client.
 
-With AWS Distro for OpenTelemetry, you can instrument your applications just once to send correlated metrics and traces to multiple AWS and Partner monitoring solutions.
+In this post I'm going to get back to OpenTelemetry and .NET, but this time I'm planning to focus on testing the **AWS Distro for OpenTelemetry**.
 
-It also collects metadata from your AWS resources and managed services, so you can correlate application performance data with underlying infrastructure data, reducing the mean time to problem resolution.
+With the AWS Distro for OpenTelemetry you can instrument your application to send metrics and traces to multiple AWS solutions such as AWS CloudWatch, Amazon Managed Service for Prometheus, AWS X-Ray or Amazon OpenSearch Service.   
 
-And this repository contains a practical example about how to use AWS OTEL for tracing when we have a series of distributed .NET apps.
+It also can collect metadata from your AWS resources and managed services, so you can correlate application performance data with underlying infrastructure data, reducing the mean time to problem resolution.
+
+As I stated before the goal for this post is testing distributed tracing with AWS Distro for OpenTelemetry in .NET, so during this post I'll be tackling the following topics:
+- How to setup the AWS OTEL Collector.
+- How to configure properly a .NET app and how to use XRay to view them.
+
+But first of all, let's review the demo I'm going to build during this post.
 
 # Demo
 
+The demo has 4 apps. These apps are not doing any business logic operations because that's not the goal here.
+The important part is that all the apps are talking with AWS services like S3, DynamoDb, AmazonMQ RabbitMQ or SQS.
+
+Here's the diagram:
+
+![components-diagram]((/img/aws-otel-demo-components-diagram.png)
+
+- **App1.WebApi** is a .NET6 Web API with 2 endpoints.
+    - The ``/http`` endpoint  makes an HTTP request to the **App2** ``/dummy`` endpoint.
+    - The ``/publish-message``  endpoint queues a message into an **AWS ActiveMQ Rabbit queue**.
+
+- **App2.RabbitConsumer.Console** is a .NET6 console app. 
+  - Dequeues messages from the Rabbit queue and makes a HTTP request to the **App3** ``/s3-to-event`` endpoint with the content of the message.
+
+- **App3.WebApi** is a .NET6 Web API with 2 endpoints.
+    - The ``/dummy`` endpoint returns a fixed "Ok" response.
+    - The ``/s3-to-event`` endpoint receives a message via HTTP POST, stores it in an **S3 bucket** and afterwards publishes the message as an event into an **AWS SQS queue**.
+
+- **App4.SqsConsumer.HostedService** is a .NET6 Worker Service.
+  - A Hosted Service reads the messages from the **AWS SQS queue** and stores it into a **DynamoDb table**.
+
 # AWS OpenTelemetry Collector
 
-# OpenTelemetry .NET Client
+The collector in our distro is built using the upstream OpenTelemetry collector. We have added AWS-specific exporters to the upstream collector to send data to AWS services including AWS X-Ray, Amazon CloudWatch and Amazon Managed Service for Prometheus. 
+
 
 # Adding OpenTelemetry on App1
 
@@ -32,6 +61,8 @@ And this repository contains a practical example about how to use AWS OTEL for t
 # Adding OpenTelemetry on App3
 
 # Adding OpenTelemetry on App4
+
+# AWS instrumentation tracing noise
 
 # XRay output
 
