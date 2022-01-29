@@ -166,7 +166,7 @@ The key part of this demo is that the apps are communicating between them and al
 
 Here's the diagram:
 
-![components-diagram]((/img/aws-otel-demo-components-diagram.png)
+![components-diagram](/img/aws-otel-demo-components-diagram.png)
 
 - **App1.WebApi** is a .NET6 Web API with 2 endpoints.
     - The ``/http`` endpoint  makes an HTTP request to the **App2** ``/dummy`` endpoint.
@@ -254,7 +254,7 @@ The ``OpenTelemetry.Contrib.Instrumentation.AWS`` NuGet package is used to auto-
 That means that we need to used the ``RabbitMQ.Client`` package and that we need to instrument the downstream call by ourselves.
 
 In the following code snippet you'll see that we are injecting the trace information into the header of the message that is going to be send.   
-Later in App2 we'll extract the trace information from the message header and link both operation.
+Later in App2 we'll extract the trace information from the message header and link both operations.
 
 To be more specific we are using an ``XRayPropagator`` to inject the Activity into the message header, this concrete propagator will add a header named ``X-Amzn-Trace-Id`` into the message.   
 
@@ -469,7 +469,9 @@ private static void AddActivityTags(Activity activity)
 
 # Add and configure OpenTelemetry on App3
 
-The App3 is a Web API that uses AWS S3 and AWS SQS, and the setup of the OTEL provider looks almost identical as the ones on the App1 and App2 but with one difference.   
+### **1. Setup the OpenTelemetry library**
+
+App3 is a Web API that uses AWS S3 and AWS SQS, and the setup of the OTEL provider looks almost identical as the ones on the App1 and App2 but with one difference.   
 We are using the ``AddAWSInstrumentation()`` method from the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package to auto-instrument the calls that are being made by the AWS SDK clients.
 
 ```csharp
@@ -487,7 +489,7 @@ services.AddOpenTelemetryTracing(builder =>
     Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
 });
 ```
-### **2. Instrument the call to S3 and SQS**
+### **2. Instrument the calls to AWS S3 and AWS SQS**
 
 App3 receives a message from App2 and upload sthe content of the message into an S3 bucket, and as you can see in the next code snippet there is nothing related to OpenTelemetry here.  
 We're simple using the ``AWSSDK.S3`` client to upload the contents of the message into the S3 bucket.
@@ -568,13 +570,15 @@ This header is important, more about it in the next section.
 
 # Add and configure OpenTelemetry on App4
 
+### **1. Setup the OpenTelemetry library**
+
+App3 is a Worker Service that uses Amazon SQS and Amazon DynamoDb.
+
+Nothing to comment here, the setup of the Otel provider is exactly the same as the one on App3.
+
 ```csharp
 services.AddOpenTelemetryTracing(builder =>
 {
-    var provider = services.BuildServiceProvider();
-    IConfiguration config = provider
-            .GetRequiredService<IConfiguration>();
-
     builder.AddAspNetCoreInstrumentation()
         .AddXRayTraceId()
         .AddAWSInstrumentation()
@@ -588,6 +592,23 @@ services.AddOpenTelemetryTracing(builder =>
     Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
 });
 ```
+
+### **2. Instrument the call to AWS SQS and AWS DynamoDb**
+
+As I stated before the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package auto-instruments the downstream calls that are being made by the AWS SDK clients, but we need more than that, we need to link the Activity on the producer side from App3 with the Activity on the consumer side from App4, and the only way to do that is manually.
+
+In the previous section I talked about how the ``AWSTraceHeader`` attribute was injected into each message send to SQS and the attribute contained the X-Ray trace header, so we're going to use this attribute to link both activities.
+
+Amazon SQS is not push-based like RabbitMQ, instead of that you need to keep pulling the messages from the queue by yourself.  
+
+In the next code snippet the Worker Service runs on an infinite loop and keeps pulling messages using the ``ReceiveMessageAsync(request, stoppingToken)`` method.
+
+When a message is pulled we call the ``ProcessMessage()`` method, this method will store the message received from SQS into DynamoDb and delete it from the SQS queue.   
+The ``ProcessMessage()`` method creates a new Activity, uses the ``XRayPropagator`` to extract the ``AWSTraceHeader`` from the message and links the producer and the consumer activities.
+
+The instrumentation of DynamoDb is much more simpler, there is no need to do any extra leg work, the auto-instrumentation from the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package will take care of it.
+
+The last step of delete the message from the SQS queue,  there is no need to do any extra leg work here either, the auto-instrumentation will do it for us.
 
 ```csharp
 public class Worker : BackgroundService
@@ -676,6 +697,9 @@ public class Worker : BackgroundService
   }
 }
 ```
+There is a extra thing worth mentioning on App4. Previously I stated that the ``ProcessMessage()`` method creates a new Activity, uses the ``XRayPropagator`` to extract the ``AWSTraceHeader`` from the message and links the producer and the consumer activities.
+
+But the ```XRayPropagator`` is built to try to extract only  the ``X-Amzn-Trace-Id`` header, if you want to extract another header you'll need to specify it on the getter delegate.
 
 ```csharp
 public static class ActivityHelper
@@ -706,9 +730,9 @@ public static class ActivityHelper
 
 # XRay output
 
-After instrumenting the 4 apps we are going to generate some traffic and afterwards access XRay  to start analyzing the traces that the apps are sending.
+After instrumenting the 4 apps we are going to generate some traffic and afterwards access XRay to start analyzing the traces that the apps are sending.
 
-If we take a look at an entire trace, this is how it looks on X-Ray:
+First let's invoke the ``/publish-message`` endpoint from App1 and let's take a look at an entire trace, this is how it looks on X-Ray:
 
 ![xray-fulltrace](/img/xray-fulltrace.png)
 
@@ -716,15 +740,37 @@ Also we can take a look at the X-Ray ServiceMap:
 
 ![xray-service](/img/xray-servicemap.png)
 
-If we want we can toggle between the ServiceMap with icons to the ServiceMap with response times
+We can toggle between the ServiceMap with icons to the ServiceMap with response times
 
 ![xray-service](/img/xray-servicemap-noicons.png)
 
-Every thing seems to be working fine, but there is one little problem...
+If we drill down into one of the spans that we're auto-generated by the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package, you can see that some metadata about which resource and which action is performed is also added into the span.
 
-# AWS auto-instrumentation tracing noise on App4
+![xray-fulltrace-dynamo-subsegment-resources](/img/xray-fulltrace-dynamo-subsegment-resources.png)
 
-But taking a look at the traces sent to X-Ray we can see a problem on App4.
+Also, do you remember that in the App1 we added some extra Tags on the Activity?
+
+```csharp
+activity?.SetTag("messaging.system", "rabbitmq");
+activity?.SetTag("messaging.destination_kind", "queue");
+activity?.SetTag("messaging.rabbitmq.queue", "sample");
+```
+You'll find them on XRay if you drill down on the _"Publish Message"_ span
+
+![x-ray-fulltrace-tags-annotations](/img/x-ray-fulltrace-tags-annotations.png)
+
+To end this, let's also invoke the ``/http`` endpoint from App1 and see an entire trace on XRay.   
+Here it is:
+
+![xray-fulltrace-http-endpoint](/img/xray-fulltrace-http-endpoint.png)
+
+Every thing seems to be working fine, but there is one little important problem...
+
+# AWS auto-instrumentation additional tracing noise on App4
+
+Taking a look at the traces sent to X-Ray we see a problem on App4.
+
+
 
 
 ```csharp
