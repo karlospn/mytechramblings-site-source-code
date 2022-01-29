@@ -14,10 +14,12 @@ As always if you don’t care about the post I have upload the source code on my
 A few months ago I wrote a post about how to start using OpenTelemetry with .NET, if you're interested you can read more about it [here](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-and-dotnet-core/).   
 In that post I talked a little bit about the main concepts around OpenTelemetry and how to instrument a .NET app with the .NET OpenTelemetry client.
 
-In this post I'm going to get back to OpenTelemetry and .NET, but this time I'm planning to focus on testing the **AWS Distro for OpenTelemetry**.
+In this post I'm going to get back to OpenTelemetry and .NET, but this time I'm planning to focus on testing the **AWS Distro for OpenTelemetry**.   
+I'm sure there's going to be some overlap with my previous post, but I'll try it to keep it to a minimum. 
 
-I'm not going to repeat myself talking about what's an activity, what's an span or a propagator, you can go read my other post.   
-In this one I want to go straight to the point, so I'm planning to be tackling the following topics:
+I'm not going to repeat myself talking about what's an activity, what's an span or a propagator, you can go read my other post.
+
+In this post I'm planning to be talk about the following topics:
 - What is the AWS OpenTelemetry Collector and how to setup it up.
 - Build a demo to show you how to configure properly a .NET app to send the tracing data to the collector
 - How to use XRay to view the traces sent.
@@ -60,12 +62,15 @@ If you want to configure it you need to know that the configuration contains thr
 
 For our demo purposes we need the following ones:
 - **Receivers**:
-  - **OTEL GRPC Receiver**: The .NET apps will have to send the tracing data to the collector and to achieve it we're going to use the OTLP GRPC receiver. This receiver receives data via gRPC using OTLP format.    
+  - **OTEL gRPC Receiver**: The .NET apps will have to send the tracing data to the collector and to achieve it we're going to use the OTLP gRPC receiver. This receiver receives data via gRPC using OTLP format.    
   Instead of the gRPC receiver we could use the HTTP receiver, this one receives data via HTTP/JSON.
 - **Exporters**:
   - **XRay Exporter**: This exporter converts OTLP traces into the AWS X-Ray format and then exports the data to the AWS X-Ray service.
   - **Logging Exporter**: This exporter writes the OTLP traces to the console. This one is not needed, but I find it quite useful to review what data are the apps sending to the collector.
 - **Processors**:
+  - **Memory limiter Processor**: This processor ensure that the Collector does not goes crazy using memory.   
+  This processor is really useful if you deploy the Collector as a sidecar along your application because it will ensure that the Collector does not use up memory needed by your application.
+  - **Batch Processor**: This processor accepts spans, metrics, or logs and places them into batches. Batching helps better compress the data and reduce the number of outgoing connections required to transmit the data.
 
 If you're curious about the logging exporter, here's an example of how output of the exporter looks like:
 
@@ -80,23 +85,32 @@ receivers:
       grpc:
         endpoint: 0.0.0.0:4317
 
+processors:
+  memory_limiter:
+    limit_mib: 50
+    check_interval: 1s
+  batch/traces:
+    timeout: 1s
+    send_batch_size: 50
+
 exporters:
   logging:
     loglevel: debug
   awsxray:
     region: eu-west-1
 
-
 service:
   pipelines:
     traces:
       receivers:
         - otlp
+      processors:
+        - memory_limiter
+        - batch/traces
       exporters:
         - logging
         - awsxray
 ```
-
 
 # Configuring permissions for the AWS OpenTelemetry Collector
 
@@ -145,7 +159,7 @@ Copy
 
 # Demo
 
-In the previous section we have talked about what is the AWS OTEL Collector and how to set it up, now it's time to focus on building the .NET apps.
+In the previous section we have talked about what is the AWS OTEL Collector and how to set it up, now it's time to focus on building some apps.
 
 The demo we're going to build will contain 4 apps, these apps are not doing any business logic operations because that's not the goal here.    
 The key part of this demo is that the apps are communicating between them and also with some AWS services like S3, DynamoDb, AmazonMQ RabbitMQ or SQS.
@@ -197,13 +211,486 @@ To get started we’re going to need the following packages:
 - The ``AWSSDK.Extensions.NETCore.Setup`` package contains some extensions for the AWS SDK for .NET to integrate with .NET Core configuration and dependency injection frameworks.
 - The ``AWSSDK.*`` packages are the official AWS SDK for .NET and allows us to interact with the different AWS Services. 
 
-# Adding OpenTelemetry on App1
+# Add and configure OpenTelemetry on App1
 
-# Adding OpenTelemetry on App2
+### **1. Setup the OpenTelemetry library**
 
-# Adding OpenTelemetry on App3
+```csharp
+services.AddOpenTelemetryTracing(builder =>
+{
+  builder.AddAspNetCoreInstrumentation()
+      .AddXRayTraceId()
+      .AddHttpClientInstrumentation()
+      .AddSource(nameof(PublishMessageController))
+      .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))
+      .AddOtlpExporter(opts =>
+      {
+          opts.Endpoint = new Uri(Configuration["Otlp:Endpoint"]);
+      });
+});
 
-# Adding OpenTelemetry on App4
+Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
+```
+As you can see it's a pretty straightforward configuration.
+
+- The  ``AddXRayTraceId()`` method is needed because we need to convert the OTEL trace ID into aAWS X-Ray compliant trace IDs, without this method the X-Ray is incapable of interpreting the application data traces.
+- The ``AddHttpClientInstrumentation()`` method enables HTTP auto-instrumentation.The Api 1 makes an HTTP request to the App2, if we want to trace the HTTP call between these 2 apps we can do it simply by adding this extension method.
+- The ``AddSource(nameof(PublishMessageController))`` method is used to add a new ActivitySource to the provider. Everytime you create a new Activity you should add a new ActivitySource.
+- The ``.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))`` method configures the Resource for the application.
+- The ``AddOtlpExporter()`` method is used to indicate that the tracing data is going to be sent to this specific endpoint. This endpoint matches the OTEL gRPC Receiver Endpoint in the AWS OTEL Collector.
+- The ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator())`` method is needed if your app calls another application instrumented with AWS X-Ray SDK. This method overrides the value of the ``Propagators.DefaultTextMapPropagator`` with the ``AWSXRayPropagator``.    
+The ``Propagators.DefaultTextMapPropagator`` is used internally by some instrumentation packages to infer and propagate the trace ID.
+
+
+To put it simply, if you're using AWS Distro for OpenTelemetry and you want to send all the tracing data to X-Ray you'll need to add this 2 method everytime you setup the OpenTelemetry provider in one of your apps:
+- ``AddXRayTraceId()``
+- ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());``
+
+All the other method are just basic OpenTelemetry setup, nothing to do with AWS Distro for OpenTelemetry.
+
+### **2. Instrument the call to AmazonMQ RabbitMQ**
+
+The ``OpenTelemetry.Contrib.Instrumentation.AWS`` NuGet package is used to auto-instrument the AWS SDK .NET clients, but there is no AWS SDK client to use with AmazonMQ Rabbit.   
+That means that we need to used the ``RabbitMQ.Client`` package and that we need to instrument the downstream call by ourselves.
+
+In the following code snippet you'll see that we are injecting the trace information into the header of the message that is going to be send.   
+Later in App2 we'll extract the trace information from the message header and link both operation.
+
+To be more specific we are using an ``XRayPropagator`` to inject the Activity into the message header, this concrete propagator will add a header named ``X-Amzn-Trace-Id`` into the message.   
+
+When setting up the OpenTelemetry provider, we add the following command: ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator())``. This method overrides the value of the ``Propagators.DefaultTextMapPropagator`` with ``AWSXRayPropagator``.   
+So now, we can get an instance of this specific propagator like this: ``var propagator = Propagators.DefaultTextMapPropagator``
+
+
+```csharp
+[ApiController]
+[Route("publish-message")]
+public class PublishMessageController : ControllerBase
+{
+  private static readonly ActivitySource Activity = new(nameof(PublishMessageController));
+
+  private readonly ILogger<PublishMessageController> _logger;
+  private readonly IConfiguration _configuration;
+
+  public PublishMessageController(
+      ILogger<PublishMessageController> logger,
+      IConfiguration configuration)
+  {
+      _logger = logger;
+      _configuration = configuration;
+  }
+
+  [HttpGet]
+  public void Get()
+  {
+      try
+      {
+          using (var activity = Activity.StartActivity("RabbitMq Publish", ActivityKind.Producer))
+          {
+              var factory = new ConnectionFactory
+              {
+                  HostName = _configuration["RabbitMq:Host"],
+                  UserName = _configuration["RabbitMq:Username"],
+                  Password = _configuration["RabbitMq:Password"],
+                  Ssl = new SslOption
+                  {
+                      Enabled = true,
+                      Version = SslProtocols.None,
+                      CertificateValidationCallback = (_, _, _, _) => true
+                  }
+              };
+
+              using (var connection = factory.CreateConnection())
+              using (var channel = connection.CreateModel())
+              {
+                  var props = channel.CreateBasicProperties();
+
+                  AddActivityToHeader(activity, props);
+
+                  channel.QueueDeclare(queue: "sample",
+                      durable: false,
+                      exclusive: false,
+                      autoDelete: false,
+                      arguments: null);
+
+                  var body = Encoding.UTF8.GetBytes("I am app1");
+
+                  _logger.LogInformation("Publishing message to queue");
+
+                  channel.BasicPublish(exchange: "",
+                      routingKey: "sample",
+                      basicProperties: props,
+                      body: body);
+              }
+          }
+      }
+      catch (Exception e)
+      {
+          _logger.LogError("Error trying to publish a message", e);
+          throw;
+      }
+  }
+
+  private void AddActivityToHeader(Activity activity, IBasicProperties props)
+  {
+      var propagator = Propagators.DefaultTextMapPropagator;
+      propagator.Inject(new PropagationContext(activity.Context, Baggage.Current), props, InjectContextIntoHeader);
+      activity?.SetTag("messaging.system", "rabbitmq");
+      activity?.SetTag("messaging.destination_kind", "queue");
+      activity?.SetTag("messaging.rabbitmq.queue", "sample");
+  }
+
+  private void InjectContextIntoHeader(IBasicProperties props, string key, string value)
+  {
+      try
+      {
+          props.Headers ??= new Dictionary<string, object>();
+          props.Headers[key] = value;
+      }
+      catch (Exception ex)
+      {
+          _logger.LogError(ex, "Failed to inject trace context.");
+      }
+  }
+}
+```
+# Add and configure OpenTelemetry on App2
+
+### **1. Setup the OpenTelemetry library**
+
+The App2 is a console app so we have to setup the library in a different way. Instead of using an ``IServiceCollection`` extension we’re creating directly a TraceProvider, apart from that, the setup looks almost the same as the previous one.
+
+```csharp
+var provider = Sdk.CreateTracerProviderBuilder()
+    .AddXRayTraceId()
+    .AddHttpClientInstrumentation()
+    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App2"))
+    .AddSource(nameof(Program))
+    .AddOtlpExporter(opts =>
+    {
+        opts.Endpoint = new Uri(_configuration["Otlp:Endpoint"]);
+    })
+    .Build();
+
+Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
+
+return provider;
+```
+### **2. Instrument the call to AmazonMQ RabbitMQ**
+
+This app retrieves a message from an ActiveMQ RabbitMQ cluster and makes an Http Request to App3.
+
+The HTTP call is being instrumented automatically by the ``AddHttpClientInstrumentation()`` extension method, but the Rabbit part needs to be instrumented manually.
+
+The code is pretty much the same as the one I have showed you on App1, but there are a 2 differences.   
+The first one is pretty obvious, this time instead of inject the message we are using the ``XRayPropagator`` to extract the ``X-Amzn-Trace-Id`` header from the message and afterwards link both activies.
+
+The second difference is more subtle, but be careful with this one or the traces sent to X-Ray are going to be malformed.
+
+> Only **Activities of kind Server are converted into X-Ray segments**. All other kind of spans (Internal, Client, etc.) are converted into X-Ray subsegments.
+
+That means that if we don't set Activity to be of  ``Kind = ActivityKind.Server`` the App2 is not going to show up correctly on XRay because it will be a subsegment.
+
+In this kind of app is quite important to instantiate the activity like this: ``var activity = Activity.StartActivity("Process Message", ActivityKind.Server, parentContext.ActivityContext))``
+
+So, why we need to set the ``Kind = ActivityKind.Server`` in this app and not on App1?   
+That's because when we setup OpenTelemetry on a .NET WebAPI an Activity of ``Kind = ActivityKind.Server`` is created automatically everytime we invoke an API Controllerthanks to the ``AddAspNetCoreInstrumentation()`` extension method
+
+If we take a look at how a trace on App1 looks like, you'll see this:
+
+![x-ray-fulltrace-app1.png](/img/x-ray-fulltrace-app1.png)
+
+- The parent Span is created automatically
+- The Second Span ("Publish message span") is the one we have created manually. 
+
+Remember this issue, because we're going to face it again on App4:
+
+```csharp
+ private static async Task ProcessMessage(BasicDeliverEventArgs ea,
+            HttpClient httpClient,
+            IModel rabbitMqChannel)
+{
+  try
+  {
+      var propagator = Propagators.DefaultTextMapPropagator;
+      var parentContext = propagator.Extract(default, ea.BasicProperties, ExtractTraceContextFromBasicProperties);
+      Baggage.Current = parentContext.Baggage;
+
+      using (var activity = Activity.StartActivity("Process Message", ActivityKind.Server, parentContext.ActivityContext))
+      {
+
+          var body = ea.Body.ToArray();
+          var message = Encoding.UTF8.GetString(body);
+          AddActivityTags(activity);
+
+          _logger.LogInformation("Message Received: " + message);
+
+          _ = await httpClient.PostAsync("/s3-to-event",
+              new StringContent(JsonSerializer.Serialize(message),
+                  Encoding.UTF8,
+                  "application/json"));
+
+          rabbitMqChannel.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
+      }
+
+  }
+  catch (Exception ex)
+  {
+      _logger.LogError($"There was an error processing the message: {ex} ");
+  }
+}
+
+
+private static IEnumerable<string> ExtractTraceContextFromBasicProperties(IBasicProperties props, string key)
+{
+  try
+  {
+      if (props.Headers.TryGetValue(key, out var value))
+      {
+          var bytes = value as byte[];
+          return new[] { Encoding.UTF8.GetString(bytes) };
+      }
+  }
+  catch (Exception ex)
+  {
+      _logger.LogError($"Failed to extract trace context: {ex}");
+  }
+
+  return Enumerable.Empty<string>();
+}
+
+private static void AddActivityTags(Activity activity)
+{
+  activity?.SetTag("messaging.system", "rabbitmq");
+  activity?.SetTag("messaging.destination_kind", "queue");
+  activity?.SetTag("messaging.rabbitmq.queue", "sample");
+}
+```
+
+# Add and configure OpenTelemetry on App3
+
+The App3 is a Web API that uses AWS S3 and AWS SQS, and the setup of the OTEL provider looks almost identical as the ones on the App1 and App2 but with one difference.   
+We are using the ``AddAWSInstrumentation()`` method from the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package to auto-instrument the calls that are being made by the AWS SDK clients.
+
+
+```csharp
+services.AddOpenTelemetryTracing(builder =>
+{
+    builder.AddAspNetCoreInstrumentation()
+        .AddXRayTraceId()
+        .AddAWSInstrumentation()
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App3"))
+        .AddOtlpExporter(opts =>
+        {
+            opts.Endpoint = new Uri(Configuration["Otlp:Endpoint"]);
+        });
+
+    Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
+});
+```
+### **2. Instrument the call to S3 and SQS**
+
+Nothing to do here. 
+
+```csharp
+public class S3Repository : IS3Repository
+{
+    private readonly IAmazonS3 _s3Client;
+    private readonly ILogger<S3Repository> _logger;
+
+    public S3Repository(IAmazonS3 s3Client, 
+        ILogger<S3Repository> logger)
+    {
+        _s3Client = s3Client;
+        _logger = logger;
+    }
+
+    public async Task Persist(string message)
+    {
+        try
+        {
+            using var ms = new MemoryStream(Encoding.UTF8.GetBytes(message));
+            var uploadRequest = new TransferUtilityUploadRequest
+            {
+                InputStream = ms,
+                Key = $"file-{DateTime.UtcNow}",
+                BucketName = "vytestevent"
+            };
+
+            var fileTransferUtility = new TransferUtility(_s3Client);
+            await fileTransferUtility.UploadAsync(uploadRequest);
+        } 
+        catch (Exception ex)
+        {
+            _logger.LogError("Error trying to upload file to S3 bucket", ex);
+            throw;          
+        }
+    }
+}
+```
+
+```csharp
+ public class SqsRepository: ISqsRepository
+{
+
+    private readonly IAmazonSQS _client;
+    private readonly IConfiguration _configuration;
+
+    public SqsRepository(IAmazonSQS client, 
+        IConfiguration configuration)
+    {
+        _client = client;
+        _configuration = configuration;
+    }
+
+    public async Task Publish(IEvent evt)
+    {
+        await _client.SendMessageAsync(new SendMessageRequest
+            {
+                MessageBody = (evt as MessagePersistedEvent)?.Message,
+                QueueUrl = _configuration["Sqs:Uri"],
+            });      
+    }
+}
+```
+
+# Add and configure OpenTelemetry on App4
+
+```csharp
+services.AddOpenTelemetryTracing(builder =>
+{
+    var provider = services.BuildServiceProvider();
+    IConfiguration config = provider
+            .GetRequiredService<IConfiguration>();
+
+    builder.AddAspNetCoreInstrumentation()
+        .AddXRayTraceId()
+        .AddAWSInstrumentation()
+        .AddSource(nameof(Worker))
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App4"))
+        .AddOtlpExporter(opts =>
+        {
+            opts.Endpoint = new Uri(hostContext.Configuration["Otlp:Endpoint"]);
+        });
+
+    Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
+});
+```
+
+```csharp
+public class Worker : BackgroundService
+{
+  private static readonly ActivitySource Activity = new(nameof(Worker));
+
+  private readonly ILogger<Worker> _logger;
+  private readonly IConfiguration _configuration;
+  private readonly IAmazonSQS _sqs;
+  private readonly IAmazonDynamoDB _dynamoDb;
+
+  public Worker(ILogger<Worker> logger,
+      IConfiguration configuration, 
+      IAmazonSQS sqs, 
+      IAmazonDynamoDB dynamoDb)
+  {
+      _logger = logger;
+      _configuration = configuration;
+      _sqs = sqs;
+      _dynamoDb = dynamoDb;
+  }
+
+  protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+  {
+      while (!stoppingToken.IsCancellationRequested)
+      {
+          try
+          {
+              var request = new ReceiveMessageRequest
+              {
+                  QueueUrl = _configuration["SQS:URI"],
+                  MaxNumberOfMessages = 1,
+                  WaitTimeSeconds = 5,
+                  AttributeNames = new List<string> { "All" }
+              };
+
+              var result = await _sqs.ReceiveMessageAsync(request, stoppingToken);
+
+              if (result.Messages.Any())
+              {
+                  await ProcessMessage(result.Messages[0], stoppingToken);
+              }
+          }
+          catch (Exception ex)
+          {
+              _logger.LogError(ex.ToString());
+          }
+
+          _logger.LogInformation("Worker running at: {time}", DateTime.UtcNow);
+          Thread.Sleep(10000);
+      }
+  }
+
+  private async Task ProcessMessage(Message msg, CancellationToken cancellationToken)
+  {
+      _logger.LogInformation("Processing messages from SQS");
+
+      var propagator = Propagators.DefaultTextMapPropagator;
+      var parentContext = propagator.Extract(default,
+              msg,
+              ActivityHelper.ExtractTraceContextFromMessage);
+
+      Baggage.Current = parentContext.Baggage;
+
+      using (var activity = Activity.StartActivity("Process SQS Message", 
+          ActivityKind.Server, 
+          parentContext.ActivityContext))
+      {
+          ActivityHelper.AddActivityTags(activity);
+          
+          _logger.LogInformation("Add item to DynamoDb");
+
+          var items = Table.LoadTable(_dynamoDb, "Items");
+          
+          var doc = new Document
+          {
+              ["Id"] = Guid.NewGuid(),
+              ["Message"] = msg.Body
+          };
+
+          await items.PutItemAsync(doc, cancellationToken);
+
+          await _sqs.DeleteMessageAsync(_configuration["SQS:URI"], msg.ReceiptHandle, cancellationToken);
+          
+      }
+  }
+}
+```
+
+```csharp
+public static class ActivityHelper
+{
+    public static IEnumerable<string> ExtractTraceContextFromMessage(Message msg, string key)
+    {
+        try
+        {
+            if (msg.Attributes.TryGetValue("AWSTraceHeader", out var value))
+            {
+                return new[] { value };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to extract trace context: {ex}");
+        }
+
+        return Enumerable.Empty<string>();
+    }
+
+    public static void AddActivityTags(Activity activity)
+    {
+        activity?.SetTag("messaging.system", "sqs");
+    }
+}
+```
 
 # XRay output
 
@@ -221,8 +708,144 @@ If we want we can toggle between the ServiceMap with icons to the ServiceMap wit
 
 ![xray-service](/img/xray-servicemap-noicons.png)
 
-# AWS auto-instrumentation tracing noise
+Every thing seems to be working fine, but there is one little problem...
 
+# AWS auto-instrumentation tracing noise on App4
+
+But taking a look at the traces sent to X-Ray we can see a problem on App4.
+
+
+```csharp
+ services.AddOpenTelemetryTracing(builder =>
+{
+    var provider = services.BuildServiceProvider();
+    IConfiguration config = provider
+            .GetRequiredService<IConfiguration>();
+
+    builder.AddAspNetCoreInstrumentation()
+        .AddXRayTraceId()
+        .AddSource(nameof(Worker))
+        .AddSource("Dynamo.PutItem")
+        .AddSource("SQS.DeleteMessageAsync")
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App4"))
+        .AddOtlpExporter(opts =>
+        {
+            opts.Endpoint = new Uri(hostContext.Configuration["Otlp:Endpoint"]);
+        });
+});
+
+Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
+```
+
+```csharp
+public class Worker : BackgroundService
+{
+    private static readonly ActivitySource Activity = new(nameof(Worker));
+    private static readonly ActivitySource ActivityDynamo = new("Dynamo.PutItem");
+    private static readonly ActivitySource ActivitySQSDelete = new("SQS.DeleteMessageAsync");
+
+    private readonly ILogger<Worker> _logger;
+    private readonly IConfiguration _configuration;
+    private readonly IAmazonSQS _sqs;
+    private readonly IAmazonDynamoDB _dynamoDb;
+
+
+    public Worker(ILogger<Worker> logger,
+        IConfiguration configuration, 
+        IAmazonSQS sqs, 
+        IAmazonDynamoDB dynamoDb)
+    {
+        _logger = logger;
+        _configuration = configuration;
+        _sqs = sqs;
+        _dynamoDb = dynamoDb;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var request = new ReceiveMessageRequest
+                {
+                    QueueUrl = _configuration["SQS:URI"],
+                    MaxNumberOfMessages = 1,
+                    WaitTimeSeconds = 5,
+                    AttributeNames = new List<string> { "All" }
+                };
+
+                var result = await _sqs.ReceiveMessageAsync(request, stoppingToken);
+
+                if (result.Messages.Any())
+                {
+                    await ProcessMessage(result.Messages[0], stoppingToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.ToString());
+            }
+
+            _logger.LogInformation("Worker running at: {time}", DateTime.UtcNow);
+            Thread.Sleep(10000);
+        }
+    }
+
+    private async Task ProcessMessage(Message msg, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Processing messages from SQS");
+
+        var propagator = Propagators.DefaultTextMapPropagator;
+
+        var parentContext = propagator.Extract(default,
+                msg,
+                ActivityHelper.ExtractTraceContextFromMessage);
+
+        Baggage.Current = parentContext.Baggage;
+
+        using (var activity = Activity.StartActivity("Process SQS Message", 
+            ActivityKind.Server, 
+            parentContext.ActivityContext))
+        {
+            
+            using (var dynamoActivity = Activity.StartActivity("Dynamo.PutItem",
+                        ActivityKind.Client,
+                        activity.Context))
+            {
+                _logger.LogInformation("Add item to DynamoDb");
+
+                dynamoActivity?.SetTag("aws.service", "Amazon.DynamoDbV2");
+                dynamoActivity?.SetTag("aws.operation", "PutItemAsync");
+                dynamoActivity?.SetTag("aws.table_name", "Items");
+
+                var items = Table.LoadTable(_dynamoDb, "Items");
+
+                var doc = new Document
+                {
+                    ["Id"] = Guid.NewGuid(),
+                    ["Message"] = msg.Body
+                };
+
+                await items.PutItemAsync(doc, cancellationToken);
+
+            }
+
+            using (var sqsActivity = Activity.StartActivity("SQS.DeleteMessageAsync",
+                        ActivityKind.Client,
+                        activity.Context))
+            {
+
+                sqsActivity?.SetTag("aws.service", "Amazon.SQS");
+                sqsActivity?.SetTag("aws.operation", "DeleMessageAsync");
+                sqsActivity?.SetTag("aws.queue_url", _configuration["SQS:URI"]);
+                await _sqs.DeleteMessageAsync(_configuration["SQS:URI"], msg.ReceiptHandle, cancellationToken);
+
+            }
+        }
+    }
+}
+```
 
 # How to run the demo
 
