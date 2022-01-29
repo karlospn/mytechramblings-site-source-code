@@ -472,7 +472,6 @@ private static void AddActivityTags(Activity activity)
 The App3 is a Web API that uses AWS S3 and AWS SQS, and the setup of the OTEL provider looks almost identical as the ones on the App1 and App2 but with one difference.   
 We are using the ``AddAWSInstrumentation()`` method from the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package to auto-instrument the calls that are being made by the AWS SDK clients.
 
-
 ```csharp
 services.AddOpenTelemetryTracing(builder =>
 {
@@ -490,7 +489,13 @@ services.AddOpenTelemetryTracing(builder =>
 ```
 ### **2. Instrument the call to S3 and SQS**
 
-Nothing to do here. 
+App3 receives a message from App2 and upload sthe content of the message into an S3 bucket, and as you can see in the next code snippet there is nothing related to OpenTelemetry here.  
+We're simple using the ``AWSSDK.S3`` client to upload the contents of the message into the S3 bucket.
+
+That's because the  ``AddAWSInstrumentation()`` will auto-instrument the downstream calls made by the ``AWSSDK.S3`` client and the ``AWSSDK.SQS`` client.
+
+The library will create an activity of ``Kind=Activity.Client`` foreach downstream call, it will also attach a few tags to each activity, this tags will contain metadata about the AWS  services being invoked.
+
 
 ```csharp
 public class S3Repository : IS3Repository
@@ -528,6 +533,13 @@ public class S3Repository : IS3Repository
     }
 }
 ```
+App3 will also queue the message received into an Amazon SQS, and as you can see in the next code snippet there is also nothing related to OpenTelemetry here.
+
+There is one thing worth mentioning when working with Amazon SQS and the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package is that the ``AWSTraceHeader`` attribute is going to added into every message send.     
+The ``AWSTraceHeader`` is a message system attribute reserved by Amazon SQS to carry the X-Ray trace header.   
+
+This header is important, more about it in the next section.
+
 
 ```csharp
  public class SqsRepository: ISqsRepository
