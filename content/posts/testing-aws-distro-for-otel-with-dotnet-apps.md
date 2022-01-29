@@ -403,7 +403,7 @@ If we take a look at how a trace on App1 looks like, you'll see this:
 - The parent Span is created automatically
 - The Second Span ("Publish message span") is the one we have created manually. 
 
-Remember this issue, because we're going to face it again on App4:
+Remember this issue, because we're going to face it again on App4.
 
 ```csharp
  private static async Task ProcessMessage(BasicDeliverEventArgs ea,
@@ -768,9 +768,39 @@ Every thing seems to be working fine, but there is one little important problem.
 
 # AWS auto-instrumentation additional tracing noise on App4
 
-Taking a look at the traces sent to X-Ray we see a problem on App4.
+Taking a deeper look at the traces sent to X-Ray we can see a problem on App4.
 
+![xray-fulltrace-sqs-noise.png](/img/xray-fulltrace-sqs-noise.png)
 
+I have tested only the ``/publish-message`` endpoint, but on XRay there are 20 extra traces with no URL. What's that?
+
+If we see the full list of traces, we can see a lot of traces with no URL
+
+![xray-fulltrace-sqs-noise-2.png](/img/xray-fulltrace-sqs-noise-2.png)
+
+If we drill down on any of those traces we will see that all those extra traces are extra calls that the App4 is doing to Amazon SQS.
+
+![xray-fulltrace-sqs-noise-3.png](/img/xray-fulltrace-sqs-noise-3.png)
+
+If we take a look at the ServiceMap we also see those extra SQS calls.
+
+![xray-servicemap-sqs-noise.png](/img/xray-servicemap-sqs-noise.png)
+
+Do you remember when I said that Amazon SQS uses a pulled-based approach instead of a pushed-based one? Also,  we have set up the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package on App4 to auto-instrument any downstrem call made on an AWS Service.   
+
+The Worker Service works on an infinite loop and in each iteration is making a call to AWS SQS to fetch a new message, everyone of these calls are being auto-instrumented by the  ``OpenTelemetry.Contrib.Instrumentation.AWS``, send to the Collector and then to XRay.
+
+That's a problem, because I don't want to send thousands of useless traces into XRay each day, just because my Worker Service is polling AWS SQS to find if there is any new message to process.
+
+What could we do here? The solution is simple but requires and extra bit of code.
+- First of all, do not use the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package, because it is the AWS SDK auto-instrumentation that is generating all that extra noise.
+- Instrument the call to ``AWS DynamoDb PutItemAsync()`` method manually.
+- Instrument the call to ``AWS SQS DeleteMessageAsync()`` method manually.
+
+First step, let's remove the ``AddAWSInstrumentation()`` extension method from the Otlp provider configuration.
+Also, we'll need to create a couple of extra ActivitySource
+- "Dynamo.PutItem" Activity for instrumenting the call to Dynamo.
+- "SQS.DeleteMessageAsync" Activity for instrumenting the call to SQS.
 
 
 ```csharp
@@ -793,6 +823,28 @@ Taking a look at the traces sent to X-Ray we see a problem on App4.
 });
 
 Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
+```
+
+Now inside the ``Process SQS Message`` Activity we're going to create a couple of new activities. 
+- The ``Dynamo.PutItem`` Activity wraps the call to DynamoDb.
+- The ``SQS.DeleteMessageAsync`` Activity wraps the call to SQS.
+
+Those 2 new activities will have the  ``Process SQS Message`` Activity as the Parent Activity.
+
+Also, we need to specify a series of metadata in each Activity if we want that the XRay ServiceMap recognize each Activity as an AWS Service.
+
+For the ``Dynamo.PutItem`` Activity will set the following tags:
+```csharp
+dynamoActivity?.SetTag("aws.service", "Amazon.DynamoDbV2");
+dynamoActivity?.SetTag("aws.operation", "PutItemAsync");
+dynamoActivity?.SetTag("aws.table_name", "Items");
+```
+
+For the ``SQS.DeleteMessageAsync`` Activity will set the following tags:
+```csharp
+sqsActivity?.SetTag("aws.service", "Amazon.SQS");
+sqsActivity?.SetTag("aws.operation", "DeleMessageAsync");
+sqsActivity?.SetTag("aws.queue_url", _configuration["SQS:URI"]);
 ```
 
 ```csharp
@@ -904,6 +956,17 @@ public class Worker : BackgroundService
     }
 }
 ```
+
+If we take a quick look at XRay after making these changes on App4 we will notice that the extra traces are gone.
+
+If we invoke the ``/http`` endpoint from App1 and see an entire trace on XRay, everything looks good
+
+![xray-fulltrace-sqs-noise-6.png](/img/xray-fulltrace-sqs-noise-6.png)
+
+The XRay ServiceMap is still able to recognize that we're doing a series of downstream calls to DynamoDb and SQS downstream thanks to the extra metadata we added on the activies.
+
+![xray-fulltrace-sqs-noise-5.png](/img/xray-fulltrace-sqs-noise-5.png)
+
 
 # How to run the demo
 
