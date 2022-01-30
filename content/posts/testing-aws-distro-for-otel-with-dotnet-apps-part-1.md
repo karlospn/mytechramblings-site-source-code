@@ -20,8 +20,8 @@ In this post I'm going to get back to OpenTelemetry and .NET, but this time I'm 
 I'm not going to repeat myself talking about what's an Activity or a Span or a Propagator, you can go read my other post.   
 I'm sure there's going to be some overlap with my previous post, but I'll try it to keep it to a minimum. 
 
-In this post I'm planning to be talking about the following topics:
-- What is the AWS OpenTelemetry Collector and how to setup it up for ingesting and exporting tracing data to AWS X-Ray.
+In this 2 part-series post I'm planning to be talking about the following topics:
+- What is the AWS OpenTelemetry Collector and how to setup it up for ingesting and exporting traces to AWS X-Ray.
 - How to build and configure properly a few distributed .NET apps that will send traces to the AWS OTEL Collector.
 - How to use AWS X-Ray to view the traces sent by the Collector.
 
@@ -35,7 +35,7 @@ With the AWS Distro for OpenTelemetry you can instrument your application to sen
 
 It can also collect metadata from your AWS resources and managed services, so you can correlate application data with infrastructure data.
 
-The main component of the AWS Distro for OpenTelemetry is the AWS OTEL Collector which is capable of ingesting metrics and traces sent by the apps, process them and finally export them into multiple AWS solutions.
+The main component of the AWS Distro for OpenTelemetry is the AWS OpenTelemetry Collector which is capable of ingesting metrics and traces sent by the apps, process them and export them into multiple AWS solutions.
 
 # AWS OpenTelemetry Collector
 
@@ -49,7 +49,7 @@ Here's a diagram showing the collector architecture:
 
 ![otel-collector-diagram](/img/otel-collector-diagram.png)
 
-Apart from traces, the AWS OTEL Collector is capable of ingesting metrics in the OTEL format and send it to AWS Cloudwatch Metrics, but in this post I'll be focusing solely on tracing data.
+Apart from traces, the AWS OTEL Collector is capable of ingesting metrics and send them to AWS Cloudwatch Metrics, but in this post I'll be focusing solely on tracing data.
 
 It's worth mentioning that there are 2 Collectors: the "official" OpenTelemetry Collector and the AWS OpenTelemtry Collector.
 
@@ -58,7 +58,7 @@ AWS instead of using directly the "official" OpenTelemetry Collector has decided
 The AWS OTEL Collector is built on top of the "official" OpenTelemetry Collector but they have added AWS-specific exporters to send data to AWS services including AWS X-Ray, Amazon CloudWatch or Amazon Managed Service for Prometheus.   
 
 In this post series we are not going to use the "official" OpenTelemetry Collector, instead of that we will be using the AWS OpenTelemetry Collector.   
-I could use the "oficial" OpenTelemetry Collector with the AWS exporters and it would work, but using the AWS one is simpler and faster to setup, so I decided to ran with it for this demo.
+I could use the "oficial" OpenTelemetry Collector with the AWS exporters and it would work, but using the AWS one is simpler and faster to setup, so I decided to ran with it.
 
 # Configuring the AWS OpenTelemetry Collector
 
@@ -71,13 +71,13 @@ In our demo the apps will be sending traces to the Collector and the Collector w
 
 To build the demo we are going need the following receivers, exporters and processors:
 - **Receivers**:
-  - **OTEL gRPC Receiver**: The .NET apps will send the tracing data to the collector to the OTLP gRPC receiver endpoint. This receiver receives data via gRPC using OTLP format.    
+  - **OTEL gRPC Receiver**: The .NET apps will send the tracing data to the OTLP gRPC receiver endpoint. This receiver receives data via gRPC using the OTLP format.    
   We could use the OTEL HTTP receiver, but the gRPC one is more performant. The HTTP receiver receives data via HTTP in JSON format.
 - **Exporters**:
   - **X-Ray Exporter**: This exporter converts the AWS X-Ray OTLP formatted trace data to the AWS X-Ray format and then exports this data to the AWS X-Ray service.
-  - **Logging Exporter**: This exporter writes the OTLP traces to console. This exporter is not needed, but it's quite useful for reviewing what data are the apps sending to the collector.
+  - **Logging Exporter**: This exporter writes the OTLP traces to console. This exporter is not needed, but it's quite useful for reviewing what data are the apps sending to the Collector.
 - **Processors**:
-  - **Memory limiter Processor**: This processor ensure that the Collector does not goes crazy using memory.   
+  - **Memory limiter Processor**: This processor ensures that the Collector does not goes crazy using memory.   
   This processor is really useful if you deploy the Collector as a sidecar along your application, because it will ensure that the Collector does not use up memory needed by your application.
   - **Batch Processor**: This processor accepts spans, metrics, or logs and places them into batches. Batching helps better compress the data and reduce the number of outgoing connections required to transmit the data.
 
@@ -85,7 +85,7 @@ If you're curious about the logging exporter, here's an example of how the outpu
 
 ![otel-collector-logging-output](/img/aws-otel-collector-logging-output.png)
 
-And here is how we are going to configure the Collector:
+And here's how we're going to configure the Collector:
 
 ```yaml
 receivers:
@@ -123,10 +123,11 @@ service:
 
 # Configuring permissions for the AWS OpenTelemetry Collector
 
-I'll be running the Collector on my local machine from a docker-compose, that requires that you specify an valid ``AWS_ACCESS_KEY`` and ``AWS_SECRET_ACCESS_KEY``.
+- _All the AWS Access Keys and Secret Keys from this post are fake, so don't bother trying them out._
 
-_All the AWS Access Keys and Secret Keys from this post are fake, so don't bother trying them out._
+I'll be running the Collector on my local machine using docker-compose, that requires that you specify a valid ``AWS_ACCESS_KEY`` and ``AWS_SECRET_ACCESS_KEY``.
 
+Here's a snippet from the docker-compose file where the Collector is configured:
 ```yaml
   otel:
     image: amazon/aws-otel-collector:latest
@@ -143,7 +144,7 @@ _All the AWS Access Keys and Secret Keys from this post are fake, so don't bothe
       - tracing
 ```
 
-This user requires at least permissions for AWS CloudWatch Logs for metric publishing, and for AWS X-Ray for sending traces.
+The user requires at least permissions for AWS CloudWatch Logs for metric publishing, and for AWS X-Ray for sending traces.
 
 So, I'll be using this IAM policy for the Collector:
 ```yaml
@@ -168,6 +169,6 @@ Copy
 }
 ```
 
-After setting up the AWS OTEL Collector, I'm ready to begin building the demo, but it won’t be right now.    
+After setting up the AWS OTEL Collector, I'm ready to begin building the apps, but it won’t be right now.    
 **See you in part 2**
 
