@@ -1,5 +1,5 @@
 ---
-title: "Testing distributed tracing with AWS Distro for OpenTelemetry and .NET. Part 2: Building the demo"
+title: "Getting started with AWS Distro for OpenTelemetry and distributed tracing using .NET. Part 2: Building the demo"
 date: 2022-01-24T11:20:12+01:00
 tags: ["AWS", "dotnet", "OpenTelemetry"]
 description: "This is a 2 part-series post. In part 2 I’ll show you how to build and configure properly a few distributed .NET apps that will send traces to the AWS OTEL Collector, and also how to analyze those traces in AWS X-Ray."

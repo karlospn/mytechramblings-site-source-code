@@ -15,7 +15,7 @@ draft: false
 A few months ago I wrote a post about how to start using OpenTelemetry with .NET, if you're interested you can read more about it [here](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-and-dotnet-core/).   
 In that post I talked a little bit about the main concepts around OpenTelemetry and also I showed how to instrument a few .NET apps with the .NET OpenTelemetry client.
 
-In this post I'm going to get back to OpenTelemetry and .NET, but this time I'm planning to focus on testing the **AWS Distro for OpenTelemetry**.   
+In this post I'm going to get back to OpenTelemetry and .NET, but this time I'm planning to focus on trying out the **AWS Distro for OpenTelemetry**.   
 
 I'm not going to repeat myself talking about what's an Activity or a Span or a Propagator, you can go read my other post.   
 I'm sure there's going to be some overlap with my previous post, but I'll try it to keep it to a minimum. 
