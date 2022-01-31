@@ -7,11 +7,11 @@ draft: true
 ---
 
 > This is a 2 part-series post.
-> - **Part 1**: What is the AWS OpenTelemetry Collector and how to setup it up for ingesting and exporting tracing data to AWS X-Ray.
+> - **Part 1**: What is the AWS OpenTelemetry Collector and how to setup it up for ingesting and exporting tracing data to AWS X-Ray. If you want to read it, click [here](https://www.mytechramblings.com/posts/getting-started-with-aws-distro-for-otel-and-dotnet-part-1/)
 > - **Part 2**: How to build and configure properly a few distributed .NET apps that will send traces to the AWS OTEL Collector, and also how to analyze those traces in AWS X-Ray.
 
 **Just show me the code**   
-As always if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/aws-otel-tracing-demo).
+As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/aws-otel-tracing-demo).
 
 # Building the demo
 
@@ -29,7 +29,7 @@ Here's the diagram:
     - The ``/publish-message``  endpoint queues a message into an **AWS ActiveMQ RabbitMQ queue**.
 
 - **App2.RabbitConsumer.Console** is a .NET6 console app. 
-  - Dequeues messages from the Rabbit queue and makes an HTTP request to the **App3** ``/s3-to-event`` endpoint with the content of the message.
+  - Dequeues messages from the RabbitMQ queue and makes an HTTP request to the **App3** ``/s3-to-event`` endpoint with the content of the message.
 
 - **App3.WebApi** is a .NET6 Web API with 2 endpoints.
     - The ``/dummy`` endpoint returns a fixed "Ok" response.
@@ -62,8 +62,8 @@ To get started we’re going to need the following packages:
 - The ``OpenTelemetry.Instrumentation.*`` packages are instrumentation libraries. These packages are instrumenting common libraries/functionalities/classes so we don’t have to do all the heavy lifting by ourselves. In our demo we’re using the following ones:
   - The ``OpenTelemetry.Instrumentation.AspNetCore`` instruments ASP.NET Core and collects telemetry about incoming web requests. This instrumentation also collects incoming gRPC requests using Grpc.AspNetCore.
   - The ``OpenTelemetry.Instrumentation.Http`` instruments the ``System.Net.Http.HttpClient`` and ``System.Net.HttpWebRequest`` types and collects telemetry about outgoing HTTP requests.
-- The ``OpenTelemetry.Contrib.Extensions.AWSXRay`` package is used to convert the format of the OpenTelemetry traces into the X-Ray trace format.    
-- The ``OpenTelemetry.Contrib.Instrumentation.AWS`` auto-instruments the AWS SDK clients and collects tracing data to downstream calls to AWS services.
+- The ``OpenTelemetry.Contrib.Extensions.AWSXRay`` package is used to convert the OpenTelemetry traces into a compatible X-Ray trace format.    
+- The ``OpenTelemetry.Contrib.Instrumentation.AWS`` packages is used to auto-instrument the AWS SDK clients and collects tracing data to downstream calls to AWS services.
 - The ``AWSSDK.Extensions.NETCore.Setup`` package contains some extensions for the AWS SDK for .NET to integrate with .NET Core configuration and dependency injection frameworks.
 - The ``AWSSDK.*`` packages are the official AWS SDK for .NET and allows us to interact with the different AWS Services. 
 
@@ -89,11 +89,11 @@ Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
 ```
 As you can see it's a pretty straightforward configuration.
 
-- The  ``AddXRayTraceId()`` method converts the OTEL trace ID into an AWS X-Ray compliant trace IDs, without this method the X-Ray is incapable of interpreting the application traces.
+- The  ``AddXRayTraceId()`` method converts the OTEL trace ID into an AWS X-Ray compliant trace ID, without this method X-Ray is incapable of interpreting the application traces.
 - The ``AddHttpClientInstrumentation()`` method enables HTTP auto-instrumentation. App1 makes an HTTP request to App2, if we want to trace the HTTP call between these 2 apps we can do it simply by adding this extension method.
 - The ``AddSource(nameof(PublishMessageController))`` method is used to add a new ActivitySource to the provider. Everytime you create a new Activity you must add a new ActivitySource.
 - The ``.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))`` method configures the Resource for the application.
-- The ``AddOtlpExporter()`` method is used to indicate that the tracing data is going to be exported to this specific endpoint. This endpoint matches with the gRPC Receiver Endpoint in the Collector configuration file.
+- The ``AddOtlpExporter()`` method indicates that the tracing data is going to be exported to this specific endpoint. This endpoint matches with the gRPC Receiver Endpoint in the Collector configuration file.
 - The ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator())`` method is needed if your app calls another application instrumented with AWS X-Ray SDK.   
 This method overrides the value of the ``Propagators.DefaultTextMapPropagator`` with the ``AWSXRayPropagator`` value. The ``Propagators.DefaultTextMapPropagator`` is used internally by some instrumentation packages to infer and propagate the trace ID.
 
@@ -107,14 +107,14 @@ All the other method shown here are just basic OpenTelemetry setup, nothing to d
 ### **2. Instrument the call to AmazonMQ RabbitMQ**
 
 The ``OpenTelemetry.Contrib.Instrumentation.AWS`` NuGet package is used to auto-instrument the AWS SDK .NET clients, but there is no AWS SDK client to use with AmazonMQ Rabbit.   
-That means that we need to used the ``RabbitMQ.Client`` package and that we need to instrument the downstream call by ourselves.
+That means that we need to used the ``RabbitMQ.Client`` package and that we need to instrument the downstream calls by ourselves.
 
-In the following code snippet you'll see that we are injecting the trace information into the header of the message that is going to be send.   
+In the next code snippet you'll see that we are injecting the trace information into the header of the message that is going to be sent.   
 Later in App2 we'll extract the trace information from the message header and link both operations.
 
-To be more specific, we are using the ``XRayPropagator`` to inject the Activity into the message header, this specific propagator will add a header named ``X-Amzn-Trace-Id`` into the message.   
+To be more specific, we are using the ``XRayPropagator`` to inject the Activity into the message header, this propagator will add a header named ``X-Amzn-Trace-Id`` into the message.   
 
-In the previous section when setting up the OpenTelemetry provider for this app we added the following command: ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator())``.   
+In the previous section when setting up the OpenTelemetry client for this app we added the following command: ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator())``.   
 This method overrides the value of the ``Propagators.DefaultTextMapPropagator`` with ``AWSXRayPropagator``.   
 So now, we can get an instance of the ``AWSXRayPropagator`` propagator like this: ``var propagator = Propagators.DefaultTextMapPropagator``
 
@@ -241,25 +241,28 @@ This app retrieves a message from an ActiveMQ RabbitMQ queue and makes an Http R
 The HTTP call is being instrumented automatically by the ``AddHttpClientInstrumentation()`` extension method, but the Rabbit part needs to be instrumented manually.
 
 The code is pretty much the same as the one I have showed you on App1, but there are 2 differences.   
-- The first one is pretty obvious, this time instead of injecting the message we are using the ``XRayPropagator`` to extract the ``X-Amzn-Trace-Id`` header from the message and link both activies.
+- The first one is pretty obvious, this time instead of injecting the trace into the message header we are using the ``XRayPropagator`` to extract the ``X-Amzn-Trace-Id`` header from the message and link both activies.
 
 - The second difference is more subtle, but be careful with this one or the traces sent to X-Ray are going to be malformed.
 
 > Only **Activities of kind Server are converted into X-Ray segments**. All other kind of spans (Internal, Client, etc.) are converted into X-Ray subsegments.
 
-That means that if we don't set the Activity to be of  ``Kind = ActivityKind.Server`` then App2 is not going to show up correctly on X-Ray because it will be a subsegment.
+This means that if we don't set the Activity to be of  ``Kind = ActivityKind.Server`` then App2 is not going to show up correctly on X-Ray because it will be a subsegment.
 
-In a Console or a Worker Service application is important to instantiate the activity like this: ``var activity = Activity.StartActivity("Process Message", ActivityKind.Server, parentContext.ActivityContext))``
+In a Console or a Worker Service application is important to instantiate the main activity like this:    
+``var activity = Activity.StartActivity("Process Message", ActivityKind.Server, parentContext.ActivityContext))``
 
-So, why we need to set the ``Kind = ActivityKind.Server`` in this app and not in App1?   
+So, why we need to set the ``Kind = ActivityKind.Server`` in this app and not on App1?   
 
 That's because when we setup OpenTelemetry on a .NET WebAPI an Activity of ``Kind = ActivityKind.Server`` is created automatically everytime we invoke an API Controller, this is thanks to the ``AddAspNetCoreInstrumentation()`` extension method.
 
-If we take a quick look at how a trace on App1 looks like, you'll see this:
-- The parent Span is created automatically
-- The Second Span ("Publish message span") is the one we created manually. 
+For example, if we take a quick look at how a trace on App1 looks like, you'll see this:
 
 ![x-ray-fulltrace-app1.png](/img/x-ray-fulltrace-app1.png)
+
+In this trace:
+- The parent span is created automatically when the API Controller is invoked.
+- The second span ("Publish message" span) is the one we created manually. 
 
 Remember this issue, because we're going to face it again on App4.
 
@@ -349,25 +352,28 @@ services.AddOpenTelemetryTracing(builder =>
 ```
 ### **2. Instrument the calls to AWS S3 and AWS SQS**
 
-App3 receives a message from App2 and uploads the content of the message into an S3 bucket.
+App3 receives a message from App2 and uploads the contents of the message into an S3 bucket.
 
-In the next code snippet you'll seed that there is nothing related to OpenTelemetry, we're simply using the ``AWSSDK.S3`` client to upload the contents of the message into the S3 bucket.
+In the next code snippet you'll see that there is nothing related to OpenTelemetry, we're simply using the ``AWSSDK.S3`` client to upload the contents of the message into the S3 bucket.
 
 That's because the  ``AddAWSInstrumentation()`` auto-instruments all the downstream calls made by the ``AWSSDK.S3`` client.    
-It will create an activity of ``Kind=Activity.Client`` for every downstream call and it will  attach a few tags to each activity, those tags will contain metadata about the AWS services being invoked.
+The auto-instrumentation will create an activity of ``Kind=Activity.Client`` for every downstream call made to S3, and it will also add some tags to the activity, those tags will contain metadata about the AWS services being invoked.
 
 
 ```csharp
-public class S3Repository : IS3Repository
+ public class S3Repository : IS3Repository
 {
     private readonly IAmazonS3 _s3Client;
     private readonly ILogger<S3Repository> _logger;
+    private readonly IConfiguration _configuration;
 
     public S3Repository(IAmazonS3 s3Client, 
-        ILogger<S3Repository> logger)
+        ILogger<S3Repository> logger, 
+        IConfiguration configuration)
     {
         _s3Client = s3Client;
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task Persist(string message)
@@ -379,7 +385,7 @@ public class S3Repository : IS3Repository
             {
                 InputStream = ms,
                 Key = $"file-{DateTime.UtcNow}",
-                BucketName = "vytestevent"
+                BucketName = _configuration["S3:BucketName"]
             };
 
             var fileTransferUtility = new TransferUtility(_s3Client);
@@ -395,9 +401,9 @@ public class S3Repository : IS3Repository
 ```
 App3 also queues the message received into an Amazon SQS.
 
-In the next code snippet there is also nothing related to OpenTelemetry because the  ``AddAWSInstrumentation()`` auto-instruments all the downstream calls made by the ``AWSSDK.SQS`` client.  
+In the next code snippet there is nothing related to OpenTelemetry because the  ``AddAWSInstrumentation()`` auto-instruments all the downstream calls made by the ``AWSSDK.SQS`` client.  
 
-There is one thing worth mentioning when working with Amazon SQS and the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package, and is that the ``AWSTraceHeader`` attribute is going to be added into every message.     
+There is one thing worth mentioning when working with Amazon SQS and the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package, and that is that the ``AWSTraceHeader`` attribute is going to be added into every message queued into SQS.     
 The ``AWSTraceHeader`` is a message system attribute reserved by Amazon SQS to carry the X-Ray trace header.   
 
 This header is important (more about it in the next section).
@@ -432,7 +438,7 @@ This header is important (more about it in the next section).
 
 ### **1. Setup the OpenTelemetry library**
 
-App3 is a Worker Service that uses Amazon SQS and Amazon DynamoDb.
+App4 is a Worker Service that uses Amazon SQS and Amazon DynamoDb.
 
 Nothing to comment here, the setup of the OTEL client is exactly the same as the one on App3.
 
@@ -455,16 +461,16 @@ services.AddOpenTelemetryTracing(builder =>
 
 ### **2. Instrument the call to AWS SQS and AWS DynamoDb**
 
-As I stated before the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package auto-instruments the downstream calls that are being made by the AWS SDK clients, but for this app we need more than that, because we need to link the Activity from App3 with the Activity from App4, and the only way to do that is manually.
+As I stated before the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package auto-instruments the downstream calls that are being made by the AWS SDK clients, but for this app we need more than that, we need to link the Activity from App3 with the Activity from App4, and the only way to do it is by hand.
 
-In the previous section I talked about how the ``AWSTraceHeader`` attribute was injected into each message sent to SQS and this attribute contained the X-Ray trace header, so we're going to use it to link both activities.
+In the previous section I talked a little bit about the ``AWSTraceHeader`` attribute and how it was injected into each message sent to SQS and that the attribute contains the X-Ray trace header. We're going to use this attribute to link both activities.
 
 In the next code snippet the Worker Service runs on an infinite loop and keeps pulling messages using the ``ReceiveMessageAsync(request, stoppingToken)`` method.   
 This is because Amazon SQS is not push-based like RabbitMQ, instead of that you need to keep pulling the messages from the queue by yourself.  
 
-When a new message is pulled we call the ``ProcessMessage()`` method, this method will store the message received from SQS into DynamoDb and subsequently delete it from the SQS queue. 
+When a new message is pulled from SQS we call the ``ProcessMessage()`` method, this method will store the message into a DynamoDb Table and subsequently delete it from the SQS queue. 
 
-The ``ProcessMessage()`` method creates a new Activity, extracts the ``AWSTraceHeader`` from the message using the ``XRayPropagator`` propagator and link both producer and consumer activities.
+The ``ProcessMessage()`` method creates a new Activity, extracts the ``AWSTraceHeader`` from the SQS message using the ``XRayPropagator`` propagator and links both producer and consumer activities.
 
 The instrumentation of DynamoDb is much more simpler, there is no need to do any extra leg work, the auto-instrumentation from the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package will take care of it.
 
@@ -559,9 +565,8 @@ public class Worker : BackgroundService
 ```
 There is an extra thing worth mentioning on App4. 
 
-Previously I stated that the ``ProcessMessage()`` method creates a new Activity, uses the ``XRayPropagator`` to extract the ``AWSTraceHeader`` from the message and links the producer and consumer activities.
-
-But the ``XRayPropagator`` is built to extract the ``X-Amzn-Trace-Id`` header, if you want to extract another header you'll need to specify it on the getter delegate, like this:
+Previously I stated that the ``ProcessMessage()`` method creates a new Activity, uses the ``XRayPropagator`` to extract the ``AWSTraceHeader`` from the message and links the producer and consumer activities.    
+But the ``XRayPropagator`` is built to extract the ``X-Amzn-Trace-Id`` header not the ``AWSTraceHeader``, if you want to extract another header you'll need to specify it on the getter delegate, like this:
 
 ```csharp
 public static class ActivityHelper
@@ -594,7 +599,7 @@ public static class ActivityHelper
 
 After instrumenting these 4 apps we are going to generate some traffic and afterwards access X-Ray to start analyzing the traces that the apps are sending.
 
-First let's invoke the ``/publish-message`` endpoint from App1 and let's take a look at an entire trace, this is how it looks on X-Ray:
+First let's invoke App1 ``/publish-message`` endpoint and take a look at an entire trace, this is how it looks on X-Ray:
 
 ![xray-fulltrace](/img/xray-fulltrace.png)
 
@@ -602,7 +607,7 @@ Also we can take a look at the X-Ray ServiceMap:
 
 ![xray-service](/img/xray-servicemap.png)
 
-In the ServiceMap we can toggle between showing the map with the AWS icons or the response times.
+In the ServiceMap we can toggle between showing the map with icons or response times.
 
 ![xray-service](/img/xray-servicemap-noicons.png)
 
@@ -610,14 +615,14 @@ If we drill down into one of the spans that were auto-generated by the ``OpenTel
 
 ![xray-fulltrace-dynamo-subsegment-resources](/img/xray-fulltrace-dynamo-subsegment-resources.png)
 
-Also, do you remember that in the App1 we added some extra Tags on the Activity?
+Also, do you remember that in App1 we added some extra Tags on the Activity?
 
 ```csharp
 activity?.SetTag("messaging.system", "rabbitmq");
 activity?.SetTag("messaging.destination_kind", "queue");
 activity?.SetTag("messaging.rabbitmq.queue", "sample");
 ```
-You'll find them on X-Ray if you drill down on the _"Publish Message"_ span
+You'll find them on X-Ray too if you drill down on the _"Publish Message"_ span
 
 ![x-ray-fulltrace-tags-annotations](/img/x-ray-fulltrace-tags-annotations.png)
 
@@ -630,16 +635,16 @@ Every thing seems to be working fine, but there is one little problem...
 
 # AWS auto-instrumentation additional tracing noise on App4
 
-After having the app running for a short period of time if we take a look at the traces sent to X-Ray we can see strange phenomenom.
+After having the app running for a short period of time, if we take a look at the traces sent to X-Ray we can see strange phenomenom.
 
 ![xray-fulltrace-sqs-noise.png](/img/xray-fulltrace-sqs-noise.png)
 
-There are 20 additional traces with no URL appeared on X-Ray.
+A bunch of additional traces with no URL appeared on X-Ray.   
 If we take a look at the full list of traces, we can see all those misterious traces with no URL.
 
 ![xray-fulltrace-sqs-noise-2.png](/img/xray-fulltrace-sqs-noise-2.png)
 
-If we drill down on any of those traces we will see that all those traces contains additional calls that App4 is doing to Amazon SQS.
+If we drill down on any of those traces we will see that it contains an additional call that App4 is doing to Amazon SQS.
 
 ![xray-fulltrace-sqs-noise-3.png](/img/xray-fulltrace-sqs-noise-3.png)
 
@@ -660,7 +665,7 @@ What could we do here? The solution is simple but requires and extra bit of code
 First step, let's remove the ``AddAWSInstrumentation()`` extension method from the OTEL client.   
 Also, we'll need to create a couple of extra ActivitySources:
 - The "Dynamo.PutItem" ActivitySource will be used for instrumenting the call to Dynamo.
-- The "SQS.DeleteMessageAsync" ActivitySource will be used for instrumenting the call to SQS.
+- The "SQS.DeleteMessage" ActivitySource will be used for instrumenting the call to SQS.
 
 ```csharp
  services.AddOpenTelemetryTracing(builder =>
@@ -685,12 +690,12 @@ Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator());
 ```
 
 Inside the ``Process SQS Message`` Activity we're going to create 2 new activities. 
-- The ``Dynamo.PutItem`` Activity wraps the calls to DynamoDb.
-- The ``SQS.DeleteMessage`` Activity wraps the call to SQS ``DeleteMessageAsync`` method.
+- The ``Dynamo.PutItem`` Activity, that wraps the calls to DynamoDb.
+- The ``SQS.DeleteMessage`` Activity, that wraps the call to the SQS ``DeleteMessageAsync`` method.
 
-Those 2 activities will set the ``Process SQS Message`` Activity as their Parent Activity.
+Those 2 activities will have the ``Process SQS Message`` Activity as their Parent Activity.
 
-Also, we need to set a series of metadata in each Activity if we want X-Ray to recognize each Activity as an AWS Service.
+Also, we need to set a series of metadata tags if we want X-Ray to recognize each Activity as an AWS Service.
 
 For the ``Dynamo.PutItem`` Activity will set the following tags:
 ```csharp
@@ -854,7 +859,7 @@ public class Worker : BackgroundService
 
 After applying those changes if we take a look at X-Ray, we will notice that the extra traces are gone.
 
-If we invoke the ``/publish-endpoint`` endpoint from App1 and take a peek of an entire trace, everything looks good.
+If we invoke the ``/publish-endpoint`` endpoint from App1 and take a peek at an entire trace, everything looks good.
 
 ![xray-fulltrace-sqs-noise-6.png](/img/xray-fulltrace-sqs-noise-6.png)
 
@@ -958,7 +963,7 @@ services:
     environment:
       OTLP__ENDPOINT: http://otel:4317
       OTEL_RESOURCE_ATTRIBUTES: service.name=App3
-      S3_BUCKET_NAME: aws-otel-demo-s3-bucket-17988
+      S3__BUCKETNAME: aws-otel-demo-s3-bucket-17988
       SQS__URI: https://sqs.eu-west-1.amazonaws.com/7777777/aws-otel-demo-sqs-queue
       AWS_ACCESS_KEY_ID: AKIA5S6L5S6L5S6L5S6L
       AWS_SECRET_ACCESS_KEY: GO7BvT9IBLb4NudL0aGO7BvT9IBLb4NudL0a
