@@ -94,7 +94,7 @@ As you can see it's a pretty straightforward configuration.
 - The ``AddSource(nameof(PublishMessageController))`` method is used to add a new ActivitySource to the provider. Everytime you create a new Activity you must add a new ActivitySource.
 - The ``.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))`` method configures the Resource for the application.
 - The ``AddOtlpExporter()`` method indicates that the tracing data is going to be exported to this specific endpoint. This endpoint matches with the gRPC Receiver Endpoint in the Collector configuration file.
-- The ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator())`` method is needed if your app calls another application instrumented with AWS X-Ray SDK.   
+- The ``Sdk.SetDefaultTextMapPropagator(new AWSXRayPropagator())`` method is needed if your app calls another application instrumented with AWS X-Ray.   
 This method overrides the value of the ``Propagators.DefaultTextMapPropagator`` with the ``AWSXRayPropagator`` value. The ``Propagators.DefaultTextMapPropagator`` is used internally by some instrumentation packages to infer and propagate the trace ID.
 
 
@@ -106,7 +106,7 @@ All the other method shown here are just basic OpenTelemetry setup, nothing to d
 
 ### **2. Instrument the call to AmazonMQ RabbitMQ**
 
-The ``OpenTelemetry.Contrib.Instrumentation.AWS`` NuGet package is used to auto-instrument the AWS SDK .NET clients, but there is no AWS SDK client to use with AmazonMQ Rabbit.   
+The ``OpenTelemetry.Contrib.Instrumentation.AWS`` NuGet package is used to auto-instrument the AWS SDK .NET clients, but there is no AWS SDK client to use with AmazonMQ RabbitMQ.   
 That means that we need to used the ``RabbitMQ.Client`` package and that we need to instrument the downstream calls by ourselves.
 
 In the next code snippet you'll see that we are injecting the trace information into the header of the message that is going to be sent.   
@@ -249,7 +249,7 @@ The code is pretty much the same as the one I have showed you on App1, but there
 
 This means that if we don't set the Activity to be of  ``Kind = ActivityKind.Server`` then App2 is not going to show up correctly on X-Ray because it will be a subsegment.
 
-In a Console or a Worker Service application is important to instantiate the main activity like this:    
+In a Console app or a Worker Service is important to instantiate the main activity like this:    
 ``var activity = Activity.StartActivity("Process Message", ActivityKind.Server, parentContext.ActivityContext))``
 
 So, why we need to set the ``Kind = ActivityKind.Server`` in this app and not on App1?   
@@ -356,7 +356,8 @@ App3 receives a message from App2 and uploads the contents of the message into a
 
 In the next code snippet you'll see that there is nothing related to OpenTelemetry, we're simply using the ``AWSSDK.S3`` client to upload the contents of the message into the S3 bucket.
 
-That's because the  ``AddAWSInstrumentation()`` auto-instruments all the downstream calls made by the ``AWSSDK.S3`` client.    
+That's because the  ``AddAWSInstrumentation()`` extension method auto-instruments all the downstream calls made by the ``AWSSDK.S3`` client.    
+
 The auto-instrumentation will create an activity of ``Kind=Activity.Client`` for every downstream call made to S3, and it will also add some tags to the activity, those tags will contain metadata about the AWS services being invoked.
 
 
@@ -401,9 +402,9 @@ The auto-instrumentation will create an activity of ``Kind=Activity.Client`` for
 ```
 App3 also queues the message received into an Amazon SQS.
 
-In the next code snippet there is nothing related to OpenTelemetry because the  ``AddAWSInstrumentation()`` auto-instruments all the downstream calls made by the ``AWSSDK.SQS`` client.  
+In the next code snippet there is also nothing related to OpenTelemetry because the  ``AddAWSInstrumentation()`` extension method auto-instruments all the downstream calls made by the ``AWSSDK.SQS`` client.  
 
-There is one thing worth mentioning when working with Amazon SQS and the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package, and that is that the ``AWSTraceHeader`` attribute is going to be added into every message queued into SQS.     
+There is one thing worth mentioning when working with Amazon SQS and the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package, and that is that the ``AWSTraceHeader`` attribute is going to be added into any message queued into SQS.     
 The ``AWSTraceHeader`` is a message system attribute reserved by Amazon SQS to carry the X-Ray trace header.   
 
 This header is important (more about it in the next section).
@@ -635,7 +636,7 @@ Every thing seems to be working fine, but there is one little problem...
 
 # AWS auto-instrumentation additional tracing noise on App4
 
-After having the app running for a short period of time, if we take a look at the traces sent to X-Ray we can see strange phenomenom.
+After having the app running for a short period of time, if we take a look at the traces sent to X-Ray we can see a strange phenomenom.
 
 ![xray-fulltrace-sqs-noise.png](/img/xray-fulltrace-sqs-noise.png)
 
@@ -644,13 +645,13 @@ If we take a look at the full list of traces, we can see all those misterious tr
 
 ![xray-fulltrace-sqs-noise-2.png](/img/xray-fulltrace-sqs-noise-2.png)
 
-If we drill down on any of those traces we will see that it contains an additional call that App4 is doing to Amazon SQS.
+If we drill down on any of those traces we will see that the trace contains a call from App4 to Amazon SQS.
 
 ![xray-fulltrace-sqs-noise-3.png](/img/xray-fulltrace-sqs-noise-3.png)
 
 Do you remember when I said that Amazon SQS uses a pull-based approach to retrieve new messages? 
 
-The Worker Service uses an infinite loop and in each iteration of the loop is making a call to AWS SQS to try to fetch new messages.   
+The Worker Service works on an infinite loop, and in each loop iteration it is making a call to AWS SQS to try to fetch new messages.   
 Also App4 uses the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package to auto-instrument any downstrem call made to an AWS Service.   
 
 You see the problem, right? Each of these calls to SQS to try to fetch new messages in combination with the auto-instrumentation provided by the  ``OpenTelemetry.Contrib.Instrumentation.AWS`` ends up generating a bunch of useless traces.
@@ -658,7 +659,7 @@ You see the problem, right? Each of these calls to SQS to try to fetch new messa
 That's a problem, because I don't want to send thousands of worthless traces into X-Ray each hour just because my Worker Service is polling AWS SQS to find if there is any new message to process.
 
 What could we do here? The solution is simple but requires and extra bit of code.
-- First of all, we'll need  to remove the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package from App4, with this kind of app the AWS SDK auto-instrumentation is more problematic than anything else.
+- First of all, we need  to remove the ``OpenTelemetry.Contrib.Instrumentation.AWS`` package from App4, with this kind of app the AWS SDK auto-instrumentation is more problematic than anything else.
 - Instrument the calls to AWS DynamoDb manually.
 - Instrument the calls to Amazon SQS manually.
 
@@ -716,7 +717,7 @@ sqsActivity?.SetTag("aws.requestId", response.ResponseMetadata.RequestId);
 sqsActivity?.SetTag("http.status_code", (int)response.HttpStatusCode);
 ```
 
-Here's how the Worker Service looks like after those changes:
+Here's how the Worker Service looks like after making those changes:
 
 ```csharp
 public class Worker : BackgroundService
@@ -859,7 +860,7 @@ public class Worker : BackgroundService
 
 After applying those changes if we take a look at X-Ray, we will notice that the extra traces are gone.
 
-If we invoke the ``/publish-endpoint`` endpoint from App1 and take a peek at an entire trace, everything looks good.
+If we invoke the ``/publish-message`` endpoint from App1 and take a peek at an entire trace, everything looks good.
 
 ![xray-fulltrace-sqs-noise-6.png](/img/xray-fulltrace-sqs-noise-6.png)
 
@@ -867,9 +868,11 @@ The XRay ServiceMap is still able to recognize that we're doing a series of down
 
 ![xray-fulltrace-sqs-noise-5.png](/img/xray-fulltrace-sqs-noise-5.png)
 
-If we generate an exception when trying to access DynamoDb, it gets recorded properly.
+Also if we generate an exception when trying to access DynamoDb, it gets recorded properly.
 
 ![xray-fulltrace-sqs-noise-7.png](/img/xray-fulltrace-sqs-noise-7.png)
+
+Everything look good now.
 
 # How to run the demo
 
