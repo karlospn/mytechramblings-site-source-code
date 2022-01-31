@@ -1,9 +1,9 @@
 ---
 title: "Testing distributed tracing with AWS Distro for OpenTelemetry and .NET. Part 1: Setting up the AWS OTEL Collector"
-date: 2022-01-24T11:19:12+01:00
+date: 2022-01-31T10:10:12+01:00
 tags: ["AWS", "dotnet", "OpenTelemetry"]
 description: "This is a 2 part-series post. In part 1 I’ll be talking about what is the AWS OpenTelemetry Collector and how to set it up for ingesting and exporting traces to AWS X-Ray."
-draft: true
+draft: false
 ---
 
 > This is a 2 part-series post.
