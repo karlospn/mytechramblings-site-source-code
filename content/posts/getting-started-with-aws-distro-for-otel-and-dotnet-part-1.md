@@ -8,7 +8,8 @@ draft: false
 
 > This is a 2 part-series post.
 > - **Part 1**: What is the AWS OpenTelemetry Collector and how to setup it up for ingesting and exporting tracing data to AWS X-Ray.
-> - **Part 2**: How to build and configure properly a few distributed .NET apps that will send traces to the AWS OTEL Collector, and also how to analyze those traces in AWS X-Ray.
+> - **Part 2**: How to build and configure properly a few distributed .NET apps that will send traces to the AWS OTEL Collector, and also how to analyze those traces in AWS X-Ray.    
+> If you want to read it, click [here](https://www.mytechramblings.com/posts/getting-started-with-aws-distro-for-otel-and-dotnet-part-2/)
 
 # Introduction
 
@@ -170,5 +171,5 @@ Copy
 ```
 
 After setting up the AWS OTEL Collector, I'm ready to begin building the apps, but it won’t be right now.    
-**See you in part 2**
+**See you in [part 2](https://www.mytechramblings.com/posts/getting-started-with-aws-distro-for-otel-and-dotnet-part-2/)**
 
