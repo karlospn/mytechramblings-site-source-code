@@ -100,11 +100,19 @@ The application we're going to profile is a .NET 6 API with 3 endpoints:
 - ``/high-cpu`` endpoint.
 - ``/memory-leak`` endpoint.
 
-As you can see, the performance issues we will tackle on each endpoint are pretty self-explanatory.
+As you can see, the performance issues we will tackle on each endpoint are pretty self-explanatory.   
+The source code can be found on my [GitHub](https://github.com/karlospn/profiling-net6-api-demo)
 
-I'll be running the app as a docker container on my local machine because it's the easiest and fastest setup possible.   
-
+I'll be running the app as a docker container on my local machine because it's the easiest and fastest setup possible.    
 It doesn't matter if you're running your app on a k8s cluster, a virtual machine or any other cloud services, the steps you need to follow when trying to pinpoint a performance issue will be exactly the same, the only thing that its going to change is how to distribute the diagnostic tools binaries. 
+
+To simulate a more realistic environment I have set some memory an Cpu limits to the app running on docker.   
+To be more precise, a **1024Mb memory limit and a 2 CPUs limit**.
+
+``docker run -d -p 5003:80 -m 1024m --cpus=2 profiling.api``
+
+Also I'll be using [bombardier](https://github.com/codesenberg/bombardier) to generate traffic on the app.   
+Bombardier is a modern HTTP(S) benchmarking tool, written in Go language and really easy to use for performance and load testing.
 
 # Profiling the ``/blocking-threads`` endpoint
 
