@@ -19,10 +19,10 @@ On a real scenario the performance issues will not be so easy to spot on, but th
 
 Most of the topics I’m going to tackle in this demo are basic stuff:
 
-- Monitor the performance counters as a first-level performance investigation.   
-- Create a memory dump to investigate why are the threads being blocked.
-- Take a look at the memory heap to find out why keeps growing.
-- Obtain a cpu trace to investigate why the CPU percentage counter is spiking.
+- How to monitor the application performance counters and use it as a first-level performance investigation.   
+- How to create a memory dump to investigate why are the threads being blocked.
+- How to investigate the contents of the memory heap to find out why the size keeps growing.
+- How to obtain a cpu trace to investigate why the CPU percentage counter is spiking.
 
 So, if you’re a performance veteran this post is not for you.
 
@@ -37,8 +37,7 @@ A couple years ago Microsoft introduced a series of new diagnostic tools:
 
 Those tools are cross-platform and nowadays are the preferred method of collecting diagnostic information for .NET Core scenarios targeting .NET Core 3.0 or above.
 
-
-## Running .NET CLI tools in a container
+# Adding .NET CLI tools in a container
 
 The .NET Core global CLI diagnostic tools (dotnet-counters, dotnet-dump, dotnet-gcdump, and dotnet-trace) are designed to work in a wide variety of environments and should all work directly in Docker containers.
 
@@ -80,4 +79,36 @@ COPY --from=build-env /app/publish .
 # Set entrypoint
 ENTRYPOINT ["dotnet", "Profiling.Api.dll"]
 ```
+
+# Executing .NET CLI tools in a running container
+
+In order to access these tools at runtime, we need to be able to access the container at runtime.   
+We can use the ``docker exec`` command to launch a shell in the running container.
+
+``docker exec -it -w //tools <container-id> sh``
+
+And once we're inside the container we're ready to execute any of the diagnostic tools like this:
+
+``./dotnet-counters monitor --process-id 1``
+
+
+# Demo Application
+
+The application we're going to profile is a .NET 6 API with 3 endpoints:
+
+- ``/blocking-threads`` endpoint.
+- ``/high-cpu`` endpoint.
+- ``/memory-leak`` endpoint.
+
+As you can see, the performance issues we will tackle on each endpoint are pretty self-explanatory.
+
+I'll be running the app as a docker container on my local machine because it's the easiest and fastest setup possible.   
+
+It doesn't matter if you're running your app on a k8s cluster, a virtual machine or any other cloud services, the steps you need to follow when trying to pinpoint a performance issue will be exactly the same, the only thing that its going to change is how to distribute the diagnostic tools binaries. 
+
+# Profiling the ``/blocking-threads`` endpoint
+
+# Profiling the ``/high-cpu`` endpoint
+
+# Profiling the ``/memory-leak`` endpoint
 
