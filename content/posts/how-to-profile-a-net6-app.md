@@ -8,7 +8,7 @@ draft: true
 
 # Introduction
 
-Every software developer at some time or another has stumbled with an application that doesn't perform well. And when it happens I find that quite a few people are unfamiliar about what steps should they take to solve them.    
+Every software developer at some time or another has stumbled with an application that doesn't perform well. And when it happens I find a lot of unfamiliarity about what steps should take to solve them.    
 And that's what I decided to write this beginner's article. 
 
 I have built a .NET6 application beforehand, this app has a few performance issues and in this post we're going to try to spot them.
@@ -107,14 +107,187 @@ I'll be running the app as a docker container on my local machine because it's t
 It doesn't matter if you're running your app on a k8s cluster, a virtual machine or any other cloud services, the steps you need to follow when trying to pinpoint a performance issue will be exactly the same, the only thing that its going to change is how to distribute the diagnostic tools binaries. 
 
 To simulate a more realistic environment I have set some memory an Cpu limits to the app running on docker.   
-To be more precise, a **1024Mb memory limit and a 2 CPUs limit**.
+To be more precise, a **1024Mb memory limit and a 1 CPUs limit**.
 
-``docker run -d -p 5003:80 -m 1024m --cpus=2 profiling.api``
+``docker run -d -p 5003:80 -m 1024m --cpus=1 profiling.api``
 
 Also I'll be using [bombardier](https://github.com/codesenberg/bombardier) to generate traffic on the app.   
 Bombardier is a modern HTTP(S) benchmarking tool, written in Go language and really easy to use for performance and load testing.
 
 # Profiling the ``/blocking-threads`` endpoint
+
+First thing we're going to do is executing the ``dotnet-counters`` command tool.
+
+``dotnet-counters`` is **always the first step** when we want to begin a performance investigation.   
+
+``dotnet-counters`` is a performance monitoring and first-level performance investigation tool. It can observe performance counter values that are published via the EventCounter API.    
+For example, you can quickly monitor things like the CPU usage or the rate of exceptions being thrown in your .NET Core application to see if there's anything suspicious before diving into more serious performance investigation using ``dotnet-dump`` or ``dotnet-trace``.
+
+The command we're going to use to launch ``dotnet-counters`` is the following one:
+
+``./dotnet-counters monitor --process-id 1 --counters System.Runtime,Microsoft.AspNetCore.Hosting``
+
+- The ``monitor`` command starts monitoring a .NET application.
+- The ``-p|--process-id`` parameter is a required one and specifies the ID of the process we want to monitor, in this case we're inside a docker container so the PID is always 1.   
+If you're running outside a container and do not know the PID of the procss you want to monitor you can run the ``./dotnet-counters ps`` command.
+- The ``--counters`` parameter is an optional one and you need to specify a comma-separated list of counters.   
+The default counters are the ``System.Runtime`` counters, but when working with an API I find useful to monitor also the ``Microsoft.AspNetCore.Hosting`` counters, so you can see how many requests are being served, how many requests are failing, request rate, etc.
+
+That's the output you'll see after launching the command:
+
+```bash
+[Microsoft.AspNetCore.Hosting]
+    Current Requests                                               0
+    Failed Requests                                                0
+    Request Rate (Count / 1 sec)                                   0
+    Total Requests                                                 0
+[System.Runtime]
+    % Time in GC since last GC (%)                                 0
+    Allocation Rate (B / 1 sec)                                8,168
+    CPU Usage (%)                                                  0
+    Exception Count (Count / 1 sec)                                0
+    GC Committed Bytes (MB)                                        0
+    GC Fragmentation (%)                                           0
+    GC Heap Size (MB)                                              3
+    Gen 0 GC Count (Count / 1 sec)                                 0
+    Gen 0 Size (B)                                                 0
+    Gen 1 GC Count (Count / 1 sec)                                 0
+    Gen 1 Size (B)                                                 0
+    Gen 2 GC Count (Count / 1 sec)                                 0
+    Gen 2 Size (B)                                                 0
+    IL Bytes Jitted (B)                                       68,801
+    LOH Size (B)                                                   0
+    Monitor Lock Contention Count (Count / 1 sec)                  0
+    Number of Active Timers                                        0
+    Number of Assemblies Loaded                                  110
+    Number of Methods Jitted                                     620
+    POH (Pinned Object Heap) Size (B)                              0
+    ThreadPool Completed Work Item Count (Count / 1 sec)           0
+    ThreadPool Queue Length                                        0
+    ThreadPool Thread Count                                        0
+    Time spent in JIT (ms / 1 sec)                                 0
+    Working Set (MB)                                              61
+```
+As you can see, it's quite a lot of counters, let me explain briefly the meaning of each one of them.
+
+- **Current Requests**:  The total number of requests that have started, but not yet stopped.
+- **Faied Requests**:  The total number of failed requests that have occurred for the life of the app.
+- **Request Rate**: The number of requests that occur per update interval.
+- **Total Requests**:  The total number of requests that have occurred for the life of the app.
+- **% Time in GC since last GC (%)**: The percent of time in GC since the last GC.
+- **Allocation Rate**:  Number of bytes allocated in the managed heap between update intervals.
+- **CPU Usage**: The percentage of CPU usage relative to to CPU resource allocated.
+- **Exception Count**: The number of exceptions that have occurred.
+- **GC Commited Bytes**: The number of bytes committed by the GC.
+- **GC Fragmentation**: The GC Heap Fragmentation (available on .NET 5 and later versions).
+- **GC Heap Size**: The number of bytes allocated by the GC.
+- **Gen 0 GC Count**: The number of times GC has occurred for Gen 0 per update interval.
+- **Gen 0 Size**:  The number of bytes for Gen 0 GC.
+- **Gen 1 GC Count**: The number of times GC has occurred for Gen 1 per update interval.
+- **Gen 1 Size**:  The number of bytes for Gen 1 GC.
+- **Gen 2 GC Count**: Number of Gen 2 GCs between update intervals
+- **Gen 2 Size**:  The number of times GC has occurred for Gen 2 per update interval.
+- **IL Bytes Jitted**: The total size of ILs that are JIT-compiled, in bytes.
+- **LOH Size**: The number of bytes for the large object heap.
+- **Monitor Lock Contention Count**: The number of times there was contention when trying to take the monitor's lock.
+- **Number of Active Timers**: The number of Timer instances that are currently active.
+- **Number of Assemblies Loaded**: The number of Assembly instances loaded into a process at a point in time.
+- **Number of Methods Jitted**:  The number of methods that are JIT-compiled.
+- **POH (Pinned Object Heap) Size**: The number of bytes for the pinned object heap (available on .NET 5 and later versions).
+- **ThreadPool Completed Work Item Count**: The number of work items that have been processed so far in the ThreadPool.
+- **ThreadPool Queue Length**: The number of work items that are currently queued to be processed in the ThreadPool.
+- **ThreadPool Thread Count**: The number of thread pool threads that currently exist in the ThreadPool.
+- **Time spent in JIT**: The total time spent doing jitting work.
+- **Working Set**: The amount of physical memory mapped to the process.
+
+Right now we're monitoring the app counters in real time, but there is no traffic in our application and nothing worth mentioning is happening, so let's apply some load using bombardier.
+
+I'm going to apply a load of 100 requests per second during 120 seconds to the ``blocking-threads`` endpoint.
+
+``./bombardier.exe -c 50 --rate 50 -l -d 120s https://localhost:5003/blocking-threads``
+
+Here's how the counters look like after 60 seconds
+```bash
+[Microsoft.AspNetCore.Hosting]
+    Current Requests                                              15
+    Failed Requests                                                0
+    Request Rate (Count / 1 sec)                                  14
+    Total Requests                                               325
+[System.Runtime]
+    % Time in GC since last GC (%)                                 0
+    Allocation Rate (B / 1 sec)                              449,624
+    CPU Usage (%)                                                  0
+    Exception Count (Count / 1 sec)                                0
+    GC Committed Bytes (MB)                                       16
+    GC Fragmentation (%)                                          22.432
+    GC Heap Size (MB)                                             12
+    Gen 0 GC Count (Count / 1 sec)                                 1
+    Gen 0 Size (B)                                         3,640,560
+    Gen 1 GC Count (Count / 1 sec)                                 0
+    Gen 1 Size (B)                                         3,488,928
+    Gen 2 GC Count (Count / 1 sec)                                 0
+    Gen 2 Size (B)                                         4,720,320
+    IL Bytes Jitted (B)                                      269,978
+    LOH Size (B)                                              98,408
+    Monitor Lock Contention Count (Count / 1 sec)                  0
+    Number of Active Timers                                        0
+    Number of Assemblies Loaded                                  113
+    Number of Methods Jitted                                   2,938
+    POH (Pinned Object Heap) Size (B)                      4,443,728
+    ThreadPool Completed Work Item Count (Count / 1 sec)          43
+    ThreadPool Queue Length                                    1,619
+    ThreadPool Thread Count                                       32
+    Time spent in JIT (ms / 1 sec)                                 0
+    Working Set (MB)                                              83
+```
+And here's how the counters look like after 120 second (end of the load test)
+```bash
+[Microsoft.AspNetCore.Hosting]
+    Current Requests                                              73
+    Failed Requests                                                0
+    Request Rate (Count / 1 sec)                                  56
+    Total Requests                                             2,727
+[System.Runtime]
+    % Time in GC since last GC (%)                                 0
+    Allocation Rate (B / 1 sec)                            2,476,392
+    CPU Usage (%)                                                  1
+    Exception Count (Count / 1 sec)                                0
+    GC Committed Bytes (MB)                                       27
+    GC Fragmentation (%)                                          12.394
+    GC Heap Size (MB)                                             23
+    Gen 0 GC Count (Count / 1 sec)                                 0
+    Gen 0 Size (B)                                                24
+    Gen 1 GC Count (Count / 1 sec)                                 0
+    Gen 1 Size (B)                                         3,823,928
+    Gen 2 GC Count (Count / 1 sec)                                 0
+    Gen 2 Size (B)                                        15,022,080
+    IL Bytes Jitted (B)                                      272,879
+    LOH Size (B)                                              98,408
+    Monitor Lock Contention Count (Count / 1 sec)                  2
+    Number of Active Timers                                        0
+    Number of Assemblies Loaded                                  113
+    Number of Methods Jitted                                   2,974
+    POH (Pinned Object Heap) Size (B)                      4,443,728
+    ThreadPool Completed Work Item Count (Count / 1 sec)         201
+    ThreadPool Queue Length                                    1,990
+    ThreadPool Thread Count                                       81
+    Time spent in JIT (ms / 1 sec)                                 0
+    Working Set (MB)                                              90
+```
+
+During this test the CPU usage was low, allocation rate also was low, there were almost no GC happening and the LOH keeps a steady size.    
+
+The only thing interesting is that the **"ThreadPool Queue Length"** and **"ThreadPool Thread Count"** counters were growing exponentially during the test duration.
+
+The "ThreadPool Thread Count" should not be growing like this, in an ideal application  everything runs asynchronously which means that a low number of threads can serve a huge amount of requests.
+
+In an async world when an incoming request arrives it spawns a new thread, that thread runs it’s current operation and when an async method is awaited, saves the current context and adds itself to the global pool as an available thread.   
+When the  async call completes or if a new request comes in at this point, the Threadpool checks if all the threads are already in operation, if yes it spawns up a new thread, if not it takes up one of the available threads from the pool.
+
+The fact that the Threadpool keeps growing means that the application is expanding the Threadpool to handle incoming requests which means that probably some threads are being blocked somewhere.    
+
+This blockage could be on purpose and maybe the app is doing some long running task, but maybe the threads are being blocked because there is something not right on the application, so it's worth investigating further.
+
 
 # Profiling the ``/high-cpu`` endpoint
 
