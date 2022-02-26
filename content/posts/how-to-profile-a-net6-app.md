@@ -47,7 +47,6 @@ One easy solution to this problem is to install the tools in the initial Docker 
 
 The only downside to this approach is increased Docker image size.
 
-
 ```yaml
 FROM mcr.microsoft.com/dotnet/sdk:6.0-bullseye-slim AS build-env
 WORKDIR /app
@@ -125,12 +124,13 @@ For example, you can quickly monitor things like the CPU usage or the rate of ex
 
 The command we're going to use to launch ``dotnet-counters`` is the following one:
 
-``./dotnet-counters monitor --process-id 1 --counters System.Runtime,Microsoft.AspNetCore.Hosting``
+``./dotnet-counters monitor --process-id 1 --refresh-interval 3 --counters System.Runtime,Microsoft.AspNetCore.Hosting``
 
 - The ``monitor`` command starts monitoring a .NET application.
-- The ``-p|--process-id`` parameter is a required one and specifies the ID of the process we want to monitor, in this case we're inside a docker container so the PID is always 1.   
+- The ``-p|--process-id`` parameter specifies the ID of the process we want to monitor, in this case we're inside a docker container so the PID is always 1.   
 If you're running outside a container and do not know the PID of the procss you want to monitor you can run the ``./dotnet-counters ps`` command.
-- The ``--counters`` parameter is an optional one and you need to specify a comma-separated list of counters.   
+- The ``--refresh-interval`` is the number of seconds between the counter polling CPU values.
+- The ``--counters`` is an optional paramete and you need to specify a comma-separated list of counters.   
 The default counters are the ``System.Runtime`` counters, but when working with an API I find useful to monitor also the ``Microsoft.AspNetCore.Hosting`` counters, so you can see how many requests are being served, how many requests are failing, request rate, etc.
 
 That's the output you'll see after launching the command:
@@ -294,7 +294,7 @@ Now that we think that our app might have a problem with threads being blocked, 
 
 ``dotnet-dump``  is a way to collect and analyze Windows and Linux dumps without any native debugger involved, by default ``dotnet-dump`` creates a full dump which contains a snapshot of the memory, information about the running threads with their corresponding stack traces and information about possible exceptions that might have occurred.
 
-What I'm going to do first is to apply another load of 100 requests per second during 120 seconds to the ``blocking-threads`` endpoint with bombardier, and while the load test is running I'll capture a dump using:
+I'm going to apply another load of 100 requests per second during 120 seconds to the ``blocking-threads`` endpoint with bombardier, and while the load test is running I'll capture a dump using:
 
 ``./dotnet-dump collect --process-id 1``
 
@@ -415,6 +415,45 @@ During this test the threadpool thread count was relatively small, allocation ra
 The only thing worth mentioning is that the **"CPU Usage"** was almost 100% during the length of the load test, so let's take a look at what might happen here.
 
 ## 2. Use ``dotnet-trace`` and Visual Studio to analyze a CPU trace
+
+The ``dotnet-trace`` diagnostic tool collects diagnostic traces from a running process. It can collect either CPU traces or GC collections and object allocations traces. It also captures CLR events.
+
+I'm going to apply another load of 100 requests per second during 120 seconds to the ``high-cpu`` endpoint with bombardier, and while the load test is running I'll capture a CPU trace using the command:
+
+``./dotnet-trace collect --process-id 1 --duration 00:00:30``
+
+- The ``collect`` command  collects a diagnostic trace from a running process.
+- The ``-p|--process-id`` parameter specifies the process id to collect the trace, in this case we're inside a docker container so the PID is always 1.   
+- The ``--duration`` parameter when specified, will trace for the given timespan and then automatically stop the trace.
+- By default ``dotnet-trace`` collects CPU traces and CLR events if you want to capture instead GC collection traces you can use the ``--profile`` paramter.
+
+
+We're going to analyze this trace with Visual Studio also, but the dump is inside the docker container, so I'm going to copy it from inside the container to my local machine using the command:
+
+``docker cp <container-id>:<path-to-the-trace> .``
+
+Now we open the trace with Visual Studio, and right after opening it we are prompted with the top CPU functions.   
+
+![vs-trace-top-functions](/img/vs-trace-top-functions.png)
+
+On this list we can see that "CalculatePrimeNumber" takes the number one spot on the list with more than 60% of CPU time.
+If we go to "Open details" we can get a more in deep information.
+
+![vs-trace-open-details](/img/vs-trace-open-details.png)
+
+This will list every function that .NET trace profiled and it's going to show both the total CPU and the self CPU time.
+- Total CPU time tells us CPU time spent code in this function and in functions called by this function.
+- Self CPU time tells us CPU time spent executing code in this function, excluding time in functions called by this function.
+
+One way to investigate is ordering by "Self CPU" and we'll get the functions ordered by how much time they spent executing code without any dependency.
+
+![vs-trace-functions-cpu](/img/vs-trace-functions-cpu.png)
+
+We can also view the call tree for every function and clicking in the "Show Hot Path" and "Expand Hot Path" will take us to the CPU hot path.
+
+![vs-trace-hot-path.png](/img/vs-trace-hot-path.png)
+
+After taking a look at the trace, it's pretty clear that the performance issue is the "CalculatePrimeNumber" function, and therefore we can go now and try to fix it.
 
 
 # Profiling the ``/memory-leak`` endpoint
