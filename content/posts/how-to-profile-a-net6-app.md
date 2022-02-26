@@ -116,7 +116,7 @@ Bombardier is a modern HTTP(S) benchmarking tool, written in Go language and rea
 
 # Profiling the ``/blocking-threads`` endpoint
 
-First thing we're going to do is executing the ``dotnet-counters`` command tool.
+## 1. Use ``dotnet-counters`` to investigate possible issues
 
 ``dotnet-counters`` is **always the first step** when we want to begin a performance investigation.   
 
@@ -204,9 +204,9 @@ Right now we're monitoring the app counters in real time, but there is no traffi
 
 I'm going to apply a load of 100 requests per second during 120 seconds to the ``blocking-threads`` endpoint.
 
-``./bombardier.exe -c 50 --rate 50 -l -d 120s https://localhost:5003/blocking-threads``
+``./bombardier.exe -c 100 --rate 100 -l -d 120s http://localhost:5003/blocking-threads``
 
-Here's how the counters look like after 60 seconds
+Here's how the counters look like 60 seconds after the load test began
 ```bash
 [Microsoft.AspNetCore.Hosting]
     Current Requests                                              15
@@ -275,21 +275,147 @@ And here's how the counters look like after 120 second (end of the load test)
     Working Set (MB)                                              90
 ```
 
-During this test the CPU usage was low, allocation rate also was low, there were almost no GC happening and the LOH keeps a steady size.    
+During this test the CPU usage was low, allocation rate also was low, there were almost no GC happening and the LOH has a steady size.    
 
 The only thing interesting is that the **"ThreadPool Queue Length"** and **"ThreadPool Thread Count"** counters were growing exponentially during the test duration.
 
 The "ThreadPool Thread Count" should not be growing like this, in an ideal application  everything runs asynchronously which means that a low number of threads can serve a huge amount of requests.
 
-In an async world when an incoming request arrives it spawns a new thread, that thread runs it’s current operation and when an async method is awaited, saves the current context and adds itself to the global pool as an available thread.   
-When the  async call completes or if a new request comes in at this point, the Threadpool checks if all the threads are already in operation, if yes it spawns up a new thread, if not it takes up one of the available threads from the pool.
+In an async world when an incoming request arrives it gets a new thread from the Threadpool, that thread runs it’s current operation and when an async method is awaited, saves the current context and adds itself to the pool as an available thread.   
+When the async call completes or if a new request comes in at this point, the Threadpool checks if all the threads are already in operation, if yes it spawns up a new thread, if not it takes up one of the available threads from the pool.
 
-The fact that the Threadpool keeps growing means that the application is expanding the Threadpool to handle incoming requests which means that probably some threads are being blocked somewhere.    
+The fact that the "ThreadPool Thread Count" counter keeps growing means that the application is expanding the Threadpool to handle incoming requests which means that probably some threads are being blocked somewhere.    
 
-This blockage could be on purpose and maybe the app is doing some long running task, but maybe the threads are being blocked because there is something not right on the application, so it's worth investigating further.
+This blockage could be on purpose and maybe the app is doing some long running task, but maybe the threads are being blocked because there is something not right, so it's worth investigating further.
 
+## 2. Use ``dotnet-dump`` and Visual Studio to analyze possible blocking threads
+   
+Now that we think that our app might have a problem with threads being blocked, the ``dotnet-dump`` diagnostic tool is the correct one to use.
+
+``dotnet-dump``  is a way to collect and analyze Windows and Linux dumps without any native debugger involved, by default ``dotnet-dump`` creates a full dump which contains a snapshot of the memory, information about the running threads with their corresponding stack traces and information about possible exceptions that might have occurred.
+
+What I'm going to do first is to apply another load of 100 requests per second during 120 seconds to the ``blocking-threads`` endpoint with bombardier, and while the load test is running I'll capture a dump using:
+
+``./dotnet-dump collect --process-id 1``
+
+A good way to analyze this dump is with Visual Studio, but the dump is inside the docker container, so I'm going to copy it from inside the container to my local machine using the command:
+
+``docker cp <container-id>:<path-to-the-dump> .``
+
+Now we can open it with Visual Studio. To start a debugging session, select "Debug with Managed Only".
+
+![vs-dump-debug](/img/vs-dump-debug.png)
+
+Keep im mind that a dump it's a snapshot of you application in a concrete point of time, so you can't debug the application, but what we can do is select "Debug > Windows > Threads" to get a full list of all the active threads the time we capture the dump.
+
+
+And as you can see on the next screenshot, looks suspicious the amount of threads that are on the "sleep" state.
+
+![vs-dump-threads-view](/img/vs-dump-threads-view.png)
+
+Another thing we can do is select "Debug > Windows > Parallel Stacks" and it gives a view of what's happening with the threads.
+
+![vs-dump-parallel-stacks](/img/vs-dump-parallel-stacks.png)
+
+In this case we can see that there are 74 threads grouped on 2 stacks, if we take a deeper look at those stacks we recognize that "BlockingThreadsService.Run" is a function of our app, if we double click on it, Visual Studio will take us there.
+
+> *To navigate from the Parallel Stacks window to the source code we need to enable the microsoft symbols server and also have the application symbols.*
+
+![vs-dump-task-waitall](/img/vs-dump-task-waitall.png)
+
+And with a quick glance we can see that all those threads and stopped in the "Task.WaitAll", so it pretty clear that something wrong might be have happened with those 2 tasks.
+If we keep searching a little bit further and take a look at this particlar thread call stack, we will see that Task1 is blocked on the lock statement
+
+![vs-dump-task-lock](/img/vs-dump-task-lock.png)
+
+And with that, we have found our performance issue and now we can fix it!
 
 # Profiling the ``/high-cpu`` endpoint
+
+## 1. Use ``dotnet-counters`` to investigate possible issues
+
+We're going to follow the same steps as the previous performance issue: 
+- launch ``dotnet-counters``
+- Apply some load with ``bombardier`` to the ``/high-cpu`` endpoint
+- Monitor the counters
+
+Here's how the counters look like 60 seconds after the load test began
+
+```bash
+[Microsoft.AspNetCore.Hosting]
+    Current Requests                                               9
+    Failed Requests                                                0
+    Request Rate (Count / 1 sec)                                   1
+    Total Requests                                                16
+[System.Runtime]
+    % Time in GC since last GC (%)                                 0
+    Allocation Rate (B / 1 sec)                               48,960
+    CPU Usage (%)                                                 99
+    Exception Count (Count / 1 sec)                                0
+    GC Committed Bytes (MB)                                        5
+    GC Fragmentation (%)                                           0.87
+    GC Heap Size (MB)                                              3
+    Gen 0 GC Count (Count / 1 sec)                                 0
+    Gen 0 Size (B)                                                24
+    Gen 1 GC Count (Count / 1 sec)                                 0
+    Gen 1 Size (B)                                         2,021,144
+    Gen 2 GC Count (Count / 1 sec)                                 0
+    Gen 2 Size (B)                                                24
+    IL Bytes Jitted (B)                                      183,974
+    LOH Size (B)                                              98,408
+    Monitor Lock Contention Count (Count / 1 sec)                  0
+    Number of Active Timers                                        0
+    Number of Assemblies Loaded                                  113
+    Number of Methods Jitted                                   1,998
+    POH (Pinned Object Heap) Size (B)                        772,808
+    ThreadPool Completed Work Item Count (Count / 1 sec)           2
+    ThreadPool Queue Length                                      193
+    ThreadPool Thread Count                                        9
+    Time spent in JIT (ms / 1 sec)                                 4.63
+    Working Set (MB)                                              72
+```
+And here's how the counters look like after 120 second (end of the load test)
+
+```bash
+[Microsoft.AspNetCore.Hosting]
+    Current Requests                                              11
+    Failed Requests                                                0
+    Request Rate (Count / 1 sec)                                   0
+    Total Requests                                                23
+[System.Runtime]
+    % Time in GC since last GC (%)                                 0
+    Allocation Rate (B / 1 sec)                                8,168
+    CPU Usage (%)                                                 99
+    Exception Count (Count / 1 sec)                                0
+    GC Committed Bytes (MB)                                        5
+    GC Fragmentation (%)                                           0.87
+    GC Heap Size (MB)                                              4
+    Gen 0 GC Count (Count / 1 sec)                                 0
+    Gen 0 Size (B)                                                24
+    Gen 1 GC Count (Count / 1 sec)                                 0
+    Gen 1 Size (B)                                         2,021,144
+    Gen 2 GC Count (Count / 1 sec)                                 0
+    Gen 2 Size (B)                                                24
+    IL Bytes Jitted (B)                                      198,752
+    LOH Size (B)                                              98,408
+    Monitor Lock Contention Count (Count / 1 sec)                  0
+    Number of Active Timers                                        0
+    Number of Assemblies Loaded                                  113
+    Number of Methods Jitted                                   2,196
+    POH (Pinned Object Heap) Size (B)                        772,808
+    ThreadPool Completed Work Item Count (Count / 1 sec)           0
+    ThreadPool Queue Length                                      179
+    ThreadPool Thread Count                                       11
+    Time spent in JIT (ms / 1 sec)                                 0
+    Working Set (MB)                                              72
+```
+
+During this test the threadpool thread count was relatively small, allocation rate was low, there were no GC happening and the LOH has a steady size.    
+
+The only thing worth mentioning is that the **"CPU Usage"** was almost 100% during the length of the load test, so let's take a look at what might happen here.
+
+## 2. Use ``dotnet-trace`` and Visual Studio to analyze a CPU trace
+
 
 # Profiling the ``/memory-leak`` endpoint
 
