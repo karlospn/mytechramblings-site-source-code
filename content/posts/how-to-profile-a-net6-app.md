@@ -1,7 +1,7 @@
 ---
-title: "Profiling a .NET6 app running in a docker container with dotnet-trace, dotnet-dump, dotnet-counters and Visual Studio"
+title: "Profiling a .NET6 app running in a linux container with dotnet-trace, dotnet-dump, dotnet-counters, dotnet-gcdump and Visual Studio"
 date: 2022-02-22T18:49:37+01:00
-description: "This post will demonstrate how you can do profiling with dotnet-trace, dotnet-dump, dotnet-counters and Visual Studio on a .NET6 application."
+description: "This post will demonstrate how you can do profiling with dotnet-trace, dotnet-dump, dotnet-counters, dotnet-gcdump and Visual Studio on a .NET6 application."
 tags: ["csharp", "dotnet", "profiling"]
 draft: true
 ---
@@ -209,75 +209,81 @@ I'm going to apply a load of 100 requests per second during 120 seconds to the `
 Here's how the counters look like 60 seconds after the load test began
 ```bash
 [Microsoft.AspNetCore.Hosting]
-    Current Requests                                              15
+    Current Requests                                              47
     Failed Requests                                                0
-    Request Rate (Count / 1 sec)                                  14
-    Total Requests                                               325
+    Request Rate (Count / 1 sec)                                  12
+    Total Requests                                               615
 [System.Runtime]
     % Time in GC since last GC (%)                                 0
-    Allocation Rate (B / 1 sec)                              449,624
-    CPU Usage (%)                                                  0
+    Allocation Rate (B / 1 sec)                              437,504
+    CPU Usage (%)                                                 13
     Exception Count (Count / 1 sec)                                0
-    GC Committed Bytes (MB)                                       16
-    GC Fragmentation (%)                                          22.432
+    GC Committed Bytes (MB)                                       15
+    GC Fragmentation (%)                                           5.626
     GC Heap Size (MB)                                             12
-    Gen 0 GC Count (Count / 1 sec)                                 1
-    Gen 0 Size (B)                                         3,640,560
+    Gen 0 GC Count (Count / 1 sec)                                 0
+    Gen 0 Size (B)                                                24
     Gen 1 GC Count (Count / 1 sec)                                 0
-    Gen 1 Size (B)                                         3,488,928
+    Gen 1 Size (B)                                         7,551,272
     Gen 2 GC Count (Count / 1 sec)                                 0
-    Gen 2 Size (B)                                         4,720,320
-    IL Bytes Jitted (B)                                      269,978
+    Gen 2 Size (B)                                         1,681,048
+    IL Bytes Jitted (B)                                      267,867
     LOH Size (B)                                              98,408
-    Monitor Lock Contention Count (Count / 1 sec)                  0
+    Monitor Lock Contention Count (Count / 1 sec)                  1
     Number of Active Timers                                        0
     Number of Assemblies Loaded                                  113
-    Number of Methods Jitted                                   2,938
-    POH (Pinned Object Heap) Size (B)                      4,443,728
-    ThreadPool Completed Work Item Count (Count / 1 sec)          43
-    ThreadPool Queue Length                                    1,619
-    ThreadPool Thread Count                                       32
+    Number of Methods Jitted                                   2,889
+    POH (Pinned Object Heap) Size (B)                      2,659,768
+    ThreadPool Completed Work Item Count (Count / 1 sec)          51
+    ThreadPool Queue Length                                      207
+    ThreadPool Thread Count                                       47
     Time spent in JIT (ms / 1 sec)                                 0
-    Working Set (MB)                                              83
+    Working Set (MB)                                              82
 ```
 And here's how the counters look like after 120 second (end of the load test)
 ```bash
 [Microsoft.AspNetCore.Hosting]
-    Current Requests                                              73
+    Current Requests                                              65
     Failed Requests                                                0
-    Request Rate (Count / 1 sec)                                  56
-    Total Requests                                             2,727
+    Request Rate (Count / 1 sec)                                  35
+    Total Requests                                             3,103
 [System.Runtime]
     % Time in GC since last GC (%)                                 0
-    Allocation Rate (B / 1 sec)                            2,476,392
-    CPU Usage (%)                                                  1
+    Allocation Rate (B / 1 sec)                            1,270,560
+    CPU Usage (%)                                                 20
     Exception Count (Count / 1 sec)                                0
-    GC Committed Bytes (MB)                                       27
-    GC Fragmentation (%)                                          12.394
-    GC Heap Size (MB)                                             23
+    GC Committed Bytes (MB)                                       25
+    GC Fragmentation (%)                                          14.214
+    GC Heap Size (MB)                                             21
     Gen 0 GC Count (Count / 1 sec)                                 0
     Gen 0 Size (B)                                                24
     Gen 1 GC Count (Count / 1 sec)                                 0
-    Gen 1 Size (B)                                         3,823,928
+    Gen 1 Size (B)                                         6,581,168
     Gen 2 GC Count (Count / 1 sec)                                 0
-    Gen 2 Size (B)                                        15,022,080
-    IL Bytes Jitted (B)                                      272,879
+    Gen 2 Size (B)                                         8,775,656
+    IL Bytes Jitted (B)                                      272,942
     LOH Size (B)                                              98,408
-    Monitor Lock Contention Count (Count / 1 sec)                  2
+    Monitor Lock Contention Count (Count / 1 sec)                  1
     Number of Active Timers                                        0
     Number of Assemblies Loaded                                  113
-    Number of Methods Jitted                                   2,974
-    POH (Pinned Object Heap) Size (B)                      4,443,728
-    ThreadPool Completed Work Item Count (Count / 1 sec)         201
-    ThreadPool Queue Length                                    1,990
-    ThreadPool Thread Count                                       81
+    Number of Methods Jitted                                   2,973
+    POH (Pinned Object Heap) Size (B)                      4,559,088
+    ThreadPool Completed Work Item Count (Count / 1 sec)         135
+    ThreadPool Queue Length                                    1,361
+    ThreadPool Thread Count                                       65
     Time spent in JIT (ms / 1 sec)                                 0
-    Working Set (MB)                                              90
+    Working Set (MB)                                              91
 ```
 
-During this test the CPU usage was low, allocation rate also was low, there were almost no GC happening and the LOH has a steady size.    
+During the test the things that seemed OK were:
+- The CPU usage was low.
+- Allocation rate was low.
+- No Gc collections.
+- LOH had a low and steady size.
 
-The only thing interesting is that the **"ThreadPool Queue Length"** and **"ThreadPool Thread Count"** counters were growing exponentially during the test duration.
+During the test the things that seemed OFF were:
+- Bad Request/Rate ratio.
+- The **"ThreadPool Queue Length"** and **"ThreadPool Thread Count"** counters were growing exponentially during the test duration.
 
 The "ThreadPool Thread Count" should not be growing like this, in an ideal application  everything runs asynchronously which means that a low number of threads can serve a huge amount of requests.
 
@@ -334,85 +340,95 @@ And with that, we have found our performance issue and now we can fix it!
 
 ## 1. Use ``dotnet-counters`` to investigate possible issues
 
-We're going to follow the same steps as the previous performance issue: 
+We're going to do the same steps we did on the previous performance issue:
 - launch ``dotnet-counters``
 - Apply some load with ``bombardier`` to the ``/high-cpu`` endpoint
-- Monitor the counters
+- Monitor the counters looking for something that doesn't seems right.
 
-Here's how the counters look like 60 seconds after the load test began
+Here's how the counters look like 60 seconds after the load test began:
 
 ```bash
 [Microsoft.AspNetCore.Hosting]
-    Current Requests                                               9
+    Current Requests                                               4
     Failed Requests                                                0
     Request Rate (Count / 1 sec)                                   1
-    Total Requests                                                16
+    Total Requests                                                71
 [System.Runtime]
     % Time in GC since last GC (%)                                 0
-    Allocation Rate (B / 1 sec)                               48,960
+    Allocation Rate (B / 1 sec)                               48,608
     CPU Usage (%)                                                 99
     Exception Count (Count / 1 sec)                                0
-    GC Committed Bytes (MB)                                        5
-    GC Fragmentation (%)                                           0.87
-    GC Heap Size (MB)                                              3
+    GC Committed Bytes (MB)                                       10
+    GC Fragmentation (%)                                           0.231
+    GC Heap Size (MB)                                              6
     Gen 0 GC Count (Count / 1 sec)                                 0
     Gen 0 Size (B)                                                24
     Gen 1 GC Count (Count / 1 sec)                                 0
-    Gen 1 Size (B)                                         2,021,144
+    Gen 1 Size (B)                                         1,535,312
     Gen 2 GC Count (Count / 1 sec)                                 0
-    Gen 2 Size (B)                                                24
-    IL Bytes Jitted (B)                                      183,974
-    LOH Size (B)                                              98,408
-    Monitor Lock Contention Count (Count / 1 sec)                  0
+    Gen 2 Size (B)                                         2,185,032
+    IL Bytes Jitted (B)                                      247,267
+    LOH Size (B)                                             196,792
+    Monitor Lock Contention Count (Count / 1 sec)                  6
     Number of Active Timers                                        0
     Number of Assemblies Loaded                                  113
-    Number of Methods Jitted                                   1,998
-    POH (Pinned Object Heap) Size (B)                        772,808
-    ThreadPool Completed Work Item Count (Count / 1 sec)           2
-    ThreadPool Queue Length                                      193
-    ThreadPool Thread Count                                        9
-    Time spent in JIT (ms / 1 sec)                                 4.63
-    Working Set (MB)                                              72
+    Number of Methods Jitted                                   2,664
+    POH (Pinned Object Heap) Size (B)                      2,206,568
+    ThreadPool Completed Work Item Count (Count / 1 sec)           1
+    ThreadPool Queue Length                                      695
+    ThreadPool Thread Count                                        4
+    Time spent in JIT (ms / 1 sec)                                 0
+    Working Set (MB)                                              81
 ```
-And here's how the counters look like after 120 second (end of the load test)
+Here's how the counters look like 120 seconds after the load test began:
 
 ```bash
 [Microsoft.AspNetCore.Hosting]
-    Current Requests                                              11
+    Current Requests                                               3
     Failed Requests                                                0
     Request Rate (Count / 1 sec)                                   0
-    Total Requests                                                23
+    Total Requests                                               136
 [System.Runtime]
-    % Time in GC since last GC (%)                                 0
-    Allocation Rate (B / 1 sec)                                8,168
+    % Time in GC since last GC (%)                                53
+    Allocation Rate (B / 1 sec)                                8,128
     CPU Usage (%)                                                 99
     Exception Count (Count / 1 sec)                                0
-    GC Committed Bytes (MB)                                        5
-    GC Fragmentation (%)                                           0.87
-    GC Heap Size (MB)                                              4
+    GC Committed Bytes (MB)                                       11
+    GC Fragmentation (%)                                           3.386
+    GC Heap Size (MB)                                             10
     Gen 0 GC Count (Count / 1 sec)                                 0
     Gen 0 Size (B)                                                24
     Gen 1 GC Count (Count / 1 sec)                                 0
-    Gen 1 Size (B)                                         2,021,144
+    Gen 1 Size (B)                                           462,464
     Gen 2 GC Count (Count / 1 sec)                                 0
-    Gen 2 Size (B)                                                24
-    IL Bytes Jitted (B)                                      198,752
-    LOH Size (B)                                              98,408
+    Gen 2 Size (B)                                         5,019,752
+    IL Bytes Jitted (B)                                      252,401
+    LOH Size (B)                                             196,792
     Monitor Lock Contention Count (Count / 1 sec)                  0
     Number of Active Timers                                        0
     Number of Assemblies Loaded                                  113
-    Number of Methods Jitted                                   2,196
-    POH (Pinned Object Heap) Size (B)                        772,808
+    Number of Methods Jitted                                   2,728
+    POH (Pinned Object Heap) Size (B)                      3,145,928
     ThreadPool Completed Work Item Count (Count / 1 sec)           0
-    ThreadPool Queue Length                                      179
-    ThreadPool Thread Count                                       11
+    ThreadPool Queue Length                                    1,651
+    ThreadPool Thread Count                                        3
     Time spent in JIT (ms / 1 sec)                                 0
-    Working Set (MB)                                              72
+    Working Set (MB)                                              83
 ```
 
-During this test the threadpool thread count was relatively small, allocation rate was low, there were no GC happening and the LOH has a steady size.    
+During the test the things that seemed OK were:
+- The threadpool thread count was relatively small.
+- Allocation rate was low.
+- No Gc collections.
+- LOH had a low and steady size.    
 
-The only thing worth mentioning is that the **"CPU Usage"** was almost 100% during the length of the load test, so let's take a look at what might happen here.
+During the test the things that seemed OFF were:
+- A terrible Request/Rate ratio.
+- The **"CPU Usage"** was almost 100% during the length of the load test.
+
+Having this low request/rate tied to the fact that the CPU usage was almost 100% the entire load test means that the CPU is the current bottleneck, which probably means that our app might be doing some operations that are wasting too many CPU cycles.
+
+Let's dig deeper.
 
 ## 2. Use ``dotnet-trace`` and Visual Studio to analyze a CPU trace
 
@@ -458,3 +474,153 @@ After taking a look at the trace, it's pretty clear that the performance issue i
 
 # Profiling the ``/memory-leak`` endpoint
 
+## 1. Use ``dotnet-counters`` to investigate possible issue
+
+We're going to do the same steps we did on the previous performance issues: 
+- Launch ``dotnet-counters``.
+- Apply some load with ``bombardier`` to the ``/memory-leak`` endpoint.
+- Monitor the counters looking for something that doesn't seems right.
+
+Here's how the counters look like 60 seconds after the load test began:
+
+```bash
+[Microsoft.AspNetCore.Hosting]
+    Current Requests                                               1
+    Failed Requests                                                0
+    Request Rate (Count / 1 sec)                                  45
+    Total Requests                                             2,075
+[System.Runtime]
+    % Time in GC since last GC (%)                                 1
+    Allocation Rate (B / 1 sec)                                1.113e+08
+    CPU Usage (%)                                                101
+    Exception Count (Count / 1 sec)                                0
+    GC Committed Bytes (MB)                                      172
+    GC Fragmentation (%)                                           4.763
+    GC Heap Size (MB)                                            162
+    Gen 0 GC Count (Count / 1 sec)                                22
+    Gen 0 Size (B)                                           192,120
+    Gen 1 GC Count (Count / 1 sec)                                 0
+    Gen 1 Size (B)                                         3,996,216
+    Gen 2 GC Count (Count / 1 sec)                                 0
+    Gen 2 Size (B)                                            1.5739e+08
+    IL Bytes Jitted (B)                                      272,014
+    LOH Size (B)                                              98,408
+    Monitor Lock Contention Count (Count / 1 sec)                 15
+    Number of Active Timers                                        0
+    Number of Assemblies Loaded                                  113
+    Number of Methods Jitted                                   3,009
+    POH (Pinned Object Heap) Size (B)                      4,876,328
+    ThreadPool Completed Work Item Count (Count / 1 sec)          90
+    ThreadPool Queue Length                                    2,079
+    ThreadPool Thread Count                                        2
+    Time spent in JIT (ms / 1 sec)                                 0
+    Working Set (MB)                                             245
+```
+Here's how the counters look like 120 seconds after the load test began:
+
+```bash
+[Microsoft.AspNetCore.Hosting]
+    Current Requests                                               1
+    Failed Requests                                                0
+    Request Rate (Count / 1 sec)                                  47
+    Total Requests                                             6,534
+[System.Runtime]
+    % Time in GC since last GC (%)                                 1
+    Allocation Rate (B / 1 sec)                               1.1626e+08
+    CPU Usage (%)                                                 99
+    Exception Count (Count / 1 sec)                                0
+    GC Committed Bytes (MB)                                      500
+    GC Fragmentation (%)                                           3.639
+    GC Heap Size (MB)                                            478
+    Gen 0 GC Count (Count / 1 sec)                                23
+    Gen 0 Size (B)                                           176,048
+    Gen 1 GC Count (Count / 1 sec)                                 0
+    Gen 1 Size (B)                                         5,040,208
+    Gen 2 GC Count (Count / 1 sec)                                 0
+    Gen 2 Size (B)                                            4.8388e+08
+    IL Bytes Jitted (B)                                      274,173
+    LOH Size (B)                                             241,800
+    Monitor Lock Contention Count (Count / 1 sec)                 26
+    Number of Active Timers                                        0
+    Number of Assemblies Loaded                                  113
+    Number of Methods Jitted                                   3,019
+    POH (Pinned Object Heap) Size (B)                      4,876,328
+    ThreadPool Completed Work Item Count (Count / 1 sec)          94
+    ThreadPool Queue Length                                      674
+    ThreadPool Thread Count                                        2
+    Time spent in JIT (ms / 1 sec)                                 0
+    Working Set (MB)                                             575
+```
+
+During the test the things that seemed OK were:
+- The threadpool thread count was small.
+- CPU usage was high but there were a pretty decent number of total requests processed.
+
+During the test the things that seemed OFF were:
+- Allocation rate was quite high.
+- The working set and the GC Heap Size were growing exponentially.
+- Gen 2 Size was quite big (461Mb).
+
+There are some suspicious things here:
+- The fact that the GC Heap Size kept growing during the test means that more and more managed object we're added to the memory.   
+- The working set and the GC Heap had quite a similar size at the end of the test.
+- At the end of the test the Gen 2 Size was really big.
+
+Those results indicate that we might have a memory leak. 
+
+## 2. Use ``dotnet-gcdump`` and Visual Studio to analyze a memory dump
+
+> You can use  ``dotnet-dump``  instead of ``dotnet-gcdump`` , take a full dump or a heap dump, open it with Visual Studio, start debugging with the "Debug Managed Memory" option and you'll get the same results that using ``dotnet-gcdump``.   
+But there is a catch, to use the "Debug Managed Memory" from Visual Studio you need **Visual Studio Enterprise**.
+
+The ``dotnet-gcdump`` tool collects GC dumps of .NET processes. These dumps are useful for several scenarios:
+
+- Comparing the number of objects on the heap at several points in time.
+- Analyzing roots of objects.
+- Collecting general statistics about the counts of objects on the heap.
+
+I'm going to apply another load of 100 requests per second during 120 seconds to the ``memory-leak`` endpoint with bombardier, and while the load test is running I'll capture 2 snapshots of the GC Heap.  
+
+Why capture 2 snapshots instead of a single one?   
+Well, because the easiest way to know what's happening in the Heap is to take 2 snapshots in a different point in time and compare them. That way I'll be able to see which objects where created on the Heap between those 2 intervals.
+
+You can capture a snapshot of the GC Heap with this command:   
+``./dotnet-gcdump collect --process-id 1``
+
+- The ``collect`` command collects a GC dump from a running process.
+- The ``-p|--process-id`` parameter specifies the process id to collect the trace, in this case we're inside a docker container so the PID is always 1.   
+
+
+We're going to analyze those dumps with Visual Studio also, but the dumps are inside the docker container, so I'm going to copy them from inside the container to my local machine using the command:
+
+``docker cp <container-id>:<path-to-the-gcdump> .``
+
+Let's open the first dump with Visual Studio and it will shouw us a screen with all the managed objects that where on the Heap.
+
+![vs-gcdump-managed-objects](/img/vs-gcdump-managed-objects.png)
+
+If we select "Compare to > Browse" on the menu and select the second dump it will shows us the diff between two diffent dump files and be able to compare the objects in the Heap.
+
+![vs-gcdump-compare-snapshots](/img/vs-gcdump-compare-snapshots.png)
+
+If we order the results by "Size Diff"  (Total size difference between the current snapshot and the baseline) those are the top results:
+
+![vs-gcdump-top-objects](/img/vs-gcdump-top-objects.png)
+
+Having strings and objects in the top spots is nothing unusual, because any app contains hundreds or even thousands of strings and objects.    
+
+The object of type Node<Guid, Object> is far more interesting. First of all let's take a look at which types are referenced by this Node<Guid, Object>
+
+![vs-gcdump-references](/img/vs-gcdump-references.png)
+
+More than 3800 new strings were created between the 2 dumps and those strings have a reference to the Node<Guid,Object>   
+Also the size of those new string is almost 400Mb, which matches quite a bit with the total size of the GC Heap.
+
+Now if we take a look at the GCRoots for this object.
+
+![vs-gcdump-path-root](/img/vs-gcdump-path-root.png)
+
+The GC root can be found on the "``Profiling.Api.Service.MemoryLeak.MemoryLeakService``", which is one of the namespaces of the demo app.   
+It seems that this service has a reference to a ``ConcurrentDictionary<Guid, Object>`` and with any new request the dictionary is being populated with more and more items.
+
+It's pretty clear that the performance issue is the "``Profiling.Api.Service.MemoryLeak.MemoryLeakService``" function, and therefore we can go now and try to fix it.
