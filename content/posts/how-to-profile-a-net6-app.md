@@ -556,7 +556,7 @@ And these are the counter values after applying load to the endpoint during 120 
     Working Set (MB)                                             575
 ```
 
-The counter that seemed OK were:
+The counters that seemed OK were:
 - The threadpool thread count was small.
 - CPU usage was high but there were a pretty decent number of total requests processed.
 
@@ -601,11 +601,11 @@ We're going to analyze those dumps with Visual Studio also, but the dumps are in
 
 ``docker cp <container-id>:<path-to-the-gcdump> .``
 
-Let's open the first dump with Visual Studio and it will show us a screen with all the managed objects that where on the Heap.
+Let's open the first dump with Visual Studio, it will show us a screen with all the managed objects that where on the Heap.
 
 ![vs-gcdump-managed-objects](/img/vs-gcdump-managed-objects.png)
 
-If we select "Compare to > Browse" on the menu and select the second dump it will shows us the diff between two diffent dump files and be able to compare the objects in the Heap.
+If we select "Compare to > Browse" on the menu and select the second dump it will shows us the diff between those 2 dump files.
 
 ![vs-gcdump-compare-snapshots](/img/vs-gcdump-compare-snapshots.png)
 
@@ -613,20 +613,20 @@ If we order the results by "Size Diff"  (Total size difference between the curre
 
 ![vs-gcdump-top-objects](/img/vs-gcdump-top-objects.png)
 
-Having strings and objects in the top spots is nothing unusual, because any app contains hundreds or even thousands of strings and objects.    
+Having strings and objects in the top spots is nothing unusual, any app contains hundreds or even thousands of strings and objects.    
 
-The object of type Node<Guid, Object> is far more interesting. First of all let's take a look at which types are referenced by this Node<Guid, Object>
+The object of type Node<Guid, Object> is far more interesting. First of all let's take a look at which types are referenced by this ``Node<Guid, Object>``
 
 ![vs-gcdump-references](/img/vs-gcdump-references.png)
 
-More than 3800 new strings were created between the 2 dumps and those strings have a reference to the Node<Guid,Object>   
-Also the size of those new string is almost 400Mb, which matches quite a bit with the total size of the GC Heap.
+More than 3800 new strings with a reference to the ``Node<Guid,Object>`` object were created in the interval of time between the 2 dumps.   
+Also the size of those new strings is almost 400Mb, which matches quite a bit with the total size of the GC Heap.
 
 Now if we take a look at the GCRoots for this object.
 
 ![vs-gcdump-path-root](/img/vs-gcdump-path-root.png)
 
 The GC root can be found on the "``Profiling.Api.Service.MemoryLeak.MemoryLeakService``", which is one of the namespaces of the demo app.   
-It seems that this service has a reference to a ``ConcurrentDictionary<Guid, Object>`` and with any new request the dictionary is being populated with more and more items.
+It seems that this service has a reference to a ``ConcurrentDictionary<Guid, Object>`` and with any new request the dictionary is being populated with more and more strings. 
 
-It's pretty clear that the performance issue is the "``Profiling.Api.Service.MemoryLeak.MemoryLeakService``" function, and therefore we can go now and try to fix it.
+It's pretty clear that the performance issue is in the ``ConcurrentDictionary<Guid, Object>`` object found in the "``Profiling.Api.Service.MemoryLeak.MemoryLeakService``" class, and therefore we can now try to fix it.
