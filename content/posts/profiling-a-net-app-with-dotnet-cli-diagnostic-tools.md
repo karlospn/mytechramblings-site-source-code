@@ -1,8 +1,8 @@
 ---
 title: "Profiling a .NET6 app running in a linux container with dotnet-trace, dotnet-dump, dotnet-counters, dotnet-gcdump and Visual Studio"
 date: 2022-02-22T18:49:37+01:00
-description: "This post will demonstrate how you can do profiling with dotnet-trace, dotnet-dump, dotnet-counters, dotnet-gcdump and Visual Studio on a .NET6 application."
-tags: ["csharp", "dotnet", "performance", "linux"]
+description: "This post contains a few practical examples showing you how to do profiling on a .NET6 application running in a linux container with the .NET global diagnostic tools (dotnet-trace, dotnet-dump, dotnet-counters and dotnet-gcdump) and Visual Studio."
+tags: ["csharp", "dotnet", "performance", "linux", "containers", "docker"]
 draft: true
 ---
 
