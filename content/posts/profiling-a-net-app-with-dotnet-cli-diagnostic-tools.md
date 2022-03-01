@@ -1,9 +1,9 @@
 ---
 title: "Profiling a .NET6 app running in a linux container with dotnet-trace, dotnet-dump, dotnet-counters, dotnet-gcdump and Visual Studio"
-date: 2022-02-22T18:49:37+01:00
-description: "This post contains a few practical examples showing you how to do profiling on a .NET6 application running in a linux container with the .NET CLI diagnostic tools (dotnet-trace, dotnet-dump, dotnet-counters and dotnet-gcdump) and Visual Studio."
+date: 2022-03-01T10:01:37+01:00
+description: "This post contains a few practical examples showing you how to profile a .NET6 application running in a linux container using the .NET CLI diagnostic tools (dotnet-trace, dotnet-dump, dotnet-counters and dotnet-gcdump) and Visual Studio."
 tags: ["csharp", "dotnet", "performance", "linux", "containers", "docker"]
-draft: true
+draft: false
 ---
 
 # Introduction
@@ -40,7 +40,7 @@ One easy solution to this problem is to install the tools in the initial Docker 
 
 The only downside to this approach is increased Docker image size. 
 
-The next code snippet shows how to add the .NET CLI tools inside a docker image alongside your application.
+The next code snippet shows how to add the .NET CLI diagnostic tools inside a docker image alongside your application.
 
 ```yaml
 FROM mcr.microsoft.com/dotnet/sdk:6.0-bullseye-slim AS build-env
@@ -100,13 +100,13 @@ The source code can be found on my [GitHub](https://github.com/karlospn/profilin
 I'll be running the app as a docker container on my local machine because it's the easiest and fastest setup possible, but it doesn't matter if you're running on a Kubernetes cluster, a virtual machine or any other cloud services, the steps you need to follow when trying to pinpoint a performance issue are exactly the same.    
 The only thing that might change are the steps needed to install the diagnostic tools binaries. 
 
-To simulate a more realistic environment I have set some memory an CPU limits to the app running on docker (**1024Mb and a 1 CPU**).
+To simulate a more realistic environment I have set some memory an CPU limits to the app running on docker (**1024Mb and 1 CPU**).
 
 ``docker run -d -p 5003:80 -m 1024m --cpus=1 profiling.api``
 
 Also I'll be using [Bombardier](https://github.com/codesenberg/bombardier) to generate traffic on the app.   
 
-Bombardier is a modern HTTP(S) benchmarking tool, written in Golang and it's really simple to use when you want to execute a performance or a load test.
+Bombardier is a modern HTTP(S) benchmarking tool, written in Golang and really simple to use when you want to run a performance or a load test.
 
 # Profiling the _/blocking-threads_ endpoint
 
@@ -115,7 +115,7 @@ Bombardier is a modern HTTP(S) benchmarking tool, written in Golang and it's rea
 ``dotnet-counters`` is **always the first step** when we want to begin a performance investigation.   
 
 ``dotnet-counters`` is a performance monitoring and first-level performance investigation tool. It can observe performance counter values that are published via the EventCounter API.    
-For example, you can quickly monitor things like the CPU usage or the rate of exceptions being thrown in your .NET Core application to see if there's anything suspicious before diving into more serious performance investigation using ``dotnet-dump`` or ``dotnet-trace``.
+For example, you can quickly monitor things like the CPU usage or the rate of exceptions being thrown in your .NET Core application to see if there's anything suspicious before diving into more serious performance investigation tools like ``dotnet-dump`` or ``dotnet-trace``.
 
 The command we're going to use to launch ``dotnet-counters`` is the following one:
 
@@ -311,7 +311,7 @@ Now we can open it with Visual Studio. To start a debugging session, select "Deb
 
 ![vs-dump-debug](/img/vs-dump-debug.png)
 
-Keep im mind that a dump it's a snapshot of your application in a concrete point of time, so you can't debug the application, but what we can do is select "Debug > Windows > Threads" to get a  list of what were the threads doing at the time we captured the dump.
+Keep in mind that a dump it's a snapshot of your application in a concrete point in time, so you can't debug the application, but what we can do is select "Debug > Windows > Threads" to get a  list of what were the threads doing at the time we captured the dump.
 
 
 And as you can see on the next screenshot, it looks suspicious the amount of threads that are on the "Sleep" state.
@@ -336,7 +336,7 @@ If we keep diggingg a little bit further and take a look at this thread call sta
 
 ![vs-dump-task-lock](/img/vs-dump-task-lock.png)
 
-It's pretty clear there is some bad code on the "BlockingThreadsService.Run" function that is blocking threads, so now we can try to fix it.    
+It's pretty clear that there is some bad code on the "BlockingThreadsService.Run" function that is blocking threads, so now we can try to fix it.    
 I'm not going to fix it in this post, we have found the performance issue and now we can move on to another one.
 
 # Profiling the _/high-cpu_ endpoint
@@ -459,8 +459,8 @@ On this list we can see that "CalculatePrimeNumber" takes the number one spot on
 
 ![vs-trace-open-details](/img/vs-trace-open-details.png)
 
-This section lists every function that the .NET trace profiled and shows both the total CPU and the self CPU time.
-- Total CPU time: CPU time spent code in this function and in functions called by this function.
+This next section lists every function that the .NET trace profiled and shows the total CPU time spent and the self CPU time spent.
+- Total CPU time: CPU time spent executing code in this function and in functions called by this function.
 - Self CPU time: CPU time spent executing code in this function, excluding time in functions called by this function.
 
 One way to investigate is ordering by "Self CPU", we'll get the functions ordered by how much CPU time they spent without any dependency.
@@ -599,7 +599,7 @@ We're going to analyze those dumps with Visual Studio also, but the dumps are in
 
 ``docker cp <container-id>:<path-to-the-gcdump> .``
 
-Let's open the first dump with Visual Studio, it will show us a screen with all the managed objects that where on the Heap.
+Let's open the first dump with Visual Studio, it will show us a screen with all the managed objects that were on the Heap.
 
 ![vs-gcdump-managed-objects](/img/vs-gcdump-managed-objects.png)
 
