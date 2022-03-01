@@ -1,29 +1,23 @@
 ---
 title: "Profiling a .NET6 app running in a linux container with dotnet-trace, dotnet-dump, dotnet-counters, dotnet-gcdump and Visual Studio"
 date: 2022-02-22T18:49:37+01:00
-description: "This post contains a few practical examples showing you how to do profiling on a .NET6 application running in a linux container with the .NET global diagnostic tools (dotnet-trace, dotnet-dump, dotnet-counters and dotnet-gcdump) and Visual Studio."
+description: "This post contains a few practical examples showing you how to do profiling on a .NET6 application running in a linux container with the .NET CLI diagnostic tools (dotnet-trace, dotnet-dump, dotnet-counters and dotnet-gcdump) and Visual Studio."
 tags: ["csharp", "dotnet", "performance", "linux", "containers", "docker"]
 draft: true
 ---
 
 # Introduction
 
-Every software developer at some time or other has stumbled with an application that doesn't perform well, and when it happens I find a lot of unfamiliarity about what steps to take. And that's the reason I decided to write this beginner's article. 
+Every software developer at some time or other has stumbled with an application that doesn't perform well, and when it happens I find a lot of unfamiliarity about what steps to take. And that's the reason I decided to write this post. 
 
-I have built a .NET6 application beforehand, this app has a few performance issues and in this post we're going to try to spot them.
+This post is aimed at people with no knowledge of how to profile an application using the .NET CLI tools and what should they look for when a possible performance issue arises. If you’re a performance veteran you can skip it.
+
+I have built a containerized .NET6 application beforehand, this app has a few performance issues and we're going to try to spot them.
 
 The performance issues on this demo app are oversimplified and I'm sure that if you take a quick glance on its source code you'll be able to spot them pretty quickly, but we are not going to do that, instead of that we're going to use the .NET CLI diagnostic tools to profile the app and try to understand what is happening.  
 
 On a real scenario the performance issues will not be so easy to spot on, but the objective of this post is to serve as stepping stone for beginners, so when faced with a real performance issue you know the basic steps to follow.
 
-All of the topics I’m going to discuss in this demo are basic stuff:
-
-- How to monitor the application performance counters and use them as a first-level performance investigation.   
-- How to create a memory dump and use it to investigate why are the threads being blocked.
-- How to investigate the contents of the GC Heap.
-- How to obtain a CPU trace and use it to investigate possible CPU problems.
-
-If you’re a performance veteran this post is not for you, so you can skip this one.
 
 # .NET CLI diagnostic tools
 
@@ -46,7 +40,7 @@ One easy solution to this problem is to install the tools in the initial Docker 
 
 The only downside to this approach is increased Docker image size. 
 
-Here's a snippet showing how I have built the demo application:
+The next code snippet shows how to add the .NET CLI tools inside a docker image alongside your application.
 
 ```yaml
 FROM mcr.microsoft.com/dotnet/sdk:6.0-bullseye-slim AS build-env
@@ -83,11 +77,11 @@ ENTRYPOINT ["dotnet", "Profiling.Api.dll"]
 
 # Executing .NET CLI tools in a running container
 
-In order to access these tools on a running container, we need to be able to access it at runtime. We can use the ``docker exec`` command to launch a shell in the running container.
+In order to access these tools on a running container, we need to be able to access it. We can use the ``docker exec`` command to launch a shell on running container.
 
 ``docker exec -it -w //tools <container-id> sh``
 
-And once we're inside the container we're ready to execute any of the diagnostic tools like this:
+And once we're inside the container we're ready to launch any of the diagnostic tools like this:
 
 ``./dotnet-counters monitor --process-id 1``
 
@@ -100,11 +94,11 @@ The application we're going to profile is a .NET 6 API with 3 endpoints:
 - ``/high-cpu`` endpoint.
 - ``/memory-leak`` endpoint.
 
-As you can see, the performance issues we will tackle on each endpoint are pretty self-explanatory.   
+As you can see, the performance issues we will try to solve on each endpoint are pretty self-explanatory.   
 The source code can be found on my [GitHub](https://github.com/karlospn/profiling-net6-api-demo)
 
 I'll be running the app as a docker container on my local machine because it's the easiest and fastest setup possible, but it doesn't matter if you're running on a Kubernetes cluster, a virtual machine or any other cloud services, the steps you need to follow when trying to pinpoint a performance issue are exactly the same.    
-The only thing that might change is how you're going to install the diagnostic tools binaries. 
+The only thing that might change are the steps needed to install the diagnostic tools binaries. 
 
 To simulate a more realistic environment I have set some memory an CPU limits to the app running on docker (**1024Mb and a 1 CPU**).
 
@@ -112,9 +106,9 @@ To simulate a more realistic environment I have set some memory an CPU limits to
 
 Also I'll be using [Bombardier](https://github.com/codesenberg/bombardier) to generate traffic on the app.   
 
-Bombardier is a modern HTTP(S) benchmarking tool, written in Golang and easy to use for performance and load testing tests.
+Bombardier is a modern HTTP(S) benchmarking tool, written in Golang and it's really simple to use when you want to execute a performance or a load test.
 
-# 1. Profiling the _/blocking-threads_ endpoint
+# Profiling the _/blocking-threads_ endpoint
 
 ## 1. Using _dotnet-counters_ to investigate possible performance issues
 
@@ -134,7 +128,7 @@ If you're running outside a container and do not know the PID of the process you
 - The ``--counters`` is an optional parameter and you need to specify a comma-separated list of counters.   
 The default counters are the ``System.Runtime`` counters, but when working with an API I find useful to monitor also the ``Microsoft.AspNetCore.Hosting`` counters, so you can see how many requests are being served, how many requests are failing, request rate, etc.
 
-That's the output you'll see after launching the command:
+That's the output you'll see after launching the tool:
 
 ```bash
 [Microsoft.AspNetCore.Hosting]
@@ -201,13 +195,13 @@ As you can see, it's quite a lot of counters, let me explain briefly the meaning
 - **Time spent in JIT**: The total time spent doing jitting work.
 - **Working Set**: The amount of physical memory mapped to the process.
 
-Right now we're monitoring the app counters in real time, but there is no traffic in our application and nothing worth mentioning is happening, so let's apply some load using bombardier.
+Right now we're monitoring the app counters in real time, but there is no traffic in our application, so nothing worth mentioning is happening. Let's apply some load using bombardier.
 
 I'm going to apply a load of 100 requests per second during 120 seconds to the ``blocking-threads`` endpoint.
 
 ``./bombardier.exe -c 120 --rate 100 -l -d 120s http://localhost:5003/blocking-threads``
 
-These are the counter values after applying load to the endpoint during 60 seconds (load test midpoint):
+These are the values of the counters halfway through the load test:
 ```bash
 [Microsoft.AspNetCore.Hosting]
     Current Requests                                              47
@@ -241,7 +235,8 @@ These are the counter values after applying load to the endpoint during 60 secon
     Time spent in JIT (ms / 1 sec)                                 0
     Working Set (MB)                                              82
 ```
-And these are the counter values after applying load to the endpoint during 120 seconds (load test end):
+And these are the values of the counters at the end of the load test:
+
 ```bash
 [Microsoft.AspNetCore.Hosting]
     Current Requests                                              65
@@ -279,11 +274,11 @@ And these are the counter values after applying load to the endpoint during 120 
 The counters that seemed OK were:
 - The CPU usage was low.
 - Allocation rate was low.
-- No Gc collections.
+- No GC collections.
 - LOH had a low and steady size.
 
 The counters that seemed OFF were:
-- Bad Request/Rate ratio.
+- Poor Request/Rate ratio.
 - The **"ThreadPool Queue Length"** and **"ThreadPool Thread Count"** counters were increasing exponentially during the test duration.
 
 The "ThreadPool Thread Count" should not be growing like this, in an ideal application  everything runs asynchronously which means that a low number of threads can serve a huge amount of requests.
@@ -305,6 +300,9 @@ I'm going to apply another load of 100 requests per second during 120 seconds to
 
 ``./dotnet-dump collect --process-id 1``
 
+- The ``collect`` command  collects a dump from a running process.
+- The ``-p|--process-id`` parameter specifies the process id to collect the trace, in this case we're inside a docker container so the PID is always 1.  
+
 A good way to analyze this dump is with Visual Studio, but the dump is inside the docker container, so I'm going to copy it from inside the container to my local machine using the command:
 
 ``docker cp <container-id>:<path-to-the-dump> .``
@@ -313,14 +311,14 @@ Now we can open it with Visual Studio. To start a debugging session, select "Deb
 
 ![vs-dump-debug](/img/vs-dump-debug.png)
 
-Keep im mind that a dump it's a snapshot of you application in a concrete point of time, so you can't debug the application, but what we can do is select "Debug > Windows > Threads" to get a  list of what were the threads doing at the time we captured the dump.
+Keep im mind that a dump it's a snapshot of your application in a concrete point of time, so you can't debug the application, but what we can do is select "Debug > Windows > Threads" to get a  list of what were the threads doing at the time we captured the dump.
 
 
 And as you can see on the next screenshot, it looks suspicious the amount of threads that are on the "Sleep" state.
 
 ![vs-dump-threads-view](/img/vs-dump-threads-view.png)
 
-Another thing we can do is select "Debug > Windows > Parallel Stacks" and it gives us a more graphical view of what's happening with the threads.
+Another thing we can do is select "Debug > Windows > Parallel Stacks" and it gives us a more graphical view of what's happening with the active threads.
 
 ![vs-dump-parallel-stacks](/img/vs-dump-parallel-stacks.png)
 
@@ -328,11 +326,11 @@ In this case we can see that there are 74 threads grouped on 2 stacks, if we tak
 
 > *To navigate from the Parallel Stacks window to the source code we need to enable the microsoft symbols server and also have access to the application symbols.*
 
-Visual Studio will take us to what command was the thread executing after double-clicking on the "BlockingThreadsService.Run" on the Parallel Stacks windows
+After double-clicking on the "BlockingThreadsService.Run" on the Parallel Stacks windows, Visual Studio will show us which command was this thread executing when the dump was created.
 
 ![vs-dump-task-waitall](/img/vs-dump-task-waitall.png)
 
-It seems that the thread was stopped in the "Task.WaitAll" command.
+And it seems that the thread was stopped in the "Task.WaitAll" command.
 
 If we keep diggingg a little bit further and take a look at this thread call stack, we will see that Task1 is blocked on the lock statement
 
@@ -350,7 +348,7 @@ We're going to follow the same steps we did on the previous performance issue:
 - Apply some load with ``bombardier`` to the ``/high-cpu`` endpoint
 - Monitor the counters looking for something that doesn't seems right.
 
-These are the counter values after applying load to the endpoint during 60 seconds (load test midpoint):
+These are the values of the counters halfway through the load test:
 ```bash
 [Microsoft.AspNetCore.Hosting]
     Current Requests                                               4
@@ -384,7 +382,7 @@ These are the counter values after applying load to the endpoint during 60 secon
     Time spent in JIT (ms / 1 sec)                                 0
     Working Set (MB)                                              81
 ```
-And these are the counter values after applying load to the endpoint during 120 seconds (load test end):
+And these are the values of the counters at the end of the load test:
 ```bash
 [Microsoft.AspNetCore.Hosting]
     Current Requests                                               3
@@ -422,7 +420,7 @@ And these are the counter values after applying load to the endpoint during 120 
 The counters that seemed OK were:
 - The threadpool thread count was relatively small.
 - Allocation rate was low.
-- No Gc collections.
+- No GC collections.
 - LOH had a low and steady size.    
 
 The counters that seemed OFF were:
@@ -446,22 +444,22 @@ I'm going to apply another load of 100 requests per second during 120 seconds to
 - The ``collect`` command  collects a diagnostic trace from a running process.
 - The ``-p|--process-id`` parameter specifies the process id to collect the trace, in this case we're inside a docker container so the PID is always 1.   
 - The ``--duration`` parameter when specified, will trace for the given timespan and then automatically stop the trace.
-- By default ``dotnet-trace`` collects CPU traces and CLR events if you want to capture instead GC collection traces you can use the ``--profile`` parameter.
+- By default ``dotnet-trace`` collects CPU traces and CLR events, if you want to capture instead GC collection traces you can use the ``--profile`` parameter.
 
 
 We're going to analyze this trace with Visual Studio also, but the trace is inside the docker container, so I'm going to copy it from inside the container to my local machine using the command:
 
 ``docker cp <container-id>:<path-to-the-trace> .``
 
-Now we open the trace with Visual Studio, and right after opening it we are prompted with the top CPU functions.   
+Now we can open the trace with Visual Studio, and right after opening it we are prompted with the top CPU functions.   
 
 ![vs-trace-top-functions](/img/vs-trace-top-functions.png)
 
-On this list we can see that "CalculatePrimeNumber" takes the number one spot on the list with more than 60% of CPU time. If we click to "Open details" we can get a more in-depth information.
+On this list we can see that "CalculatePrimeNumber" takes the number one spot on the list with more than 60% of CPU time. If we click on the "Open details" link we can get a more in-depth information.
 
 ![vs-trace-open-details](/img/vs-trace-open-details.png)
 
-This will list every function that .NET trace profiled and it's going to show both the total CPU and the self CPU time.
+This section lists every function that the .NET trace profiled and shows both the total CPU and the self CPU time.
 - Total CPU time: CPU time spent code in this function and in functions called by this function.
 - Self CPU time: CPU time spent executing code in this function, excluding time in functions called by this function.
 
@@ -475,7 +473,7 @@ We can also view the call tree for every function, clicking in the "Show Hot Pat
 
 After taking a look at the trace, it's pretty clear that the performance issue is the "CalculatePrimeNumber" function, and therefore we can go now and try to fix it.
 
-It's pretty clear there the "CalculatePrimeNumber" function is spending a huge amount of CPU time, so now we take a look at the source code and try to determine if the CPU spent by this method is legitimate or it is a bug or maybe the source code can be improved to reduce the CPU usage.
+The "CalculatePrimeNumber" function is spending a huge amount of CPU time, so now we can take a look at the source code and try to determine if the CPU spent by this method is legitimate, it is a bug or maybe the code can be improved to reduce the usage.
 
 
 # Profiling the _/memory-leak_ endpoint
@@ -487,7 +485,7 @@ We're going to follow the same steps we did on the previous performance issues:
 - Apply some load with ``bombardier`` to the ``/memory-leak`` endpoint.
 - Monitor the counters looking for something that doesn't seems right.
 
-These are the counter values after applying load to the endpoint during 60 seconds (load test midpoint):
+These are the values of the counters halfway through the load test:
 ```bash
 [Microsoft.AspNetCore.Hosting]
     Current Requests                                               1
@@ -521,7 +519,7 @@ These are the counter values after applying load to the endpoint during 60 secon
     Time spent in JIT (ms / 1 sec)                                 0
     Working Set (MB)                                             245
 ```
-And these are the counter values after applying load to the endpoint during 120 seconds (load test end):
+And these are the values of the counters at the end of the load test:
 ```bash
 [Microsoft.AspNetCore.Hosting]
     Current Requests                                               1
@@ -562,20 +560,20 @@ The counters that seemed OK were:
 
 The counters that seemed OFF were:
 - Allocation rate was quite high.
-- The Working Set and the GC Heap Size were growing exponentially and both had a similar size at the end of the test.   
-- The fact that the GC Heap Size kept growing during the test means that more and more managed object we're added to the memory.
-- Gen 2 Size was big.
+- The Working Set and the GC Heap Size kept growing exponentially and both had a similar size at the end of the test.   
+- The fact that the GC Heap Size kept growing during the test means that more and more managed objects we're added to the memory.
+- GC Gen 2 Size was quite big in size.
 
 Everything indicates that we might have a potential memory leak. 
 
-## 2. Using _dotnet-gcdump_ and Visual Studio to analyze a GC dump
+## 2. Using _dotnet-gcdump_ and Visual Studio to analyze a GC Heap dump
 
-> You can use  ``dotnet-dump``  instead of ``dotnet-gcdump`` , with ``dotnet-dump`` you will:
+> You can use  ``dotnet-dump``  instead of ``dotnet-gcdump``, with ``dotnet-dump`` you will do the following steps:
 > - Take a Full or a Heap Dump.
 > - Open it with Visual Studio.
 > - Start debugging with the "Debug Managed Memory" option.  
 >
-> And you'll come to the same conclusion as if you're using ``dotnet-gcdump``.   
+> And you'll come to the same conclusion as if you were using ``dotnet-gcdump``.   
 But there is a catch, to use the "Debug Managed Memory" from Visual Studio you need **Visual Studio Enterprise**.
 
 The ``dotnet-gcdump`` tool collects GC dumps of .NET processes. These dumps are useful for several scenarios:
@@ -588,7 +586,7 @@ I'm going to apply another load of 100 requests per second during 120 seconds to
 
 - Why capture 2 snapshots instead of a single one?   
 
-Well, because the easiest way to know what's going on in the Heap is to take 2 snapshots in a different point in time and compare them. That way I'll be able to see which new objects where added on the Heap between those 2 intervals.
+Well, because the easiest way to know what's going on in the Heap is to take 2 snapshots in different points in time and compare them. That way I'll be able to see which new objects where added on the Heap between those 2 intervals.
 
 You can capture a snapshot of the GC Heap with this command:   
 ``./dotnet-gcdump collect --process-id 1``
@@ -605,7 +603,7 @@ Let's open the first dump with Visual Studio, it will show us a screen with all 
 
 ![vs-gcdump-managed-objects](/img/vs-gcdump-managed-objects.png)
 
-If we select "Compare to > Browse" on the menu and select the second dump it will shows us the diff between those 2 dump files.
+If we select "Compare to > Browse" on the menu and select the second dump it will shows us the diff between the 2 dump files.
 
 ![vs-gcdump-compare-snapshots](/img/vs-gcdump-compare-snapshots.png)
 
@@ -615,18 +613,18 @@ If we order the results by "Size Diff"  (Total size difference between the curre
 
 Having strings and objects in the top spots is nothing unusual, any app contains hundreds or even thousands of strings and objects.    
 
-The object of type Node<Guid, Object> is far more interesting. First of all let's take a look at which types are referenced by this ``Node<Guid, Object>``
+The object of type ``Node<Guid, Object>`` is far more interesting. First of all, let's take a look at which types are referenced by this ``Node<Guid, Object>``
 
 ![vs-gcdump-references](/img/vs-gcdump-references.png)
 
-More than 3800 new strings with a reference to the ``Node<Guid,Object>`` object were created in the interval of time between the 2 dumps.   
-Also the size of those new strings is almost 400Mb, which matches quite a bit with the total size of the GC Heap.
+More than 3800 new strings with a reference to the ``Node<Guid,Object>`` object were created in the interval of time between the 2 dumps. Also the size of those new strings is quite big, almost 400Mb.
 
-Now if we take a look at the GCRoots for this object.
+That's quite a sizeable amount of new strings referencing this particular object, let's dig deeper and take look at the Roots for this object.
 
 ![vs-gcdump-path-root](/img/vs-gcdump-path-root.png)
 
-The GC root can be found on the "``Profiling.Api.Service.MemoryLeak.MemoryLeakService``", which is one of the namespaces of the demo app.   
-It seems that this service has a reference to a ``ConcurrentDictionary<Guid, Object>`` and with any new request the dictionary is being populated with more and more strings. 
+If we take a look at the roots we can see that the ``Profiling.Api.Service.MemoryLeak.MemoryLeakService`` (which is a service I have built on our demo app) has a reference to a ``ConcurrentDictionary<Guid, Object>``, and in turn, the ``ConcurrentDictionary<Guid, Object>`` has a reference to the ``Node<Guid,Object>``.
 
-It's pretty clear that the performance issue is in the ``ConcurrentDictionary<Guid, Object>`` object found in the "``Profiling.Api.Service.MemoryLeak.MemoryLeakService``" class, and therefore we can now try to fix it.
+The leakage seems to be coming from the ``ConcurrentDictionary<Guid, Object>`` on the ``Profiling.Api.Service.MemoryLeak.MemoryLeakService`` namespace.  
+
+The next step would be to dig in the source code and take a look at what this dictionary is used for, because this behaviour might be completely legitimate and this app needs to work with thousands of new strings from time to time, and instead of a memory leak this is just a poor implementation.
