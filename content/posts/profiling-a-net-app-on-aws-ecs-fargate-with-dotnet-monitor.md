@@ -1,10 +1,9 @@
 ---
 title: "Profiling a .NET6 app running on AWS ECS Fargate with dotnet-monitor"
-date: 2022-03-28T22:01:20+02:00
+date: 2022-03-30T10:25:20+02:00
 tags: ["aws", "fargate", "ecs", "containers", "dotnet", "csharp", "performance"]
-description: "The dotnet-monitor tool is an alternative to the .NET diagnostic tools and in this post I'll show you how to deploy a .NET 6 application into AWS ECS Fargate with dotnet-monitor as a sidecar container.    
-And afterwards how you can profile an app using the dotnet-monitor HTTP API."
-draft: true
+description: "The dotnet-monitor tool is an alternative to the .NET CLI diagnostic tools. In this post I'll show you how to deploy a .NET 6 application into AWS ECS Fargate with dotnet-monitor as a sidecar container, and afterwards how you can profile an app using the dotnet-monitor HTTP API."
+draft: false
 ---
 
 > **Just show me the code**   
@@ -70,7 +69,7 @@ But first of all, we need to deploy the app into AWS ECS Fargate with ``dotnet-m
 
 # **Deploy into AWS ECS Fargate**
 
-This is the entire stack what we're going to deploy on AWS:
+This is the entire stack that we're going to deploy on AWS:
 
 ![fargate-dotnet-monitor-cdk-app](/img/fargate-dotnet-monitor-cdk-app.png)
 
@@ -183,15 +182,15 @@ The next code snippet is probably the most interesting part of the CDK app, and 
 ```
 - The ``dotnet-monitor`` tool is configured to run in Listen mode. The tool establishes a diagnostic communication channel at the specified Unix Domain Socket path by the ``DOTNETMONITOR_DiagnosticPort__EndpointName`` environment variable.   
 Also the application container has a ``DOTNET_DiagnosticPorts`` environment variable specified so that the application's runtime will communicate with the dotnet monitor instance at the specified Unix Domain Socket path.    
-Each port configuration specifies whether it is a ``suspend`` or ``nosuspend`` port. Ports specifying suspend in their configuration will cause the runtime to pause early on in the startup path before most runtime subsystems have started. This allows any agent to receive a connection and properly setup before the application startup continues
+Each port configuration specifies whether it is a ``suspend`` or ``nosuspend`` port. Ports specifying suspend in their configuration will cause the runtime to pause early on in the startup path before most runtime subsystems have started. This allows any agent to receive a connection and properly setup before the application startup continues.
   
 - In Listen mode the Unix Domain Socket file needs to be shared among the ``dotnet-monitor`` container and the app container you wish to monitor. If your diagnostic port is established at ``/diag/port``, then a shared volume needs to be mounted at ``/diag`` in the ``dotnet-monitor`` container and also in the app container. To share a directory in Fargate we'll use [Bind Mounts](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/bind-mounts.html).
 
-- The ``dotnet-monitor`` tool is configured to instruct the application runtime to produce dump files at the path specified by the ``DOTNETMONITOR_Storage__DumpTempFolder`` environment variable. If you want to create a dump on Fargate you'll need to enable the ``SYS_PTRACE`` Capability on the application container.
+- The ``dotnet-monitor`` tool is configured to instruct the application runtime to produce dump files at the path specified by the ``DOTNETMONITOR_Storage__DumpTempFolder`` environment variable. If you want to get a dump on Fargate you'll need to enable the ``SYS_PTRACE`` Capability on the application container.
   
 - By default, ``dotnet monitor``  requires authentication. For the purposes of this demo, authentication has been disabled by using the ``--no-auth`` command line switch. 
   
-- By default, ``dotnet monitor``  has HTTPS enabled. For the purposes of this example, the artifact URLs have been changed to ``http://localhost:52323`` using the ``DOTNETMONITOR_Urls`` environment variable such that a TLS certificate is not required.
+- By default, ``dotnet monitor``  has HTTPS enabled. For the purposes of this example, the artifact URLs have been changed to ``http://+:52323`` using the ``DOTNETMONITOR_Urls`` environment variable such that a TLS certificate is not required.
 
 If you want to take a look at the entire CDK app, you can go to my [Github](https://github.com/karlospn/profiling-net6-api-on-aws-ecs-fargate-using-dotnet-monitor) page.
 
@@ -204,11 +203,11 @@ $ curl http://alb-mon-ecs-prf-dotnet-demo-744303317.eu-west-1.elb.amazonaws.com:
 
 # **Profiling the Demo API using dotnet-monitor**
 
-In my [previous post](https://www.mytechramblings.com/posts/profiling-a-net-app-with-dotnet-cli-diagnostic-tools/) I wrote a detailed guide about how to run a performance investigation in each of the 3 endpoints of the demo API.
+In my [previous post](https://www.mytechramblings.com/posts/profiling-a-net-app-with-dotnet-cli-diagnostic-tools/) I wrote a detailed guide about how to run a performance investigation in each one of the 3 endpoints of the demo API.
 
 **In this post I'm not going to show you how to find all the performance issues the demo API has.**      
 **I'm going to walk you through only 1 of the issues, that's because the process to investigate and pinpoint what is going on with this app is practically identical as the one I did on my previous post.**   
-**In fact the only thing that changes is that I'm interacting with the ``dotnet-monitor`` HTTP API to collect diagnostics instead of the .NET CLI diagnostic tools.**
+**In fact the only thing that changes is that I'm interacting with the ``dotnet-monitor`` HTTP API to collect diagnostics instead of the .NET CLI diagnostic tools.**   
 
 
 # **Profiling the /blocking-threads endpoint**
@@ -227,8 +226,8 @@ GET /trace?pid={pid}&profile={profile}&durationSeconds={durationSeconds}&egressP
 ```
 
 - ``pid``: The ID of the process.
-- ``profile``: The name of the profile(s) used to collect events. Multiple profiles may be specified by separating them with commas. Default is ``Cpu,Http,Metrics``**
-- ``durationSeconds``: The duration of the trace operation in seconds. Default is 30
+- ``profile``: The name of the profile(s) used to collect events. Multiple profiles may be specified by separating them with commas. Default is ``Cpu,Http,Metrics``.**
+- ``durationSeconds``: The duration of the trace operation in seconds. Default is 30.
 - ``egressProvider``: If specified, uses the named egress provider for egressing the collected trace. When not specified, the trace is written to the HTTP response stream.
 
 **The available profiles are:
@@ -253,7 +252,7 @@ I'm going to apply a load of 100 requests per second during 120 seconds to the `
 And at the same time I'm going to capture a trace using the ``dotnet-monitor /trace`` endpoint.  
 ``GET http://alb-mon-ecs-prf-dotnet-demo-744303317.eu-west-1.elb.amazonaws.com:52323/trace?pid=1&durationSeconds=120``   
 
-The following two screenshots shows the values of the performance counters during the load test:
+The following screenshots shows the values of the performance counters during the load test:
 
 ![dotnetmonitor-counters-1](/img/dotnetmonitor-counters-1.png)
 
@@ -285,7 +284,7 @@ The format to invoke it is the following one:
 GET /dump?pid={pid}&type={type}&egressProvider={egressProvider}
 ```
 - ``pid``: The ID of the process.
-- ``type``: The type of dump to capture. Default value is ``WithHeap``**
+- ``type``: The type of dump to capture. Default value is ``WithHeap``.**
 - ``egressProvider``: If specified, uses the named egress provider for egressing the collected trace. When not specified, the trace is written to the HTTP response stream.
 
 
@@ -331,11 +330,11 @@ If we keep diggingg a little bit further and take a look at this thread call sta
 ![vs-dump-task-lock](/img/vs-dump-task-lock.png)
 
 It's pretty clear that there is some bad code on the "BlockingThreadsService.Run" function that is blocking threads, so now we can try to fix it.    
-I'm not going to fix it in this post, we have found the performance issue and now we can move on to another one.
+I'm not going to fix it in this post, we have found the performance issue and now we can move on.
 
 # .NET CLI Diagnostic tools vs dotnet-monitor
 
-As I stated in the previous section, it doesn't matter if you're using the .NET CLI diagnostic tools or ``dotnet-monitor``, the process to investigate and pinpoint what is going wrong with an app is almost the same.
+As I stated in the previous section, it doesn't matter if you're using the .NET CLI diagnostic tools or ``dotnet-monitor`` to profile an app, the process to investigate and pinpoint what is going wrong is almost the same.
 
 When using the .NET CLI diagnostic tools:
 - Launch ``dotnet-counters``.
