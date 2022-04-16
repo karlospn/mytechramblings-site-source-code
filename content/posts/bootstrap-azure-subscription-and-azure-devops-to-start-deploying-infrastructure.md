@@ -9,12 +9,19 @@ draft: true
 > **Just show me the code**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/bootstrapping-azure-subscription-and-azdo-project-for-terraform).
 
-Nowadays almost every develops knows what infrastructure as code is.
+Nowadays almost every developer knows what infrastructure as code is.
 
 In a nutshell, infrastructure as code (IaC) is the process of managing and provisioning computer data centers through machine-readable definition files, instead of through physical hardware configuration or interactive configuration tools.
 
-In this post I want to show you how to programmatically bootstrap an Azure subscription and how to setup Azure DevOps to start deploy Infrastructure as Code using Azure Pipelines.
+Using IaC on Azure with Azure DevOps requires of a minimal bootstrap process, you could do it manually and it will work. The required steps are the following ones:
+-  Create an Storage Account to store the Terraform state
+-  Create a Service Principal on our AAD with a role with enough permissions to create new resources on Azure.
+-  Store the Service Principal credential somewhere safe.
+-  On Azure Pipelines create a CI/CD pipeline that gets the Service Principal credentials and deploys the infrastructure on Azure using Terraform.
 
+The steps required are quite simple and as I stated before you could do it manually, but you'll have to do them every time you want to deploy resources into a new subscription. So, having some kind of automation seems the way to go here.
+
+And that's what I want to show you in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code.
 
 # Azure Bicep vs ARM Templates vs Terraform
 
