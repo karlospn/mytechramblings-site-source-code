@@ -413,7 +413,7 @@ To run the script on **Azure Cloud Shell** you'll need to upload the following f
 
 And afterwards, just execute the ``Initialize-AzureBootstrapProcessForTerraform.ps1`` script.
 
-![vs-dump-parallel-stacks](/img/vs-dump-parallel-stacks.png)
+![tf-bs-azdo-cloudshell](/img/tf-bs-azdo-cloudshell.png)
 
 # Permissions needed to execute the script
 
@@ -424,13 +424,19 @@ To run the script you'll need to have the following permissions:
 - An ``Azure DevOps PAT`` (Personal Access Token) with a Full Access scope.
 
 
-# Azure DevOps pipeline example
+# Azure DevOps IaC pipeline example
 
 After executing the script we're ready to start deploying infrastructure to Azure using Azure Pipelines.    
 
-The next code snippet is an example of a pipeline that does exactly that.
-
 The pipeline has 3 runtime parameters. The Runtime parameters let you have more control over what values can be passed to a pipeline. In our case we are defining which Terraform commands should the pipeline execute.
+
+![tf-bs-azdo-pipelines-run-pipeline](/img/tf-bs-azdo-pipelines-run-pipeline.png)
+
+The pipeline uses the variable group we have created to obtain the credentials of the SP stored on the Key Vault.
+
+![tf-bs-azdo-variable-group](/img/tf-bs-azdo-variable-group.png)
+
+The next code snippet is an example of a pipeline that does exactly that.
 
 ```yaml
 trigger: none
@@ -510,6 +516,10 @@ steps:
       ARM_TENANT_ID: $(sp-bs-tf-iac-tenant-id)
       ARM_SUBSCRIPTION_ID: $(sp-bs-tf-iac-subscription-id)
 ```
+And here's an example of how the output of the pipeline looks like:
+
+![tf-bs-azdo-pipeline-tf-plan](/img/tf-bs-azdo-pipeline-tf-plan.png)
+
 
 # Reference links
 
