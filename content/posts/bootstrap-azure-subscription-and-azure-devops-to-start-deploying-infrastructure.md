@@ -53,7 +53,7 @@ Here's a detailed list of which resources will be created during the bootstrap p
 - An Storage Account to hold the Terraform State.
 - A Service Principal that will be used by Azure DevOps to deploy the infrastructure onto Azure. This SP uses a custom role.
 - A custom role. 
-  - This custom role has the same permissions as ``Contributor`` but can create role assigmnemts. It also have permissions to read, write and delete data on Azure Key Vault and App Configuration.
+  - This custom role has the same permissions as ``Contributor`` but can create role assigmnemts. It also have permissions to read, write and delete data on Azure Key Vaults and App Configurations.
 - A Key Vault to hold the credentials of the Service Principal.
   - The script by itself adds the SP credentials into the KV, you don't need to do anything.
 - An Azure DevOps variable group that holds the credentials of the Service Principal.
@@ -62,14 +62,14 @@ Here's a detailed list of which resources will be created during the bootstrap p
 
 # Bootstrap Script
 
-The script is built using Powershell and the Az module and it does the following steps:
+The script is built using Powershell and the [Az module](https://docs.microsoft.com/es-es/powershell/azure/what-is-azure-powershell?view=azps-7.4.0) and it does the following steps:
 
 - Creates a Resource Group and a Storage Account using the Azure Az Powershell Module.
 - Inits Terraform using the Storage Account as backend.
 - Imports those 2 resources into the Terraform state.
 - Uses Terraform to create the rest of the resources.
 
-_Why is the script using the Powershell Az Module only to create the resource group and the storage account? Why is it using Terraform to create the rest of the needed resources?_
+> _Why is the script using the Powershell Az Module only to create the resource group and the storage account? Why is it using Terraform to create the rest of the needed resources?_
 
 We could do everything using purely scripting with Powershell and no using Terraform at all, but using Terraform to create the needed resources in this script is simpler, less error prone and much more easy to mantain.   
 
@@ -77,7 +77,7 @@ Also if in a near future we want to update some of the existing resources or eve
 
 The idea behind this script is that you don't need to touch the Powershell script at all, in case you want to add some extra resources or modify the existing ones modify the ``main.tf`` file. 
 
-The next code snippet show the entirety of the script:
+The next code snippet shows the entirety of the script:
 ```powershell
 Param(
     [Parameter(Mandatory=$True)]
@@ -322,14 +322,31 @@ function main
 main
 ```
 
+The script is pretty self-explanatory, but nonetheless here's a quick summary explaining what every function does in the script.
+
+- ``Set-ConfigVars`` function: Reads the config file. More info about the configuration on the section below. 
+- ``Connect-AzureSubscription`` function:  Connects to the specified Azure subscription.
+- ``Set-EnvVarsAsTfVars`` function: The ``Set-ConfigVars`` function returned a hashtable containing the variables on the configuration file. This functions store the hashtable variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so the configuration values can also be used within the Terraform files.
+- ``New-ResourceGroup`` function: Creates a Resource Group if it doesn't exist.
+- ``New-StorageAccount`` function: Creates a Storage Account and a Storage Container if they don't exist.
+- ``Invoke-TerraformInit`` function: Initializes Terraform using the Storage Container as backend
+- ``Import-TerraformState`` function: Adds the Storage Account and the Resource Container into the Tf state, so any future changes can be tracked using the ``Terraform Plan`` command.
+- ``Invoke-TerraformPlan`` function: Runs the ``Terraform Plan`` command.
+- ``Invoke-TerraformApply`` function:  Runs the ``Terraform Apply`` command.
+
+To know the use of the ``$ProvisionBootstrapResources`` parameter and how to execute the script, read the _"How to run the script"_ section below.
+
 # Script configuration
 
 Reusability is key, I don't want to modify the script every time I need to bootstrap a new subscription.
 
 To avoid that, there is a ``config.env`` file that contains the script configuration.
 
-You can change the values on this file to your liking, but you must **NOT** change the name of the variables within the ``config.env`` file or the script will break.
+The configuration values are used in the Powershell script and also in the Terraform files. The script stores the vonfiguration variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so they can be used within the Terraform file.
 
+> You can change the values on this file to your liking, but you must **NOT** change the name of the variables within the ``config.env`` file or the script will break.
+
+The config variables are the following ones:
 
 - ``tf_state_resource_group_name``: The name of the resource group.
 - ``tf_state_storage_account_name``: The name of the storage account.
