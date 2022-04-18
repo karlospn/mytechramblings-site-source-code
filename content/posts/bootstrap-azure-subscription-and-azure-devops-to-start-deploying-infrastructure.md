@@ -2,7 +2,7 @@
 title: "How to bootstrap Terraform and Azure DevOps to start deploying your infrastructure as code to Azure"
 date: 2022-04-15T14:22:10+02:00
 tags: ["azure", "devops", "terraform", "iac"]
-description: "TBD"
+description: "Deploying insfrastructure as code on Azure using Azure DevOps and Terraform requires a minimal bootstrap process. This process could be done manually but you'll have to do it every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here. And that's exactly what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform."
 draft: true
 ---
 
@@ -13,17 +13,17 @@ Nowadays almost every developer knows what infrastructure as code is.
 
 In a nutshell, infrastructure as code (IaC) is the process of managing and provisioning computer resources through machine-readable definition files, instead of through physical hardware configuration or interactive configuration tools.
 
-Using IaC on Azure with Azure DevOps requires a minimal bootstrap process. The required steps are the following ones:
+Deploying insfrastructure as code on Azure using Azure DevOps and Terraform requires a minimal bootstrap process. The required steps are the following ones:
 -  Create a Resource Group.
 -  Create an Storage Account to store the Terraform state.
--  Create a Service Principal on our AAD.
+-  Create a Service Principal on our Azure Active Directory.
 -  Assign a role to the SP with enough permissions to create new resources on Azure.
 -  Store the SP credentials somewhere safe.
--  On Azure Pipelines create a CI/CD pipeline that gets the SP credentials and using Terraform deploys the infrastructure on Azure.
+-  On Azure DevOps when a CI/CD pipeline is executed, it needs to retrieve the SP credentials and create/update/delete the desired infrastructure on Azure using Terraform.
 
-As you can see the required steps are quite simple and you could do them manually, but you'll have to do them every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here.
+As you can see the required steps to start using IaC with Terraform are quite simple and you could perfectly do it manually using the Azure Portal, but you'll have to do them every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here.
 
-And that's what I want to show you in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code.
+And that's what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform.
 
 # Azure Bicep vs ARM Templates vs Terraform
 
@@ -36,11 +36,11 @@ ARM templates are essentially just JSON files with a few extended capabilities, 
 Azure Bicep is an abstraction over ARM templates, that aims to drastically simplify the pain  experience of writing ARM templates, it has a cleaner syntax, improved type safety, and better support for modularity and code re-use.   
 Bicep code is transpiled to standard ARM Template JSON files.
 
-For organizations starting a greenfield deployment **ONLY** on Azure infrastructure and having no prior investment in other configuration languages such as Terraform, Bicep would be a great option.
+For organizations starting a greenfield deployment only on Azure infrastructure and having no prior investment in other configuration languages such as Terraform, Bicep would be a great option.
 
 But the truth is that nowadays most of the companies I know that are working with Azure are using Terraform instead of Azure Bicep. 
 
-Why is that?  Terraform is a more mature option, that works greats with multi-cloud scenarios or even when we want to provision things on some PaaS/SaaS services, like: provisioning things on an Azure DevOps organization or a RabbitMq Cluster hosted wherever, etc.   
+Why is that? Terraform is a more mature option, works greats with multi-cloud scenarios or even when we want to provision resources on some PaaS/SaaS services, like: provisioning an Azure DevOps organization or a RabbitMq Cluster.   
 
 Also, Azure Bicep is relatively new, so for quite some time the only viable option to work with IaC on Azure was either Terraform or ARM templates, so a lot of companies made the choice back then and right now there is not enough benefits to ditch Terraform for Bicep.
 
@@ -50,15 +50,31 @@ Also, Azure Bicep is relatively new, so for quite some time the only viable opti
 Here's a detailed list of which resources will be created during the bootstrap process:
 
 - A Resource Group.
-- An Storage Account to hold the Terraform State.
-- A Service Principal that will be used by Azure DevOps to deploy the infrastructure onto Azure. This SP uses a custom role.
-- A custom role. 
-  - This custom role has the same permissions as ``Contributor`` but can create role assigmnemts. It also have permissions to read, write and delete data on Azure Key Vaults and App Configurations.
-- A Key Vault to hold the credentials of the Service Principal.
-  - The script by itself adds the SP credentials into the KV, you don't need to do anything.
+- An Storage Account that holds the Terraform State.
+- A no delete lock on the Storage Account. 
+- A Service Principal that will be used by Azure DevOps to deploy infrastructure onto Azure. This SP has a custom role.
+- A custom role for deploying infrastructure. This role has the same permissions as ``Contributor`` but can create role assigmnemts. It also have permissions to read, write and delete data on Azure Key Vaults and App Configurations.
+- A Key Vault to hold the credentials of the Service Principal. Also, the script by itself adds the SP credentials into the Key Vault, so you don't need to manipulate the Key Vault at all.
+- A no delete lock on the Key Vault. 
 - An Azure DevOps variable group that holds the credentials of the Service Principal.
-  - The script links the Azure Key Vault we have created with this variable group and map the SP credentials to the variable group, but to do that we will need another Service Principal.
+  - The bootstrap script links the Azure Key Vault we have created with this variable group and maps the SP credentials to the variable group, but to do that we will need another Service Principal.
 - A secondary Service Principal with a ``Key Vault Administrator`` role associated at the resource group scope.
+
+
+> _But why we need a secondary Service Principal?_
+
+The Key Vault holds the Service Principal credentials that will be used to deploy infrastructure to Azure via Terraform. To deploy infrastructure into Azure we will use Azure Pipelines, but
+the pipelines needs to retrieve the SP credentials to be able to deploy the resources, so how we can retrieve those SP credentials?
+
+There are a few options available:
+
+- Create a variable group and store the SP credentials in plain text.
+- Create a variable group, link it with an existing KeyVault and use the secrets stored on the KV as variables in the pipeline.
+- Use the [Azure Key Vault Task](https://docs.microsoft.com/en-us/azure/devops/pipelines/release/azure-key-vault?view=azure-devops)
+
+
+The first option is the easiest to implement but it is the less secure one, so it's discarded, the other two options are both ok, use whatever you prefer, I personally prefer using a variable group because using it alongside with Azure Pipelines is less verbose that using the KeyVault task.   
+Nonetheless if you create a variable group and you want to link it to and existing Key Vault you need a Service Principal with permissions to retrieve secrets from the Vault, I could use the  Service Principal I'll be using to deploy resources to Azure but this SP has a role with far too many permissions, so it is a better practice to create another Service Principal with only Key Vault permissions and use it only to link the variable group with the Vault.
 
 # Bootstrap Script
 
@@ -67,11 +83,11 @@ The script is built using Powershell and the [Az module](https://docs.microsoft.
 - Creates a Resource Group and a Storage Account using the Azure Az Powershell Module.
 - Inits Terraform using the Storage Account as backend.
 - Imports those 2 resources into the Terraform state.
-- Uses Terraform to create the rest of the resources.
+- Uses Terraform to create the rest of the resources listed on the previous section.
 
 > _Why is the script using the Powershell Az Module only to create the resource group and the storage account? Why is it using Terraform to create the rest of the needed resources?_
 
-We could do everything using purely scripting with Powershell and no using Terraform at all, but using Terraform to create the needed resources in this script is simpler, less error prone and much more easy to mantain.   
+We could do everything using purely scripting with Powershell and no using Terraform at all, but using Terraform to create the resources in this script is simpler, less error prone and much more easy to mantain.   
 
 Also if in a near future we want to update some of the existing resources or even add some additional ones it is easier to do it via Terraform than modifying the Powershell script.
 
@@ -321,7 +337,6 @@ function main
 
 main
 ```
-
 The script is pretty self-explanatory, but nonetheless here's a quick summary explaining what every function does in the script.
 
 - ``Set-ConfigVars`` function: Reads the config file. More info about the configuration on the section below. 
@@ -335,6 +350,365 @@ The script is pretty self-explanatory, but nonetheless here's a quick summary ex
 - ``Invoke-TerraformApply`` function:  Runs the ``Terraform Apply`` command.
 
 To know the use of the ``$ProvisionBootstrapResources`` parameter and how to execute the script, read the _"How to run the script"_ section below.
+
+
+# Bootstrap script Terraform part
+
+The Powershell script only creates the necessary resources to start using Terraform (Resource Group + Storage Account), the rest of the resources are created via Terraform.
+
+The next code snippet shows the terraform part of the bootstrap script.
+
+```yaml
+terraform {
+
+  backend "azurerm" {
+    key = "bootstrap.tfstate"
+  }
+
+  required_providers {
+
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = ">=3.0.0"
+    }
+
+    azuredevops = {
+      source = "microsoft/azuredevops"
+      version = ">=0.2.0"
+    }
+
+    azuread = {
+      source  = "azuread"
+      version = ">=2.20.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+}
+
+provider "azuredevops" {
+  org_service_url       = var.azdo_org_url
+  personal_access_token = var.azdo_pat
+}
+
+provider "azuread"{
+}
+
+## Get the configuration of the AzureRM provider
+data "azurerm_client_config" "current" {}
+
+
+## Get the AzDo Team Project 
+data "azuredevops_project" "project" {
+  name = var.azdo_project_name
+}
+
+##########################################################################################
+## Start Importing existing resources into tf
+##########################################################################################
+
+## Create resource group. Already exists created by azure-bootstrap-terraform-init.sh
+resource "azurerm_resource_group" "tf_state_rg" {
+  name     = var.tf_state_resource_group_name
+  location = var.azure_region
+  tags = var.default_tags
+}
+
+## Creates store account that hold Terraform shared state. Already exists created by azure-bootstrap-terraform-init.sh
+resource "azurerm_storage_account" "tf_state_storage" {
+  name                     = var.tf_state_storage_account_name
+  resource_group_name      = azurerm_resource_group.tf_state_rg.name
+  location                 = azurerm_resource_group.tf_state_rg.location
+  account_tier             = "Standard"
+  account_kind             = "StorageV2"
+  account_replication_type = "LRS"
+  
+  tags = merge( 
+    var.default_tags,
+    {
+      "description" = "Storage Account that holds the Terraform state files."
+    })
+}
+
+## Lock the storage account. It cannot be deleted because it is needed by Terraform.
+resource "azurerm_management_lock" "lock_tf_storage_account" {
+  name       = "lock-bs-tf-stacct-${var.project_name}"
+  scope      = azurerm_storage_account.tf_state_storage.id
+  lock_level = "CanNotDelete"
+  notes      = "Locked because it's needed by Terraform"
+}
+
+##########################################################################################
+## End Importing existing resources into tf
+##########################################################################################
+
+##########################################################################################
+## Start Creating KeyVault to hold SP credentials
+##########################################################################################
+
+## KeyVault to hold SP creds
+resource "azurerm_key_vault" "sp_creds_kv" {
+  name                        = "kv-bs-tf-${var.project_name}"
+  location                    = azurerm_resource_group.tf_state_rg.location
+  resource_group_name         = azurerm_resource_group.tf_state_rg.name
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  sku_name                    = "standard"
+  soft_delete_retention_days  = 15
+  enable_rbac_authorization   = true
+  purge_protection_enabled    = false
+  tags                        = merge( 
+    var.default_tags,
+    {
+      "description" = "KeyVault that holds the SP credentials for deploying infrastructure"
+    })
+}
+
+## Lock the key vault. It cannot be deleted because it is needed by Azure DevOps
+resource "azurerm_management_lock" "lock_sp_kv" {
+  name       = "lock-bs-tf-kv-${var.project_name}"
+  scope      = azurerm_key_vault.sp_creds_kv.id
+  lock_level = "CanNotDelete"
+  notes      = "Locked because it's needed by Azure DevOps"
+}
+
+## Add myself as a KV Admin role. This assignment is required to later add the IaC SP credentials into the KV
+resource "azurerm_role_assignment" "me_keyvault_role" {
+  scope                            = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${azurerm_resource_group.tf_state_rg.name}"
+  role_definition_name             = "Key Vault Administrator"
+  principal_id                     = data.azurerm_client_config.current.object_id
+}
+
+##########################################################################################
+## End Creating KeyVault to hold SP credentials
+##########################################################################################
+
+#########################################################################################
+## Start creating SP to be used by Azure DevOps variable group  to access the Key Vault
+##########################################################################################
+
+## Create an AAD application, it's needed to create a SP
+resource "azuread_application" "azdo_keyvault_app" {
+  display_name = "app-bs-tf-azdo-vargroup-kv-connection-${var.project_name}"
+}
+
+## Create an AAD Service Principal
+resource "azuread_service_principal" "azdo_keyvault_sp" {
+  application_id = azuread_application.azdo_keyvault_app.application_id
+}
+
+## Creates a password for the AAD app
+resource "azuread_application_password" "azdo_keyvault_sp_password" {
+  application_object_id = azuread_application.azdo_keyvault_app.id
+  display_name          = "TF generated password" 
+  end_date              = "2040-01-01T00:00:00Z"
+}
+
+## Assign a KV Admin role to the SP. The role is assigned at resource group scope
+resource "azurerm_role_assignment" "azdo_keyvault_role" {
+  scope                            = "/subscriptions/${data.azurerm_client_config.current.subscription_id}/resourceGroups/${azurerm_resource_group.tf_state_rg.name}"
+  role_definition_name             = "Key Vault Administrator"
+  principal_id                     = azuread_service_principal.azdo_keyvault_sp.id
+  skip_service_principal_aad_check = true
+}
+
+## Create a Azure DevOps Service Endpoint to access to KV
+resource "azuredevops_serviceendpoint_azurerm" "keyvault_access" {
+  project_id            = data.azuredevops_project.project.id
+  service_endpoint_name = "service-endpoint-bs-tf-azdo-vargroup-kv-connection-${var.project_name}"
+  credentials {
+    serviceprincipalid  = azuread_application.azdo_keyvault_app.application_id
+    serviceprincipalkey = azuread_application_password.azdo_keyvault_sp_password.value
+  }
+  azurerm_spn_tenantid      = data.azurerm_client_config.current.tenant_id
+  azurerm_subscription_id   = data.azurerm_client_config.current.subscription_id
+  azurerm_subscription_name = "Management Subscription"
+}
+##########################################################################################
+## End creating SP to be used by Azure DevOps variable group  to access the Key Vault
+##########################################################################################
+
+##########################################################################################
+## Start creating SP to be used by AzDo Pipelines to deploy infrastructure to Azure
+##########################################################################################
+
+## Create an AAD application, it's needed to create a SP
+resource "azuread_application" "iac_app" {
+  display_name = "app-bs-tf-deploy-iac-azdo-pipelines-${var.project_name}"
+}
+
+## Create an AAD Service Principal
+resource "azuread_service_principal" "iac_sp" {
+  application_id = azuread_application.iac_app.application_id
+}
+
+## Creates a random password for the AAD app
+resource "azuread_application_password" "iac_sp_password" {
+  application_object_id = azuread_application.iac_app.id
+  display_name          = "TF generated password"   
+  end_date              = "2040-01-01T00:00:00Z"
+}
+
+# Create a custom role for this SP
+resource "azurerm_role_definition" "iac_custom_role" {
+  name        = "role-iac-deploy-${var.project_name}"
+  scope       = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  description = "This is a custom role created via Terraform. It has the same permissions as Contributor but can create role assigmnemts. It also have permissions to read, write and delete data on  Azure Key Vault and App Configuration."
+  permissions {
+    actions     = ["*"]
+    not_actions = [
+      "Microsoft.Authorization/elevateAccess/Action",
+      "Microsoft.Blueprint/blueprintAssignments/write",
+      "Microsoft.Blueprint/blueprintAssignments/delete",
+      "Microsoft.Compute/galleries/share/action"
+    ]
+    data_actions = [ 
+      "Microsoft.KeyVault/vaults/*",
+      "Microsoft.AppConfiguration/configurationStores/*/read",
+      "Microsoft.AppConfiguration/configurationStores/*/write",
+      "Microsoft.AppConfiguration/configurationStores/*/delete"
+    ]
+    not_data_actions = []
+  }
+  assignable_scopes = [
+    "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  ]
+}
+
+## Assign the custom role to the SP. The role is assigned at subscription scope.
+resource "azurerm_role_assignment" "iac_role_assignment" {
+  scope                            = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  role_definition_name             = "role-iac-deploy-${var.project_name}"
+  principal_id                     = azuread_service_principal.iac_sp.id
+  skip_service_principal_aad_check = true
+  depends_on = [
+    azurerm_role_definition.iac_custom_role
+  ]
+}
+
+## Store SP client secret in the KV
+resource "azurerm_key_vault_secret" "iac_sp_secret" {
+  name         = "sp-bs-tf-iac-client-secret"
+  value        = azuread_application_password.iac_sp_password.value
+  key_vault_id = azurerm_key_vault.sp_creds_kv.id
+  tags = var.default_tags
+}
+
+## Store SP client secret in the KV
+resource "azurerm_key_vault_secret" "iac_sp_clientid" {
+  name         = "sp-bs-tf-iac-client-id"
+  value        = azuread_service_principal.iac_sp.application_id
+  key_vault_id = azurerm_key_vault.sp_creds_kv.id
+  tags = var.default_tags
+}
+
+## Store SP client secret in the KV
+resource "azurerm_key_vault_secret" "iac_sp_tenant" {
+  name         = "sp-bs-tf-iac-tenant-id"
+  value        = data.azurerm_client_config.current.tenant_id
+  key_vault_id = azurerm_key_vault.sp_creds_kv.id
+  tags = var.default_tags
+}
+
+## Store SP client secret in the KV
+resource "azurerm_key_vault_secret" "iac_sp_subid" {
+  name         = "sp-bs-tf-iac-subscription-id"
+  value        = data.azurerm_client_config.current.subscription_id
+  key_vault_id = azurerm_key_vault.sp_creds_kv.id
+  tags = var.default_tags
+}
+
+##########################################################################################
+## End creating SP to be used by AzDo Pipelines to deploy infrastructure to Azure
+##########################################################################################
+
+#########################################################################################
+## Start creating Azure DevOps variable Group used for deploy IaC
+##########################################################################################
+
+## Create AZDO variable group with IaC SP credentials
+resource "azuredevops_variable_group" "azdo_iac_var_group" {
+  project_id   = data.azuredevops_project.project.id
+  name         = "vargroup-bs-tf-iac-${var.project_name}"
+  allow_access = true
+
+  key_vault {
+    name                = azurerm_key_vault.sp_creds_kv.name
+    service_endpoint_id = azuredevops_serviceendpoint_azurerm.keyvault_access.id
+  }
+
+  depends_on = [
+    azurerm_key_vault_secret.iac_sp_secret,
+    azurerm_key_vault_secret.iac_sp_clientid,
+    azurerm_key_vault_secret.iac_sp_tenant,
+    azurerm_key_vault_secret.iac_sp_subid
+  ]
+
+  variable {
+    name = "sp-bs-tf-iac-client-id"
+  }
+
+  variable {
+    name = "sp-bs-tf-iac-client-secret"
+  }
+
+  variable {
+    name = "sp-bs-tf-iac-tenant-id"
+  }
+
+  variable {
+    name = "sp-bs-tf-iac-subscription-id"
+  }
+}
+
+##########################################################################################
+## End creating Azure DevOps variable Group used for deploy IaC
+##########################################################################################
+```
+ As I did with the powershell script, let me do another quick summary explaining what the terraform creates.
+
+The first resources you'll see in the Tf file are those 2:
+```yaml
+## Create resource group. Already exists created by azure-bootstrap-terraform-init.sh
+resource "azurerm_resource_group" "tf_state_rg" {
+  name     = var.tf_state_resource_group_name
+  location = var.azure_region
+  tags = var.default_tags
+}
+
+
+
+## Creates store account that hold Terraform shared state. Already exists created by azure-bootstrap-terraform-init.sh
+resource "azurerm_storage_account" "tf_state_storage" {
+  name                     = var.tf_state_storage_account_name
+  resource_group_name      = azurerm_resource_group.tf_state_rg.name
+  location                 = azurerm_resource_group.tf_state_rg.location
+  account_tier             = "Standard"
+  account_kind             = "StorageV2"
+  account_replication_type = "LRS"
+  
+  tags = merge( 
+    var.default_tags,
+    {
+      "description" = "Storage Account that holds the Terraform state files."
+    })
+}
+```
+Terraform is NOT creating a new Resource Group and Storage Account, in the Powershell part of the script we imported these resources into the Tf state, here we're simply declaring them so we can keep track of them via Terraform.
+
+
+
+
+ The terraform file uses those 3 providers:
+
+ - [azurerm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs) provider to create:
+   - 
+ - [azuread](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs) provider to create:
+   - Service Principal used to deploy infrastructure.
+   - Service Principal used to linked the Azure DevOps variable group with the Vault.
+ - [azuredevops](https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs) provider
+
 
 # Script configuration
 
