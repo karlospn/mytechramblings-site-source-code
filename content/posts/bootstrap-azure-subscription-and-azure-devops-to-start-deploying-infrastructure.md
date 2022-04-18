@@ -76,7 +76,7 @@ There are a few options available:
 The first option is the easiest to implement but it is the less secure one, so it's discarded, the other two options are both ok, use whatever you prefer, I personally prefer using a variable group because using it alongside with Azure Pipelines is less verbose that using the KeyVault task.   
 Nonetheless if you create a variable group and you want to link it to and existing Key Vault you need a Service Principal with permissions to retrieve secrets from the Vault, I could use the  Service Principal I'll be using to deploy resources to Azure but this SP has a role with far too many permissions, so it is a better practice to create another Service Principal with only Key Vault permissions and use it only to link the variable group with the Vault.
 
-# Bootstrap Script
+# Bootstrap Script: Powershell part
 
 The script is built using Powershell and the [Az module](https://docs.microsoft.com/es-es/powershell/azure/what-is-azure-powershell?view=azps-7.4.0) and it does the following steps:
 
@@ -94,7 +94,7 @@ Also if in a near future we want to update some of the existing resources or eve
 The idea behind this script is that you don't need to touch the Powershell script at all, in case you want to add some extra resources or modify the existing ones modify the ``main.tf`` file. 
 
 The next code snippet shows the entirety of the script:
-```powershell
+```bash
 Param(
     [Parameter(Mandatory=$True)]
     [bool] $ProvisionBootstrapResources = $false
@@ -352,7 +352,7 @@ The script is pretty self-explanatory, but nonetheless here's a quick summary ex
 To know the use of the ``$ProvisionBootstrapResources`` parameter and how to execute the script, read the _"How to run the script"_ section below.
 
 
-# Bootstrap script Terraform part
+# Bootstrap script: Terraform part
 
 The Powershell script only creates the necessary resources to start using Terraform (Resource Group + Storage Account), the rest of the resources are created via Terraform.
 
@@ -666,9 +666,9 @@ resource "azuredevops_variable_group" "azdo_iac_var_group" {
 ## End creating Azure DevOps variable Group used for deploy IaC
 ##########################################################################################
 ```
- As I did with the powershell script, let me do another quick summary explaining what the terraform creates.
+ As I did with the powershell script, let me run another quick summary explaining what the terraform creates.
 
-The first resources you'll see in the Tf file are those 2:
+The first two resources you'll see in the Tf file are these ones:
 ```yaml
 ## Create resource group. Already exists created by azure-bootstrap-terraform-init.sh
 resource "azurerm_resource_group" "tf_state_rg" {
@@ -676,8 +676,6 @@ resource "azurerm_resource_group" "tf_state_rg" {
   location = var.azure_region
   tags = var.default_tags
 }
-
-
 
 ## Creates store account that hold Terraform shared state. Already exists created by azure-bootstrap-terraform-init.sh
 resource "azurerm_storage_account" "tf_state_storage" {
@@ -695,19 +693,28 @@ resource "azurerm_storage_account" "tf_state_storage" {
     })
 }
 ```
-Terraform is NOT creating a new Resource Group and Storage Account, in the Powershell part of the script we imported these resources into the Tf state, here we're simply declaring them so we can keep track of them via Terraform.
+In this code snippet Terraform is NOT creating a new Resource Group and Storage Account. In the Powershell part of the script we imported these resources into the Tf state, here we're simply declaring them so we can keep track of them via Terraform.
 
+ In the tf file we're using those 3 providers:
 
-
-
- The terraform file uses those 3 providers:
-
- - [azurerm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs) provider to create:
-   - 
- - [azuread](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs) provider to create:
+ - The [azuread](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs) provider to create:
    - Service Principal used to deploy infrastructure.
    - Service Principal used to linked the Azure DevOps variable group with the Vault.
- - [azuredevops](https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs) provider
+ - The [azuredevops](https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs) provider to create:
+    - A Service Endpoint that uses the secondary Service Principal credentials (is required to linked the variable group with the Vault).
+    - A Variable Group linked with an Azure Key Vault.
+ - The [azurerm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs) provider to create:
+   - Storage Account Lock
+   - Azure KeyVault
+   - Azure KeyVault Lock
+   - Assign myself a "Key Vault Administrator" Role (this role assignment is necessary because we need to add the SP credentials into the Vault).
+   - Create a custom role used to deploy the infrastructure.
+   - Assign the custo role to the SP that will deploy the infrastructure.
+   - Assign the Secondary SP a "Key Vault Administrator" Role (this role assignment is necesarry to link the variable group with the Vault).
+   - Store the SP credentials into the Vault.
+
+
+Also, if you take a look at my [GitHub repository](https://github.com/karlospn/bootstrapping-azure-subscription-and-azdo-project-for-terraform) you'll see that there is a ``variables.tf`` file. More info about it in the next section.
 
 
 # Script configuration
@@ -716,7 +723,7 @@ Reusability is key, I don't want to modify the script every time I need to boots
 
 To avoid that, there is a ``config.env`` file that contains the script configuration.
 
-The configuration values are used in the Powershell script and also in the Terraform files. The script stores the vonfiguration variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so they can be used within the Terraform file.
+The configuration variables are used in the Powershell script and also in the Terraform files. The script stores the configuration variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so they can be used within the Terraform file.   
 
 > You can change the values on this file to your liking, but you must **NOT** change the name of the variables within the ``config.env`` file or the script will break.
 
