@@ -2,7 +2,7 @@
 title: "How to bootstrap Terraform and Azure DevOps to start deploying your infrastructure as code to Azure"
 date: 2022-04-19T12:30:10+02:00
 tags: ["azure", "devops", "terraform", "iac", "powershell"]
-description: "Deploying insfrastructure as code on Azure using Azure Pipelines and Terraform requires a minimal bootstrap process. This process can be done manually, but you'll have to do it every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here. And that's exactly what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform."
+description: "Deploying infrastructure as code on Azure using Azure Pipelines and Terraform requires a minimal bootstrap process. This process can be done manually, but you'll have to do it every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here. And that's exactly what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform."
 draft: false
 ---
 
@@ -13,7 +13,7 @@ Nowadays almost every developer knows what infrastructure as code is.
 
 In a nutshell, infrastructure as code (IaC) is the process of managing and provisioning computer resources through machine-readable definition files, instead of through physical hardware configuration or interactive configuration tools.
 
-Deploying insfrastructure as code on Azure using Azure Pipelines and Terraform requires a bootstrap process. The required steps are the following ones:
+Deploying infrastructure as code on Azure using Azure Pipelines and Terraform requires a bootstrap process. The required steps are the following ones:
 -  Create a Resource Group.
 -  Create an Storage Account to store the Terraform state.
 -  Create a Service Principal on our Azure Active Directory.
