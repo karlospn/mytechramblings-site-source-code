@@ -1,9 +1,9 @@
 ---
 title: "How to bootstrap Terraform and Azure DevOps to start deploying your infrastructure as code to Azure"
-date: 2022-04-15T14:22:10+02:00
+date: 2022-04-19T12:30:10+02:00
 tags: ["azure", "devops", "terraform", "iac", "powershell"]
 description: "Deploying insfrastructure as code on Azure using Azure Pipelines and Terraform requires a minimal bootstrap process. This process can be done manually, but you'll have to do it every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here. And that's exactly what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform."
-draft: true
+draft: false
 ---
 
 > **Just show me the code**   
