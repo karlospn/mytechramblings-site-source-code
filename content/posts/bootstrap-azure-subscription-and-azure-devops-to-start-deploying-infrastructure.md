@@ -2,7 +2,7 @@
 title: "How to bootstrap Terraform and Azure DevOps to start deploying your infrastructure as code to Azure"
 date: 2022-04-15T14:22:10+02:00
 tags: ["azure", "devops", "terraform", "iac"]
-description: "Deploying insfrastructure as code on Azure using Azure DevOps and Terraform requires a minimal bootstrap process. This process could be done manually but you'll have to do it every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here. And that's exactly what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform."
+description: "Deploying insfrastructure as code on Azure using Azure Pipelines and Terraform requires a minimal bootstrap process. This process can be done manually but you'll have to do it every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here. And that's exactly what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform."
 draft: true
 ---
 
@@ -13,68 +13,72 @@ Nowadays almost every developer knows what infrastructure as code is.
 
 In a nutshell, infrastructure as code (IaC) is the process of managing and provisioning computer resources through machine-readable definition files, instead of through physical hardware configuration or interactive configuration tools.
 
-Deploying insfrastructure as code on Azure using Azure DevOps and Terraform requires a minimal bootstrap process. The required steps are the following ones:
+Deploying insfrastructure as code on Azure using Azure Pipelines and Terraform requires a minimal bootstrap process. The required steps are the following ones:
 -  Create a Resource Group.
 -  Create an Storage Account to store the Terraform state.
 -  Create a Service Principal on our Azure Active Directory.
 -  Assign a role to the SP with enough permissions to create new resources on Azure.
 -  Store the SP credentials somewhere safe.
--  On Azure DevOps when a CI/CD pipeline is executed, it needs to retrieve the SP credentials and create/update/delete the desired infrastructure on Azure using Terraform.
+-  When an IaC pipeline is executed on Azure Pipelines, it needs to retrieve the SP credentials and create/update/delete the desired infrastructure on Azure using Terraform.
 
-As you can see the required steps to start using IaC with Terraform are quite simple and you could perfectly do it manually using the Azure Portal, but you'll have to do them every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here.
+As you can see the required steps to start using IaC with Terraform and Azure Pipelines are quite simple and you could perfectly do it manually using the Azure Portal, but you'll have to do them every time you want to start deploying resources into a new subscription. So, having some kind of automation seems the way to go here.
 
 And that's what I want to show in this post, how to programmatically bootstrap an Azure subscription and an Azure DevOps project to start deploying Infrastructure as Code with Terraform.
 
 # Azure Bicep vs ARM Templates vs Terraform
 
-First of all let me talk a little about which tools are available when working with IaC on Azure.
-
 When working with Azure we have 2 native options for IaC: Azure Resource Manager (ARM) templates or Azure Bicep.
 
-ARM templates are essentially just JSON files with a few extended capabilities, describing the expected infrastructure to end up with, after applying the template. It works good, but writing them are a really pain in the ass.
+ARM templates are essentially just JSON files with a few extended capabilities, describing the expected infrastructure to end up with, after applying the template. It works OK, but writing them are a really pain in the ass.
 
 Azure Bicep is an abstraction over ARM templates, that aims to drastically simplify the pain  experience of writing ARM templates, it has a cleaner syntax, improved type safety, and better support for modularity and code re-use.   
 Bicep code is transpiled to standard ARM Template JSON files.
 
-For organizations starting a greenfield deployment only on Azure infrastructure and having no prior investment in other configuration languages such as Terraform, Bicep would be a great option.
+For organizations starting a greenfield deployment only on Azure infrastructure and having no prior investment in other configuration languages such as Terraform, Bicep is a good option.
 
 But the truth is that nowadays most of the companies I know that are working with Azure are using Terraform instead of Azure Bicep. 
 
-Why is that? Terraform is a more mature option, works greats with multi-cloud scenarios or even when we want to provision resources on some PaaS/SaaS services, like: provisioning an Azure DevOps organization or a RabbitMq Cluster.   
+Why is that? Terraform is a more mature option, works greats with multi-cloud scenarios or even when we want to provision resources on some PaaS/SaaS services, like: provisioning resources inside an Azure DevOps organization or a RabbitMq Cluster.   
 
-Also, Azure Bicep is relatively new, so for quite some time the only viable option to work with IaC on Azure was either Terraform or ARM templates, so a lot of companies made the choice back then and right now there is not enough benefits to ditch Terraform for Bicep.
+Also, Azure Bicep is relatively new, so for quite some time the only viable options to work with IaC on Azure was either Terraform or ARM templates, so a lot of companies made the choice back then and right now there is not enough benefits to ditch Terraform for Bicep.
 
 
-# Resources created during the bootstrap process
+# Resources created by the bootstrap script
 
 Here's a detailed list of which resources will be created during the bootstrap process:
 
 - A Resource Group.
 - An Storage Account that holds the Terraform State.
-- A no delete lock on the Storage Account. 
-- A Service Principal that will be used by Azure DevOps to deploy infrastructure onto Azure. This SP has a custom role.
-- A custom role for deploying infrastructure. This role has the same permissions as ``Contributor`` but can create role assigmnemts. It also have permissions to read, write and delete data on Azure Key Vaults and App Configurations.
-- A Key Vault to hold the credentials of the Service Principal. Also, the script by itself adds the SP credentials into the Key Vault, so you don't need to manipulate the Key Vault at all.
-- A no delete lock on the Key Vault. 
+- A cannot-delete lock on the Storage Account. 
+- A Service Principal that will be used by Azure Pipelines to deploy infrastructure onto Azure. This SP will have a custom role.
+- A custom role used for deploying infrastructure. This role has the same permissions as ``Contributor`` but can create role assigmnemts. It also have permissions to read, write and delete data on Azure Key Vaults and App Configurations.
+- A Key Vault to hold the credentials of the Service Principal. 
+  - The script itself adds the SP credentials into the Key Vault, so you don't need to manipulate the Vault at all.
+- A cannot-delete lock on the Key Vault. 
 - An Azure DevOps variable group that holds the credentials of the Service Principal.
-  - The bootstrap script links the Azure Key Vault we have created with this variable group and maps the SP credentials to the variable group, but to do that we will need another Service Principal.
-- A secondary Service Principal with a ``Key Vault Administrator`` role associated at the resource group scope.
+  - The bootstrap script links the Azure Key Vault we have created with this variable group and maps the SP credentials to the variable group.
+- A second Service Principal with a ``Key Vault Administrator`` role associated at the resource group scope.
 
 
-> _But why we need a secondary Service Principal?_
+> _Why we need a second Service Principal?_
 
-The Key Vault holds the Service Principal credentials that will be used to deploy infrastructure to Azure via Terraform. To deploy infrastructure into Azure we will use Azure Pipelines, but
-the pipelines needs to retrieve the SP credentials to be able to deploy the resources, so how we can retrieve those SP credentials?
+ To automate the deploying of infrastructure into Azure we will use Azure Pipelines, which means that the pipelines needs to retrieve the SP credentials to be able to deploy the resources.   
+ 
+ And the SP credentials are stored in the Key Vault, so how we can the pipeline retrieve it?
 
 There are a few options available:
 
 - Create a variable group and store the SP credentials in plain text.
-- Create a variable group, link it with an existing KeyVault and use the secrets stored on the KV as variables in the pipeline.
+- Create a variable group, [link it with an existing Key Vault](https://docs.microsoft.com/en-us/azure/devops/pipelines/library/variable-groups?view=azure-devops&tabs=yaml#link-secrets-from-an-azure-key-vault) and use the secrets stored on the Vault as variables in the pipeline.
 - Use the [Azure Key Vault Task](https://docs.microsoft.com/en-us/azure/devops/pipelines/release/azure-key-vault?view=azure-devops)
 
 
-The first option is the easiest to implement but it is the less secure one, so it's discarded, the other two options are both ok, use whatever you prefer, I personally prefer using a variable group because using it alongside with Azure Pipelines is less verbose that using the KeyVault task.   
-Nonetheless if you create a variable group and you want to link it to and existing Key Vault you need a Service Principal with permissions to retrieve secrets from the Vault, I could use the  Service Principal I'll be using to deploy resources to Azure but this SP has a role with far too many permissions, so it is a better practice to create another Service Principal with only Key Vault permissions and use it only to link the variable group with the Vault.
+The first option is the easiest to implement but it is the less secure one, so it's discarded.
+
+The other two options are both ok, use whatever you prefer, I personally prefer using a variable group because is less verbose that using the KeyVault task.   
+
+Nevertheless, if you create a variable group and you want to link it to and existing Key Vault you need a Service Principal with permissions to retrieve secrets from the Vault.   
+In this case I could use the Service Principal I'll be using to create the resources to Azure but it has a role with far too many permissions, so it is a better practice to create another Service Principal with only Key Vault permissions and use it only to link the variable group with the Vault.
 
 # Bootstrap Script: Powershell part
 
@@ -87,13 +91,13 @@ The script is built using Powershell and the [Az module](https://docs.microsoft.
 
 > _Why is the script using the Powershell Az Module only to create the resource group and the storage account? Why is it using Terraform to create the rest of the needed resources?_
 
-We could do everything using purely scripting with Powershell and no using Terraform at all, but using Terraform to create the resources in this script is simpler, less error prone and much more easy to mantain.   
+We could do everything using purely scripting with Powershell and no using Terraform at all, but using Terraform to create the resources is simpler, less error prone and much more easy to mantain.   
 
 Also if in a near future we want to update some of the existing resources or even add some additional ones it is easier to do it via Terraform than modifying the Powershell script.
 
-The idea behind this script is that you don't need to touch the Powershell script at all, in case you want to add some extra resources or modify the existing ones modify the ``main.tf`` file. 
+The idea behind this script is that you don't need to touch the Powershell part of the script at all, in case you want to add some extra resources or modify the existing ones modify the ``main.tf`` file and execute the script. 
 
-The next code snippet shows the entirety of the script:
+The next code snippet shows the entirety of the Powershell script:
 ```bash
 Param(
     [Parameter(Mandatory=$True)]
@@ -198,7 +202,6 @@ function New-StorageAccount
         }
     }
 }
-
 
 function Set-EnvVarsAsTfVars
 {
@@ -337,17 +340,17 @@ function main
 
 main
 ```
-The script is pretty self-explanatory, but nonetheless here's a quick summary explaining what every function does in the script.
+The script is pretty self-explanatory, but nonetheless here's a quick summary explaining what every function does.
 
-- ``Set-ConfigVars`` function: Reads the config file. More info about the configuration on the section below. 
-- ``Connect-AzureSubscription`` function:  Connects to the specified Azure subscription.
-- ``Set-EnvVarsAsTfVars`` function: The ``Set-ConfigVars`` function returned a hashtable containing the variables on the configuration file. This functions store the hashtable variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so the configuration values can also be used within the Terraform files.
-- ``New-ResourceGroup`` function: Creates a Resource Group if it doesn't exist.
-- ``New-StorageAccount`` function: Creates a Storage Account and a Storage Container if they don't exist.
-- ``Invoke-TerraformInit`` function: Initializes Terraform using the Storage Container as backend
-- ``Import-TerraformState`` function: Adds the Storage Account and the Resource Container into the Tf state, so any future changes can be tracked using the ``Terraform Plan`` command.
-- ``Invoke-TerraformPlan`` function: Runs the ``Terraform Plan`` command.
-- ``Invoke-TerraformApply`` function:  Runs the ``Terraform Apply`` command.
+- ``Set-ConfigVars``: Gets the script configuration. _More info about the configuration on the "Script configuration" section below._ 
+- ``Connect-AzureSubscription``:  Connects to the specified Azure subscription.
+- ``Set-EnvVarsAsTfVars``: The ``Set-ConfigVars`` function gets the script configuration and this one stores the config variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so the config can be used by the Terraform part of the script.
+- ``New-ResourceGroup``: Creates a Resource Group, if it doesn't exist.
+- ``New-StorageAccount``: Creates a Storage Account and a Storage Container, if they don't exist.
+- ``Invoke-TerraformInit``: Initializes Terraform using the Storage Container as backend.
+- ``Import-TerraformState``: Adds the Storage Account and the Resource Container into the Tf state, so any future changes can be tracked using the ``Terraform Plan`` command.
+- ``Invoke-TerraformPlan``: Runs the ``Terraform Plan`` command.
+- ``Invoke-TerraformApply``:  Runs the ``Terraform Apply`` command.
 
 To know the use of the ``$ProvisionBootstrapResources`` parameter and how to execute the script, read the _"How to run the script"_ section below.
 
@@ -358,7 +361,7 @@ The Powershell script only creates the necessary resources to start using Terraf
 
 The next code snippet shows the terraform part of the bootstrap script.
 
-```yaml
+```csharp
 terraform {
 
   backend "azurerm" {
@@ -666,10 +669,11 @@ resource "azuredevops_variable_group" "azdo_iac_var_group" {
 ## End creating Azure DevOps variable Group used for deploy IaC
 ##########################################################################################
 ```
- As I did with the powershell script, let me run another quick summary explaining what the terraform creates.
+ As I did with the Powershell part of the script, let me run another quick summary explaining what Terraform creates.
 
-The first two resources you'll see in the Tf file are these ones:
-```yaml
+The first two resources you'll see in the ``main.tf`` file are these ones:
+
+```csharp
 ## Create resource group. Already exists created by azure-bootstrap-terraform-init.sh
 resource "azurerm_resource_group" "tf_state_rg" {
   name     = var.tf_state_resource_group_name
@@ -693,26 +697,32 @@ resource "azurerm_storage_account" "tf_state_storage" {
     })
 }
 ```
-In this code snippet Terraform is NOT creating a new Resource Group and Storage Account. In the Powershell part of the script we imported these resources into the Tf state, here we're simply declaring them so we can keep track of them via Terraform.
+Terraform is **NOT** creating a new Resource Group and Storage Account.   
+On the Powershell part of the script we imported these resources into the Tf state, here we're simply declaring them so we can keep track of them via Terraform.
 
- In the tf file we're using those 3 providers:
+ In the ``main.tf`` file we're using those 3 providers:
 
- - The [azuread](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs) provider to create:
-   - Service Principal used to deploy infrastructure.
-   - Service Principal used to linked the Azure DevOps variable group with the Vault.
- - The [azuredevops](https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs) provider to create:
-    - A Service Endpoint that uses the secondary Service Principal credentials (is required to linked the variable group with the Vault).
-    - A Variable Group linked with an Azure Key Vault.
- - The [azurerm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs) provider to create:
-   - Storage Account Lock
-   - Azure KeyVault
-   - Azure KeyVault Lock
-   - Assign myself a "Key Vault Administrator" Role (this role assignment is necessary because we need to add the SP credentials into the Vault).
-   - Create a custom role used to deploy the infrastructure.
-   - Assign the custo role to the SP that will deploy the infrastructure.
-   - Assign the Secondary SP a "Key Vault Administrator" Role (this role assignment is necesarry to link the variable group with the Vault).
-   - Store the SP credentials into the Vault.
+ - The [azuread](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs) provider.
+ - The [azuredevops](https://registry.terraform.io/providers/microsoft/azuredevops/latest/docs) provider.
+ - The [azurerm](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs) provider.
 
+
+With the azuread provider we create the following resources:
+  - A Service Principal that will be used to deploy infrastructure.
+  - A Service Principal that will be used to link the Azure DevOps variable group with the Vault.
+
+With the azuredevops provider we create the following resources:
+  - A Service Endpoint _(is required to link the variable group with the Vault and makes use of the second SP)_.
+  - A Variable Group linked with the Vault _(to link it, it uses the Service Endpoint)_.
+
+With the azurerm provider we create the following resources:
+  - An Storage Account cannot-delete Lock.
+  - An Azure KeyVault.
+  - An Azure KeyVault cannot-delete Lock.
+  - Assign myself a "Key Vault Administrator" Role _(this role assignment is necessary because later on the script we are going to add the SP credentials into the Vault)_.
+  - Create a custom role _(it will be used to deploy the infrastructure)_ and assign it to the SP.
+  - Assign a "Key Vault Administrator" Role to the second SP _(this role assignment is necesarry to link the variable group with the Vault)_.
+  - Store the SP credentials into the Vault.
 
 Also, if you take a look at my [GitHub repository](https://github.com/karlospn/bootstrapping-azure-subscription-and-azdo-project-for-terraform) you'll see that there is a ``variables.tf`` file. More info about it in the next section.
 
@@ -723,9 +733,9 @@ Reusability is key, I don't want to modify the script every time I need to boots
 
 To avoid that, there is a ``config.env`` file that contains the script configuration.
 
-The configuration variables are used in the Powershell script and also in the Terraform files. The script stores the configuration variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so they can be used within the Terraform file.   
+The configuration variables are used in the Powershell script and also in the Terraform files. The script stores the configuration variables as [Terraform TF_VAR_ environment variables](https://www.terraform.io/cli/config/environment-variables#tf_var_name) so they can be used within the ``main.tf`` file.   
 
-> You can change the values on this file to your liking, but you must **NOT** change the name of the variables within the ``config.env`` file or the script will break.
+> You can change the values on the ``config.env`` file to your liking, but you must **NOT** change the name of the variables or the script will break.
 
 The config variables are the following ones:
 
@@ -762,18 +772,19 @@ azdo_pat=12p3j12p31290j213021asdpsdj
 ```
 # How to run the script
 
-**To run it you need to pass it a parameter named: ``ProvisionBootStrapResources``.** 
+**To run it you need to set a parameter named: ``ProvisionBootStrapResources``.** 
 
 - _Example: ``./Initialize-AzureBootstrapProcessForTerraform.ps1 -ProvisionBootStrapResources $True``_
 
 When the ``ProvisionBootStrapResources`` parameter is set to ``$True`` it will execute the entire script, which means:
-- Creating the resource group and the storage account for the tf state using the Powershell Az module
+- Creating the resource group and the storage account for the tf state using the Powershell Az module.
+- Import them into the Tf state.
 - Executing the Terraform Init, Plan and Apply commands to create the rest of the resources.      
 
 **If this is the first time you run the script and want to create the all the resources from zero, set it to ``$True``.**
 
-When the ``ProvisionBootStrapResources`` parameter is set to ``$False`` it will skip the steps of creating the resource group and the storage account, it will only run the Terraform Init, Plan and Apply steps.   
-**If you have modified the ``main.tf`` file to add or update some existing resources set it to ``$False``.**
+When the ``ProvisionBootStrapResources`` parameter is set to ``$False`` it will skip the steps of creating the resource group and the storage account and it will only run the Terraform Init, Plan and Apply steps.   
+**If you already ran the bootstrap script previously and you have modified the ``main.tf`` file to add or update some existing resources set it to ``$False``.**
 
 # Where to run the script
 
@@ -809,6 +820,7 @@ To run the script you'll need to have the following permissions:
 
 After executing the script we're ready to start deploying infrastructure to Azure using Azure Pipelines.    
 
+I have created an example pipeline to show you how it looks.   
 The pipeline has 3 runtime parameters. The Runtime parameters let you have more control over what values can be passed to a pipeline. In our case we are defining which Terraform commands should the pipeline execute.
 
 ![tf-bs-azdo-pipelines-run-pipeline](/img/tf-bs-azdo-pipelines-run-pipeline.png)
