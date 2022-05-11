@@ -3,7 +3,12 @@ title: "Linting a .NET 6 app dockerfile using Hadolint, dockerfile_lint and Azur
 date: 2022-05-10T11:26:01+02:00
 draft: true
 tags: ["dotnet", "csharp", "devops", "containers", "docker"]
+description: "TBD"
 ---
+
+> **Just show me the code**   
+> As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/linting-a-dockerfile-net6-app-with-azure-pipelines).
+
 
 A few months back I wrote a post about image scanning security and how important it is in a Secure DevOps workflow, also I showed you how you could use some of the most well-known image scanners alongside with your Azure DevOps CI/CD YAML Pipelines.    
 If you're interested, the post is right [here](https://www.mytechramblings.com/posts/testing-container-vulnerabilities-scanners-using-azure-pipelines/)
@@ -130,11 +135,33 @@ That why Hadolint and dockerfile_lint are a pretty good match. The first one val
 
 One really important thing that you need to know about dockerfile_lint is that is somewhat abandoned by Red Hat, they killed it when Project Atomic was abandoned. So as it is right now it works great, but do not expect any new releases or bug fixes.
 
+## How to use it
+
+To run it locally:
+
+```bash
+npm install -g dockerfile_lint
+dockerfile_lint -f <Dockerfile>  -r <linting_rules>.yml
+```
+
+To run it from the official docker image:
+
+```bash
+docker run -it --rm -v $PWD:/root/ \
+           projectatomic/dockerfile-lint \
+           dockerfile_lint [-f Dockerfile]
+```
+
+Rule files are written in yaml. The semantic rules are implememented using regular expressions, run on one instruction of the dockerfile at a time. The rule file has 4 sections, a profile section, a general section, a line rule section and a required instruction section.
+
+More info about how to write rules [here](https://github.com/projectatomic/dockerfile_lint#extending-and-customizing-rule-files) and a few examples [here](https://github.com/projectatomic/dockerfile_lint/tree/master/sample_rules).
 
 
-#  Example linting a .NET6 app dockerfile
+#  Practical example
 
-In this section, we'll be linting a .NET6 Dockerfile with some issues and end up with a fully double-checked linted file.
+In the previous section I talked a little bit about Hadolint and dockerfile_lint. 
+
+Now, we'll doing a practical example, we'll be linting a .NET6 Dockerfile with some issues and end up with a fully double-checked linted file.
 
 
 ```yaml
@@ -273,6 +300,9 @@ required_instructions:
         - "https://docs.docker.com/engine/reference/builder/"
         - "#copy"
 ```
+
+
+# Dockerfile linting pipeline using Azure Pipelines 
 
 ```yaml
 trigger:
