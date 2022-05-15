@@ -447,7 +447,7 @@ Reference -> https://docs.microsoft.com/en-us/dotnet/core/rid-catalog
 
 
 Line 43: -> RUN dotnet build "./src/WebApp/WebApp.csproj"       -c Release      --runtime rhel-x64      --self-contained true   /p:PublishSingleFile=true
-ERROR: When using dotnet build you must use the no-restore flag. The --no-restore option is used to disable implicit restore, when using the dotnet restore command you don't need to restore the packages a second time.
+ERROR: When using dotnet build you must use the no-restore flag. The --no-restore option is used to disable implicit restore, when using the dotnet restore command you do not need to restore the packages a second time.
 Reference -> https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-build
 
 
@@ -476,22 +476,21 @@ ERROR: There is no 'EXPOSE' instruction. Without exposed ports how will the serv
 Reference -> https://docs.docker.com/engine/reference/builder/#expose
 ```
 
-On the previous section I have stated that the Dockerfile had no errors and if you build an image using it, it will create an image that runs without no problems at all.    
-As you can see having a working and running image doesn't mean that the Dockerfile is free of problems.
+As I said earlier, the Dockerfile I showed you at the beginning of this example creates an image that runs just fine, but as you can see having a working and running image doesn't mean that the Dockerfile is free of problems or the application is tuned up correctly.
 
 Let's start fixing the errors:
 
-- The base image should come from the official Microsoft repository, which means changing this instruction from ``FROM bitnami/dotnet-sdk:6 `` to ``mcr.microsoft.com/dotnet/sdk:6.0 AS build``
+- The base image should come from the official Microsoft repository, which means changing this instruction from ``FROM bitnami/dotnet-sdk:6 AS build`` to ``FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build``
 
-- The application must use a ``linux-x64`` runtime instead of the ``rhel-x64``, so it needs to be change on the ``dotnet restore``, ``dotnet build`` and ``dotnet publish`` commands.
+- The application must use a ``linux-x64`` runtime instead of the ``rhel-x64`` runtime, which means changing the runtime attribute on the ``dotnet restore``, ``dotnet build`` and ``dotnet publish`` commands.
 
-- There is no need to restore the NuGet packages on each dotnet command, so we need to set the ``--no-restore`` attribute on the ``dotnet build`` command. 
+- There is no need to restore the NuGet packages on each dotnet command, which means setting the ``--no-restore`` attribute on the ``dotnet build`` command. 
 
-- There is no need to restore the Nuget package and build the project again when running the ``dotnet publish`` command, so we need to set the ``--no-build`` attribute on the ``dotnet publish`` command.
+- There is no need to restore the NuGet packages and build the project again when running the ``dotnet publish`` command, which means setting the ``--no-build`` attribute on the ``dotnet publish`` command.
 
 - One strategy to reduce the size of the artifact is to trim the artifact. To do it we need to set the ``/p:PublishTrimmed=true`` attribute when running the ``dotnet publish`` command.
 
-- It might not be needed but it is always a good practice to ``EXPOSE`` which ports are going to be used, so on stage 2 we're going to ``EXPOSE 80``.
+- It might not be needed, but it is always a good practice to ``EXPOSE`` which ports are going to be used, so on stage 2 we're going to add the ``EXPOSE 80`` and ``EXPOSE 443`` instructions.
 
 Here's the resulting Dockerfile after applying all this fixes.
 
@@ -556,7 +555,7 @@ COPY --from=build /app/publish .
 ENTRYPOINT ["./WebApp"]
 ```
 
-If we try to execute the linter again, there are no errors.
+If we try to execute dockerfile_lint again, there are no errors.
 
 ```bash
 # Analyzing Dockerfile
@@ -564,11 +563,11 @@ If we try to execute the linter again, there are no errors.
 Check passed!
 ```
 
-# Linting a dockerfile using Azure Pipelines 
+# Linting the Dockerfile using Azure Pipelines 
 
 Now it is time to put everything together on an Azure DevOps CI/CD pipeline.
 
-Let me show you how the pipeline looks like, I'm going to put together a pipeline that not only runs the linters, but it also builds the application image if there are no linting errors and finally scans the resulting image using security scanner.
+I'm going to put together a pipeline that not only runs the linters, but it also builds the application image if there are no linting errors and finally scans the resulting image using a security scanner.
 
 Here's how it looks:
 
