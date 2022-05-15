@@ -1,6 +1,6 @@
 ---
 title: "Linting a .NET 6 app Dockerfile using Hadolint, dockerfile_lint and Azure Pipelines"
-date: 2022-05-10T11:26:01+02:00
+date: 2022-05-16T10:01:01+02:00
 draft: true
 tags: ["dotnet", "csharp", "devops", "containers", "docker"]
 description: "Like any other language, Dockerfiles can and should be linted for updated best practices and code quality checks. In this post I will show you how to incorporate a couple of Dockerfile linters into our Secure DevOps workflow to ensure our Dockerfiles are always readable, understandable and maintainable."
@@ -9,8 +9,8 @@ description: "Like any other language, Dockerfiles can and should be linted for 
 > **Just show me the code**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/linting-a-dockerfile-net6-app-with-azure-pipelines).
 
-A few months back I wrote a post about security image scanning and how important it is in a Secure DevOps workflow, also I showed you how you could use some of the most well-known image scanners alongside with your Azure DevOps CI/CD YAML Pipelines.    
-If you're interested, the post is right [here](https://www.mytechramblings.com/posts/testing-container-vulnerabilities-scanners-using-azure-pipelines/)
+A few months back I wrote a post about security image scanning and how important it is in a Secure DevOps workflow, also I showed you how you could use some of the most well-known image scanners alongside with your Azure DevOps CI/CD Pipelines.    
+If you're interested, the post is right [here](https://www.mytechramblings.com/posts/testing-container-vulnerabilities-scanners-using-azure-pipelines/).
 
 Another important step, that is skipped quite frequently, is linting the application Dockerfile. 
 
@@ -24,7 +24,7 @@ Incorporating a linter into our Secure DevOps workflow ensures our Dockerfiles a
 
 In this post I will be covering how you can use them and also how you can integrate them on your CI/CD pipelines.   
 
-To show you how to integrate them with a CI/CD pipeline I'll be using Azure DevOps Pipelines, but the process is practically the same is you want to integrate the with whatever CI/CD tool you use (Github Actions, Bitbucket Pipelines, Jenkins, ...).
+To show you how to integrate them with a CI/CD pipeline I'll be using Azure DevOps Pipelines, but the process is practically identical if you want to integrate them with whatever CI/CD tool you use (Github Actions, Bitbucket Pipelines, Jenkins, ...).
 
 In this post I'll focus on those 2 linters:
 
@@ -99,7 +99,7 @@ HADOLINT_REQUIRE_LABELS=maintainer:text  # comma separated list of label schema 
 
 ## Integrate it with Azure Pipelines
 
-The easiest way to integrate it with Azure Pipelines is using the docker image and pipe the app Dockerfile.
+The easiest way to integrate it with Azure Pipelines is using the docker official image and pass it the application Dockerfile.
 
 ```yaml
 trigger: none
@@ -120,14 +120,14 @@ steps:
 
 # dockerfile_lint
 
-Hadolint already validates that your Dockerfile follows the Docker best practices, so why you need another linter?
+Hadolint already validates that your Dockerfile follows [Docker best practices](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/), so why you need another linter?
 
 dockerfile_lint is a rule based semantic linter. The linter rules can be used to check file syntax as well as arbitrary semantic and best practices attributes determined by the rule file writer.
 
 I tend to use dockerfile_lint to validate that the application is configured properly on the Dockerfile.   
 For example, if someone is writing a .NET app Dockerfile I want to validate that the base images used are coming from the official Microsoft registry (mcr.microsoft.com) and is not using some unofficial images from docker hub or somewhere else.
 
-That's why Hadolint and dockerfile_lint are a pretty good match, the first one validates that the Dockerfile is following the best practices, and the second one validates that the app is properly setup using a syntactic analisys.
+That's why Hadolint and dockerfile_lint are a pretty good match, the first one validates that the Dockerfile is following the best practices, and the second one validates that the app is properly setup using a syntactic analysis.
 
 One **really important** thing that you need to know about dockerfile_lint is that is somewhat abandoned by Red Hat, they killed it when Project Atomic was abandoned. As it is right now, it works good enough, but do not expect any new releases or bug fixes.
 
@@ -248,7 +248,7 @@ It is a multi-stage dockerfile.
 
 ## **1. Executing the Hadolint linter**
 
-The first step is executing Hadolint to check if the Dockerfile follows Docker best practices.   
+The first step is executing Hadolint to check if the Dockerfile follows [Docker best practices](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/).   
 After running it, this is the output:
 
 ```bash
@@ -259,7 +259,7 @@ After running it, this is the output:
 ```
 
 Using the latest tag or no tag at all is not a good practice, to solve the ``DL3007`` issue I'm going to change:
-- The ``FROM bitnami/dotnet-sdk:latest`` command to ``FROM bitnami/dotnet-sdk:6``
+- The ``FROM bitnami/dotnet-sdk:latest`` instruction to ``FROM bitnami/dotnet-sdk:6``
 
 The ``MAINTAINER`` instruction is used to define the author of the generated images, but this instruction is deprecated. The ``LABEL`` instruction is a much more flexible version of this and you should use it instead. To solve the ``DL4000``  issue I'm going to change:
 - The ``MAINTAINER mytechramblings.com`` instruction to ``LABEL maintaner=mytechramblings.com``
@@ -480,7 +480,7 @@ As I said earlier, the Dockerfile I showed you at the beginning of this example 
 
 Let's start fixing the errors:
 
-- The base image should come from the official Microsoft repository, which means changing this instruction from ``FROM bitnami/dotnet-sdk:6 AS build`` to ``FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build``
+- The base image should come from the official Microsoft repository, which means changing this instruction  ``FROM bitnami/dotnet-sdk:6 AS build`` to ``FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build``
 
 - The application must use a ``linux-x64`` runtime instead of the ``rhel-x64`` runtime, which means changing the runtime attribute on the ``dotnet restore``, ``dotnet build`` and ``dotnet publish`` commands.
 
