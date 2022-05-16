@@ -1,7 +1,7 @@
 ---
 title: "Linting a .NET 6 app Dockerfile using Hadolint, dockerfile_lint and Azure Pipelines"
-date: 2022-05-16T10:01:01+02:00
-draft: true
+date: 2022-05-16T10:05:01+02:00
+draft: false
 tags: ["dotnet", "csharp", "devops", "containers", "docker"]
 description: "Like any other language, Dockerfiles can and should be linted for updated best practices and code quality checks. In this post I will show you how to incorporate a couple of Dockerfile linters into our Secure DevOps workflow to ensure our Dockerfiles are always readable, understandable and maintainable."
 ---
