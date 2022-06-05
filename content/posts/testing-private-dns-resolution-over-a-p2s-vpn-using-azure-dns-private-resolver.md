@@ -32,7 +32,9 @@ By default, it also creates a private DNS zone, corresponding to the ``privateli
 
 When you resolve the resource endpoint URL from outside the VNet with the private endpoint, it resolves to the public endpoint of the resoucee. When resolved from the VNet hosting the private endpoint, the resource endpoint URL resolves to the private endpoint's IP address.
 
-It might sound a little bit complicated, but it's quite simple, here's a quick example:
+It might sound a little bit complicated, but it's quite simple, here's a quick example to help you understand:
+
+## Example about how private endpoint works 
 
 - I have create a new App Service and it has a public IP address provided by Azure.
 
@@ -109,7 +111,7 @@ $ curl -I dns-resolver-test.azurewebsites.net
 HTTP/1.1 403 Ip Forbidden
 Content-Length: 1895
 Content-Type: text/html
-x-ms-forbidden-ip: 83.42.82.58
+x-ms-forbidden-ip: 71.11.124.148
 Date: Sun, 05 Jun 2022 17:18:48 GMT
 ```
 
@@ -121,7 +123,7 @@ $ curl -I dns-resolver-test.azurewebsites.net
 HTTP/1.1 403 Ip Forbidden
 Content-Length: 1895
 Content-Type: text/html
-x-ms-forbidden-ip: 83.42.82.58
+x-ms-forbidden-ip: 71.11.124.148
 Date: Sun, 05 Jun 2022 17:24:36 GMT
 ```
 
