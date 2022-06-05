@@ -21,7 +21,7 @@ Be aware that **this issue also happens if you try to resolve some Azure private
 
 Let me explain a little more in-depth what the problem is about. I'm going to start showing you a simplified example so you can have a better understanding of what's the issue here.
 
-![diagram](/img/vpn-p2s-problem-diagram.png.png)
+![example-diagram](/img/vpn-p2s-problem-diagram.png)
 
 As you can see it's a pretty standard setup, we have a public app where the customers connect via public internet and this app uses a few private resources, to be more precise, the public app makes a call to another app and it also needs a database to persists some data.
 
@@ -36,34 +36,100 @@ It might sound a little bit complicated, but it's quite simple, here's a quick e
 
 - I have create a new App Service and it has a public IP address provided by Azure.
 
-<ADD-IMG>
+```bash
+$ nslookup dns-resolver-test.azurewebsites.net
+Servidor:  ...
+Address:  ...
+
+Respuesta no autoritativa:
+Nombre:  waws-prod-am2-439-397b.westeurope.cloudapp.azure.com
+Address:  20.50.2.56
+Aliases:  dns-resolver-test.azurewebsites.net
+          waws-prod-am2-439.sip.azurewebsites.windows.net
+```
 
 - Now I created a Private Endpoint to make this App Service private. And as you can see Azure is changing the public name resolution by adding there another CNAME record pointing towards the dedicated FQDN of private endpoint.
 
-<ADD-IMG>
+```bash
+$ nslookup dns-resolver-test.azurewebsites.net
+Servidor:  ...
+Address:  ...
+
+Respuesta no autoritativa:
+Nombre:  waws-prod-am2-439-397b.westeurope.cloudapp.azure.com
+Address:  20.50.2.56
+Aliases:  dns-resolver-test.azurewebsites.net
+          dns-resolver-test.privatelink.azurewebsites.net
+          waws-prod-am2-439.sip.azurewebsites.windows.net
+```
 
 - When the private endpoint was created a private DNS zone was created, this DNS zone contains an A-record that points the private endpoint address to the private IP that is associated for the resource. Also this private DNS zone has been attached to the VNET.
 
-<ADD-IMG>
+![private-endpoint-dns-zone](/img/private-endpoint-dns-zone.png)
 
 - Now when you try to resolve it from a client that inside the VNET, it will response the private IP address.
 
-<ADD-IMG>
+```bash
+$ nslookup dns-resolver-test.azurewebsites.net
+Server:  UnKnown
+Address:  168.63.129.16
 
-- And if you try to resolve it form a client from outside the VNET, it will response the public IP address, but bear in mind that if you try to call the app from outside the VNET it won't work.
+Non-authoritative answer:
+Name:    dns-resolver-test.privatelink.azurewebsites.net
+Address:  10.0.0.4
+Aliases:  dns-resolver-test.azurewebsites.net
 
-<ADD-IMG>
+
+$ curl -I dns-resolver-test.azurewebsites.net
+HTTP/1.1 200 OK
+Content-Length: 3161
+Content-Type: text/html
+Last-Modified: Thu, 27 Aug 2020 23:23:23 GMT
+Accept-Ranges: bytes
+ETag: "5f48406b-c59"
+Server: nginx/1.19.2
+Date: Sun, 05 Jun 2022 17:21:50 GMT
+```
+
+- And if you try to resolve it form a client from outside the VNET, it will response the public IP address, also bear in mind that if you try to call the app from outside the VNET it won't work.
+
+```bash
+$ nslookup dns-resolver-test.azurewebsites.net
+Servidor:  ...
+Address:  ...
+
+Respuesta no autoritativa:
+Nombre:  waws-prod-am2-439-397b.westeurope.cloudapp.azure.com
+Address:  20.50.2.56
+Aliases:  dns-resolver-test.azurewebsites.net
+          dns-resolver-test.privatelink.azurewebsites.net
+          waws-prod-am2-439.sip.azurewebsites.windows.net
+
+$ curl -I dns-resolver-test.azurewebsites.net
+HTTP/1.1 403 Ip Forbidden
+Content-Length: 1895
+Content-Type: text/html
+x-ms-forbidden-ip: 83.42.82.58
+Date: Sun, 05 Jun 2022 17:18:48 GMT
+```
+
 
 Now, image the scenario where a developer needs to access those private resources, for that reason you put in place a Point-to-Site VPN, but when someone connects to the VPN and tries to invoke call the private app endpoint or the private cosmosdb endpoint it gets an error.
 
-<ADD-ERRORS>
+```bash
+$ curl -I dns-resolver-test.azurewebsites.net
+HTTP/1.1 403 Ip Forbidden
+Content-Length: 1895
+Content-Type: text/html
+x-ms-forbidden-ip: 83.42.82.58
+Date: Sun, 05 Jun 2022 17:24:36 GMT
+```
 
 And that's because when connected over an Azure P2S VPN connection the private DNS zone resolution does not work, so it tries to connect using the public endpoint instead of the private endpoint private IP.
 
 As I stated before, be aware that the same problem happens if you're trying to access a private Azure resource from an on-premise network connected to Azure via Express Route or VPN.
 
 To solve it, there are a few solutions available and in the next sections I'm going to talk about it.
-
 
 # Solution 1: Modify the hosts.config file on you local machine
 
