@@ -137,7 +137,7 @@ To solve it, there are a few solutions available and in the next sections I'm go
 
 The Hosts file is used to override the DNS system so that a browser or other application can be redirected to a specific IP address.
 
-This is the easiest solution you'll only need to modify the host file in you machine to override the DNS resolution of the private services.
+This is the easiest solution if you want to invoke a private azure resource, you'll only need to modify the host file in you machine to override the DNS resolution of the private services.
 
 Here's an example of how to do it:
 
@@ -161,7 +161,9 @@ The main objectivo for having a DNS Formarder is to forward DNS queries to Azure
 
 Once you have a DNS forwarder/proxy is deployed on Azure, you can define the DNS server at the VNET level or set DNS Server configuration directly on client XLM profile.
 
-Once everything is setup you will be able to resolve Private Endpoint entries from your VPN P2S clients.
+Once everything is setup you will be able to resolve Private Endpoint entries from your VPN P2S clients. 
+
+The DNS Forwarder/Proxy can be hosted on a virtual machine or on a container within ACI or AKS.
 
 To setup a DNS forwarder is quite simple mainly because you only need to forward queries to this IP: 168.63.129.16. This IP represents Azure DNS.   
 
@@ -190,7 +192,12 @@ If you're using a Virtual Machine with Windows, it is also quite straightforward
 <add-img>
 
 
-Using an IaaS DNS Forwarder is the de facto solution nowadays to resolve private DNS zones.The DNS Forwarder/Proxy can be hosted on a virtual machine or on a container within ACI or AKS.
+Using a DNS Forwarder is the de facto solution nowadays to resolve private DNS zones and it works fine.    
+The main pain point here is this DNS forwarder/proxy ends up being piece of software you need to setup properly and maintain, which is even worse if you're using a VM insted of the containerized approach, because you'll need to update the underlying OS.
+
+Also it is quite possible that you want to set it up to have high availability too.
+
+As I have said before this approach works fine, but right now seems to be a better solution available.
 
 # Solution 3: Use Azure Private DNS Resolver
 
@@ -202,6 +209,7 @@ Let's take a look at the previous example where I had a public app that was usin
 Here's how the diagram will look like after deploying an Azure Private DNS Resolver
 
 <add-img>
+
 
 
 If you want to try it by yourself, you can find this example on my [GitHub repository](https://github.com/karlospn/testing-private-dns-resolution-using-azure-dns-private-resolver).  It uses Terraform to deploy it. There is not much worth mentioning, probably the only interesting thing is that I'm using the [AzApi Terraform Provider](https://docs.microsoft.com/en-us/azure/developer/terraform/overview-azapi-provider) to provision the Private DNS Resolver.
