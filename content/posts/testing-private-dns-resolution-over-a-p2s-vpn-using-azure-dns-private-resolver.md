@@ -214,32 +214,37 @@ Using a DNS forwarder is the de facto solution when we want to resolve a private
 
 # Solution 3: Use Azure Private DNS Resolver
 
-Until now Azure didn't provide any DNS server that is addressable from a VPN connection. 
-
-The Azure DNS Private Resolver removes the needs to have additional DNS Forwarder to resolve private DNS zones.
+The Azure DNS Private Resolver resource removes the needs to have an additional DNS Forwarder to resolve private DNS zones.
 
 Let's take a look at the previous example where I had a public app that was using a few private resources.
-Here's how the diagram will look like after deploying an Azure Private DNS Resolver
+Here's how the diagram will look like after deploying an Azure Private DNS Resolver.
 
 ![vpn-p2s-private-dns-resolver](img/vpn-p2s-private-dns-resolver.png)
 
-As you can see now we deployed a DNS Resolver Inbound endpoint.    
-
+As you can see now the only difference is that I have deployed a DNS Resolver Inbound endpoint.    
 An inbound endpoint enables name resolution from on-premises or other private locations via an IP address that is part of your private virtual network address space.   
 
-This endpoint requires a subnet in the VNet where it’s provisioned. The subnet can only be delegated to ``Microsoft.Network/dnsResolvers`` and can't be used for other services.   
+The inbound endpoint requires a subnet in the VNet where it’s provisioned. The subnet can only be delegated to ``Microsoft.Network/dnsResolvers`` and can't be used for other services.   
 
-DNS queries received by the inbound endpoint will ingress to Azure. You can resolve names in scenarios where you have Private DNS Zones, including VMs that are using auto registration, or Private Link enabled services.
+DNS queries received by the inbound endpoint will ingress to Azure DNS. You can resolve names in scenarios where you have Private DNS Zones, including VMs that are using auto registration, or Private Link enabled services.
 
-Also the **DNS Resolver Inbound endpoint needs to be set as a DNS Server in the VNET**.
+One important thing here is that the **DNS Resolver Inbound endpoint needs to be set as a DNS Server in the VNET**, if not you won't be able to resolve any private resource.
 
-If you want to try it by yourself, you can find this example on my [GitHub repository](https://github.com/karlospn/testing-private-dns-resolution-using-azure-dns-private-resolver).  It uses Terraform to deploy it. There is not much worth mentioning, probably the only interesting thing is that I'm using the [AzApi Terraform Provider](https://docs.microsoft.com/en-us/azure/developer/terraform/overview-azapi-provider) to provision the Private DNS Resolver.
+When creating a DNS private resolver there is also the concept of outbound endpoints, it enables conditional forwarding name resolution from Azure to on-premises, other cloud providers, or external DNS servers. 
+
+In this case we don't need an outbound endpoint only and inbound one.
+
+If you want to deploy the above example on your subscription and test it, you can find it on my [GitHub repository](https://github.com/karlospn/testing-private-dns-resolution-using-azure-dns-private-resolver). It uses Terraform to deploy it. 
+
+There is not much worth mentioning and that's good news, you only need to provision an Azure DNS private resolver and an inbound enpdoint, set the endpoint as a DNS Server in your VNET and from this point forward you'll be able to resolve private DNS zones when connected to a P2S VPN.
+
+The only interesting thing (it is only interesting if you're using Terraform with Azure) is that I'm using the [AzApi Terraform Provider](https://docs.microsoft.com/en-us/azure/developer/terraform/overview-azapi-provider) to provision the Private DNS Resolver instead of the official AzureRM Terraform provider.
 
 The AzAPI provider is a thin layer on top of the Azure ARM REST APIs. The AzAPI provider enables you to manage any Azure resource type using any API version. This provider complements the AzureRM provider by enabling the management of new Azure resources and properties.
 
 I'm using the AzApi provider because the Private DNS Resolver is not available right now on the official AzureRM Terraform provider.
 
-If you're interested here's a snippet of how to provision a Private DNS Resolver
+If you're interested here's a snippet of how to provision a Private DNS Resolver and an inbound endpoint using the AzApi provider.
 
 ```javascript
 resource "azapi_resource" "dns_resolver" {
