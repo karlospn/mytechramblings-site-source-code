@@ -1,9 +1,9 @@
 ---
-title: "Testing private DNS resolution over an Azure P2S VPN connection"
+title: "Testing private endpoints DNS resolution over an Azure P2S VPN connection"
 date: 2022-06-02T21:54:47+02:00
 draft: true
 tags: ["azure", "cloud", "terraform", "dns"]
-description: "The purpose of this post is to try out the new Azure DNS Private Resolver resource. To test it, we're going to try to solve one of the current issues that Azure VPN P2S has right now. The problem is when connected over an Azure P2S VPN connection the private DNS zone resolution does not work, because it tries to connect using the public endpoint instead of the private endpoint private IP. This becomes quite problematic when you're using private endpoints to secure some private resources, because there is no easy way to resolve the private endpoint DNS when connected to a P2S VPN."
+description: "The purpose of this post is to try out the new Azure DNS Private Resolver resource. To test it, we're going to try to solve one of the current issues that Azure VPN has right now: when connected over an Azure P2S VPN connection the private DNS zone resolution does not work. This becomes quite problematic when you're using private endpoints to secure some private resources, because there is no easy way to solve the private endpoint DNS when connected to a P2S VPN."
 ---
 
 > **Just show me the code**   
@@ -23,11 +23,11 @@ So at the end I thought that writing a little bit about it, might be helpful to 
 # What is the problem when trying to resolve a private resource over an Azure VPN P2S
 
 First of all, let me explain a little more in-depth what this problem is all about.   
-I'm going to start showing you a simplified example, so you can have a better understanding of what's the issue here.
+I'm going to use a simplified example, so you can have a better understanding of what's the issue here.
 
 ![example-diagram](/img/vpn-p2s-problem-diagram.png)
 
-As you can see this is a pretty basic setup, we have a public app where the customers can connect via public internet. This public app uses a few private resources, to be more precise, it makes a call to another app and it also needs a database to persists data.
+As you can see this is a pretty basic setup, we have a public app where the customers can connect via public internet and this public app uses a few private resources, to be more precise, it makes a call to another app and it also needs a database to persists data.
 
 It makes no sense that the database and the second app could be accessed from anywhere on the internet, so we're going to make them private. To make both resources private we're going to Azure Private Endpoints.
 
