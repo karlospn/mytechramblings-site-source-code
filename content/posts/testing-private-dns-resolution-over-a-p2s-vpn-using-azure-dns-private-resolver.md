@@ -3,13 +3,13 @@ title: "Testing Azure Private Endpoints DNS resolution over an Azure P2S VPN con
 date: 2022-06-02T21:54:47+02:00
 draft: true
 tags: ["azure", "cloud", "terraform", "dns"]
-description: "The purpose of this post is to try out the new Azure DNS Private Resolver resource. To test it, we're going to try to solve one of the current issues that Azure VPN has right now: when connected over an Azure P2S VPN connection the private DNS zone resolution does not work. This becomes quite problematic when you're using private endpoints to secure some private resources, because there is no easy way to solve the private endpoint DNS when connected to a P2S VPN."
+description: "The purpose of this post is to try out the new Azure DNS Private Resolver resource. To test it, we're going to try to solve one of the current issues that Azure VPN has right now: when connected over an Azure P2S VPN the private DNS zone resolution does not work. This becomes quite problematic when you're using private endpoints to secure some private resources, because there is no easy way to resolve the private endpoint DNS when connected to a P2S VPN."
 ---
 
 > **Just show me the code**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/testing-private-dns-resolution-using-azure-dns-private-resolver).
 
-I have had this long time issue with DNS resolution of private resources on Azure when working over a Point-to-Site VPN connection.
+It is widely known that an issue exists with DNS resolution of private resources on Azure when connected over a Point-to-Site VPN.
 
 The problem I'm talking about is that **a private DNS zone will not work over an Azure P2S VPN connection**, which means that by default you cannot resolve a private DNS zone when connected over a P2S VPN.   
 This becomes quite problematic when you're using private endpoints to secure some private resources, because there is no easy way to resolve the private endpoint DNS when connected to a VPN.
