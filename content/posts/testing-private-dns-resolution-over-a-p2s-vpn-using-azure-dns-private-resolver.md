@@ -1,6 +1,6 @@
 ---
 title: "Testing Azure Private Endpoints DNS resolution over an Azure P2S VPN connection"
-date: 2022-06-02T21:54:47+02:00
+date: 2022-06-13T13:10:47+02:00
 draft: true
 tags: ["azure", "cloud", "terraform", "dns"]
 description: "The purpose of this post is to try out the new Azure DNS Private Resolver resource. To test it, we're going to try to solve one of the current issues that Azure VPN has right now: when connected over an Azure P2S VPN the private DNS zone resolution does not work. This becomes quite problematic when you're using private endpoints to secure some private resources, because there is no easy way to resolve the private endpoint DNS when connected to a P2S VPN."
@@ -27,9 +27,9 @@ I'm going to use a simplified example, so you can have a better understanding of
 
 ![example-diagram](/img/vpn-p2s-problem-diagram.png)
 
-As you can see this is a pretty basic setup, we have a public app where the customers can connect via public internet, this public app uses a few private resources, to be more precise, it makes a call to another app and it also needs a database to persists data.
+As you can see this is a pretty basic setup, we have a public app where customers can connect via public internet, this public app uses a few private resources, to be more precise, it makes a call to another app and it also needs a database to persists data.
 
-It makes no sense that the database and the second app could be accessed from anywhere on the internet, so we're going to make them private. To make both resources private we're going to use Azure Private Endpoints.
+It makes no sense from the database and the second app to be accessible from anywhere on the internet, so we're going to make them private. To make both resources private we're going to use Azure Private Endpoints.
 
 When a private endpoint is created, Azure changes the public name resolution by adding another CNAME record pointing towards the dedicated FQDN of the private endpoint.    
 By default, it also creates a private DNS zone, corresponding to the ``privatelink`` subdomain, with the DNS A resource record for the private endpoint.
@@ -38,9 +38,9 @@ When you resolve the resource endpoint URL from outside the VNet with the privat
 
 It might sound a little bit complicated, but it's quite simple, let me show you a quick example to help you better understand how private endpoints works:
 
-## Example about how private endpoint works 
+## Example about how an Azure Private Endpoint works 
 
-- I have created a new App Service, and it is publicly accessible from the internet.
+- I have created a new App Service, which is publicly accessible from the internet.
   
 ```bash
 $ nslookup dns-resolver-test.azurewebsites.net
@@ -135,13 +135,14 @@ That's because when connected over an Azure P2S VPN connection the private DNS z
 
 The same problem happens if you're trying to access a private Azure resource from an on-premise network connected to Azure via Express Route or VPN.
 
-To solve it, there are a few solutions available and in the next sections I'm going to talk about it.
+To solve it, there are a few solutions available and in the next sections I'm going to talk about them.
 
 # Solution 1: Modify the hosts file on your local machine
 
 The hosts file is used to override the DNS system so that a browser or other application on your local machine can be redirected to a specific IP address.
 
-This is the easiest solution if you want to invoke a private resource, you'll only need to modify the hosts file in your machine to override the DNS resolution of the private services.
+This is the easiest solution if you want to invoke a private resource.   
+You'll need to modify the hosts file in your machine and point the private resource to the private IP of the private endpoint. This will override the DNS resolution of the private services.
 
 Here's an example of how to do it:
 
@@ -155,11 +156,11 @@ Now those services instead of resolving to the public endpoint, they will resolv
 
 This solution works but is very ineffective.    
 In the example above we only had two private resources: a Cosmos database and an App Service, but imagine a real project with tens of resources and multiple environments (dev, staging, prod, ...).
-The hosts file ends up having thousands of private IPs and becomes quite cumbersome to manage it.
+The hosts file ends up having hundreds of private IPs and becomes quite cumbersome to manage it.
 
 Also every time you create a new private resource on Azure you need to update the hosts file and also signal everyone that is using the VPN that a new resource needs to be added in their hosts file.
 
-It might work with small projects where a small group of people needs to access thoses resources via VPN, but it's not a good solution.
+This solution might work with small projects where a small group of people needs to access thoses resources via VPN, but it's not a good solution.
 
 
 # Solution 2: Use a DNS Forwarder
@@ -174,13 +175,13 @@ Once everything is setup you will be able to resolve Private Endpoint entries fr
 
 The DNS Forwarder/Proxy can be hosted on a virtual machine or on a container service like ACI or AKS.
 
-Setup a DNS forwarder is simple, mainly because you only need to forward queries to the Azure DNS IP: 168.63.129.16.
+Setting up a DNS forwarder is simple, mainly because you only need to forward queries to the Azure DNS IP: 168.63.129.16.
 
 Here's an example of a containerized Bind DNS Server that can be deployed on ACI or AKS:
 
 - https://github.com/whiteducksoftware/az-dns-forwarder
 
-If you take a look at the configuration of the Bind Server, you'll see that the only action it does is to forward queries to Azure DNS:
+If you take a look at the configuration of the Bind Server, you'll see that the only action it does is forward queries to Azure DNS:
 
 ```javascript
 options {
@@ -210,7 +211,7 @@ The inconvenience with this approach is that the DNS forwarder/proxy ends up bei
 
 Also the fact that you need to set the DNS forwarder as the main DNS Server of the VNET means that you probably want to deploy it with a high availability.
 
-Using a DNS forwarder when we want to resolve a private DNS zone when connected to a VPN works fine, but nowadays seems that there is a better solution available.
+In conclusion, using a DNS forwarder when we want to resolve a private DNS zone when connected to a VPN works fine, but nowadays seems that there is a better solution available.
 
 # Solution 3: Use Azure Private DNS Resolver
 
