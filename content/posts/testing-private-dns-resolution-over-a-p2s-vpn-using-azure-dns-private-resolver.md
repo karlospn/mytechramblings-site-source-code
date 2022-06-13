@@ -9,18 +9,18 @@ description: "The purpose of this post is to try out the new Azure DNS Private R
 > **Just show me the code**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/testing-private-dns-resolution-using-azure-dns-private-resolver).
 
-It is widely known that an issue exists with DNS resolution of private resources on Azure when connected over a Point-to-Site VPN.
+Nowadays is common knowledge that there is an issue when trying to resolve the DNS of a private endpoint while connected to a Point-to-Site VPN. 
 
-The problem I'm talking about is that **a private DNS zone will not work over an Azure P2S VPN connection**, which means that by default you cannot resolve a private DNS zone when connected over a P2S VPN.   
+This problem happens because **a private DNS zone will not work over an Azure P2S VPN connection**, which means that by default you cannot resolve a private DNS zone when connected over a P2S VPN.    
 This becomes quite problematic when you're using private endpoints to secure some private resources, because there is no easy way to resolve the private endpoint DNS when connected to a VPN.
 
-Be aware that **this problem also happens if you try to resolve a private resource from an on-premise network connected via ExpressRoute or VPN S2S.**.
+This issue is not exclusive of P2S VPN connections, it also happens if you try to resolve a private resource from an on-premise network connected via ExpressRoute or a VPN S2S.
 
-At first I didn't plan to write about it, mainly because I didn't find it interesting enough, but the new [Azure DNS Private Resolver](https://azure.microsoft.com/en-us/blog/announcing-azure-dns-private-resolver-now-in-preview/) resource is a potential solution to this issue and I wanted to test it.
+There are a few options available to solve this issue, and in this post I plan to talk a little bit about them.
 
-So at the end I thought that writing a little bit about it, might be helpful to someone.
+I didn't plan to write this post, mainly because I didn't find it interesting enough, but the new [Azure DNS Private Resolver](https://azure.microsoft.com/en-us/blog/announcing-azure-dns-private-resolver-now-in-preview/) resource seems like a potential solution to this issue and I wanted to test it, so at the end I have decided that writing a little bit about this topic might become helpful to someone.
 
-# What is the problem when trying to resolve a private resource over an Azure VPN P2S
+# What is the problem when trying to resolve a private resource over an Azure VPN P2S connection
 
 First of all, let me explain a little more in-depth what this problem is all about.   
 I'm going to use a simplified example, so you can have a better understanding of what's the issue here.
