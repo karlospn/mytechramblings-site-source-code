@@ -1,5 +1,5 @@
 ---
-title: "Testing private endpoints DNS resolution over an Azure P2S VPN connection"
+title: "Testing Azure Private Endpoints DNS resolution over an Azure P2S VPN connection"
 date: 2022-06-02T21:54:47+02:00
 draft: true
 tags: ["azure", "cloud", "terraform", "dns"]
@@ -27,9 +27,9 @@ I'm going to use a simplified example, so you can have a better understanding of
 
 ![example-diagram](/img/vpn-p2s-problem-diagram.png)
 
-As you can see this is a pretty basic setup, we have a public app where the customers can connect via public internet and this public app uses a few private resources, to be more precise, it makes a call to another app and it also needs a database to persists data.
+As you can see this is a pretty basic setup, we have a public app where the customers can connect via public internet, this public app uses a few private resources, to be more precise, it makes a call to another app and it also needs a database to persists data.
 
-It makes no sense that the database and the second app could be accessed from anywhere on the internet, so we're going to make them private. To make both resources private we're going to Azure Private Endpoints.
+It makes no sense that the database and the second app could be accessed from anywhere on the internet, so we're going to make them private. To make both resources private we're going to use Azure Private Endpoints.
 
 When a private endpoint is created, Azure changes the public name resolution by adding another CNAME record pointing towards the dedicated FQDN of the private endpoint.    
 By default, it also creates a private DNS zone, corresponding to the ``privatelink`` subdomain, with the DNS A resource record for the private endpoint.
@@ -137,11 +137,11 @@ The same problem happens if you're trying to access a private Azure resource fro
 
 To solve it, there are a few solutions available and in the next sections I'm going to talk about it.
 
-# Solution 1: Modify the hosts file on you local machine
+# Solution 1: Modify the hosts file on your local machine
 
-The Hosts file is used to override the DNS system so that a browser or other application can be redirected to a specific IP address.
+The hosts file is used to override the DNS system so that a browser or other application on your local machine can be redirected to a specific IP address.
 
-This is the easiest solution if you want to invoke a private azure resource, you'll only need to modify the host file in you machine to override the DNS resolution of the private services.
+This is the easiest solution if you want to invoke a private resource, you'll only need to modify the hosts file in your machine to override the DNS resolution of the private services.
 
 Here's an example of how to do it:
 
@@ -151,22 +151,22 @@ Here's an example of how to do it:
 10.18.2.5 cosmos-dns-resolver-test-dev.mongo.cosmos.azure.com
 10.18.2.6 cosmos-dns-resolver-test-dev-westeurope.mongo.cosmos.azure.com
 ```
-Those services instead of resolving to the public endpoint, they will resolve to the private endpoint private IP. 
+Now those services instead of resolving to the public endpoint, they will resolve to the private endpoint private IP. 
 
 This solution works but is very ineffective.    
-In the example above we only had two private resources: a Cosmos database and an App Service, but imagine that in a real project with tens of resources and multiple environments (dev, staging, prod, ...).
+In the example above we only had two private resources: a Cosmos database and an App Service, but imagine a real project with tens of resources and multiple environments (dev, staging, prod, ...).
 The hosts file ends up having thousands of private IPs and becomes quite cumbersome to manage it.
 
-And also every time you create a new private resource on Azure you need to update the host file and also signal everyone that is using the VPN that a new resource needs to be added in their hosts file.
+Also every time you create a new private resource on Azure you need to update the hosts file and also signal everyone that is using the VPN that a new resource needs to be added in their hosts file.
 
-It might work with small projects where a small group of people need to access thoses resources via VPN, but it's not a good solution.
+It might work with small projects where a small group of people needs to access thoses resources via VPN, but it's not a good solution.
 
 
 # Solution 2: Use a DNS Forwarder
 
 Another option for the P2S VPN clients to be able to resolve Private Endpoint entries hosted on Azure Private DNS Zones is using a DNS Forwarder.
 
-The main objectivo for having a DNS Formarder is to forward DNS queries to Azure DNS.
+The main objectivo for having a DNS Forwarder is to forward DNS queries to Azure DNS.
 
 Once you have a DNS forwarder/proxy deployed on Azure, you can define the DNS server at the VNET level or set DNS Server configuration directly on client XLM profile.
 
@@ -176,7 +176,7 @@ The DNS Forwarder/Proxy can be hosted on a virtual machine or on a container ser
 
 Setup a DNS forwarder is simple, mainly because you only need to forward queries to the Azure DNS IP: 168.63.129.16.
 
-Here's a example of a containerized Bind DNS Server that can be deployed on ACI or AKS:
+Here's an example of a containerized Bind DNS Server that can be deployed on ACI or AKS:
 
 - https://github.com/whiteducksoftware/az-dns-forwarder
 
@@ -198,30 +198,30 @@ options {
 
 If you're using a Windows Virtual Machine, it is also quite straightforward to set it up. Simply add the Azure DNS IP in the Forwarder Tab of the DNS Server.
 
-![windows-dns-manager](img/windows-dns-manager-forwarders.png)
+![windows-dns-manager](/img/windows-dns-manager-forwarders.png)
 
 Using a DNS Forwarder is the de facto solution nowadays to resolve private DNS zones and it works fine.    
 
-If you want a more in-depth documentation about it you can go here:
+If you want a more in-depth documentation about it, you can go here:
 - https://docs.microsoft.com/en-us/azure/private-link/private-endpoint-dns#dns-configuration-scenarios
 
 
-The inconvenients with this approach is that the DNS forwarder/proxy ends up being another piece of software that needs to be setup and mantain properly. The maintain part is even worse if you're using a VM insted of a containerized approach because the underlying OS updates became your problem. 
+The inconvenience with this approach is that the DNS forwarder/proxy ends up being another piece of software that needs to be setup and mantain properly. The maintenance part is even worse if you're using a VM instead of a containerized approach because the underlying OS updates became your problem. 
 
-Also you need to set the DNS forwarder as a DNS at the VNET level, so it needs to have a high availability.
+Also the fact that you need to set the DNS forwarder as the main DNS Server of the VNET means that you probably want to deploy it with a high availability.
 
-Using a DNS forwarder is the de facto solution when we want to resolve a private DNS zone when connected to a VPN, but nowadays seems that a better solution is available.
+Using a DNS forwarder when we want to resolve a private DNS zone when connected to a VPN works fine, but nowadays seems that there is a better solution available.
 
 # Solution 3: Use Azure Private DNS Resolver
 
-The Azure DNS Private Resolver resource removes the needs to have an additional DNS Forwarder to resolve private DNS zones.
+The Azure DNS Private Resolver resource removes the need to have an additional DNS Forwarder to resolve private DNS zones.
 
 Let's take a look at the previous example where I had a public app that was using a few private resources.
 Here's how the diagram will look like after deploying an Azure Private DNS Resolver.
 
-![vpn-p2s-private-dns-resolver](img/vpn-p2s-private-dns-resolver.png)
+![vpn-p2s-private-dns-resolver](/img/vpn-p2s-private-dns-resolver.png)
 
-As you can see now the only difference is that I have deployed a DNS Resolver Inbound endpoint.    
+As you can see, the only difference is that I have deployed a DNS Resolver Inbound endpoint.    
 An inbound endpoint enables name resolution from on-premises or other private locations via an IP address that is part of your private virtual network address space.   
 
 The inbound endpoint requires a subnet in the VNet where it’s provisioned. The subnet can only be delegated to ``Microsoft.Network/dnsResolvers`` and can't be used for other services.   
@@ -230,15 +230,15 @@ DNS queries received by the inbound endpoint will ingress to Azure DNS. You can 
 
 One important thing here is that the **DNS Resolver Inbound endpoint needs to be set as a DNS Server in the VNET**, if not you won't be able to resolve any private resource.
 
-When creating a DNS private resolver there is also the concept of outbound endpoints, it enables conditional forwarding name resolution from Azure to on-premises, other cloud providers, or external DNS servers. 
+When creating a Private DNS Resolver there is also the concept of outbound endpoints. An outbound endpoint enables conditional forwarding name resolution from Azure to on-premises, other cloud providers, or external DNS servers. 
 
-In this case we don't need an outbound endpoint only and inbound one.
+In this case we don't need an outbound endpoint, only the inbound one.
 
 If you want to deploy the above example on your subscription and test it, you can find it on my [GitHub repository](https://github.com/karlospn/testing-private-dns-resolution-using-azure-dns-private-resolver). It uses Terraform to deploy it. 
 
-There is not much worth mentioning and that's good news, you only need to provision an Azure DNS private resolver and an inbound enpdoint, set the endpoint as a DNS Server in your VNET and from this point forward you'll be able to resolve private DNS zones when connected to a P2S VPN.
+There is not much more worth mentioning and that's good news, you only need to provision an Azure DNS Private Resolver and an inbound enpdoint, set the inbound endpoint as a DNS Server in your VNET and from this point forward you'll be able to resolve private DNS zones when connected to a P2S VPN.
 
-The only interesting thing (it is only interesting if you're using Terraform with Azure) is that I'm using the [AzApi Terraform Provider](https://docs.microsoft.com/en-us/azure/developer/terraform/overview-azapi-provider) to provision the Private DNS Resolver instead of the official AzureRM Terraform provider.
+The only interesting thing worth mentioning (it is only interesting if you're using Terraform with Azure) is that I'm using the [AzApi Terraform Provider](https://docs.microsoft.com/en-us/azure/developer/terraform/overview-azapi-provider) to provision the Private DNS Resolver instead of the official AzureRM Terraform provider.
 
 The AzAPI provider is a thin layer on top of the Azure ARM REST APIs. The AzAPI provider enables you to manage any Azure resource type using any API version. This provider complements the AzureRM provider by enabling the management of new Azure resources and properties.
 
