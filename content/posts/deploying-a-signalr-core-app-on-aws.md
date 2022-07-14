@@ -25,9 +25,36 @@ I usually find that there is a lack of knowledge when trying to deploy a SignalR
 
 # **Network**
 
+In this section I want to talk about AWS services that can control and balance network traffic and how to use them with SignalR.
+
+The services we're going to review are the following ones:
+- AWS Application Load Balancer
+- AWS WebSocket Api Gateway
+
+
 ## **1. AWS Application Load Balancer**
 
+SignalR requires that all HTTP requests for a specific connection be handled by the same instance. When a SignalR app is running behind a load balancer with multiple instances of the same service, "sticky sessions" must be used.
+
+The only circumstances in which sticky sessions are not required are:
+
+- When hosting on a single instance of the application.
+- When using the Azure SignalR Service (later we'll talk a little bit about it).
+- When all clients are configured to only use WebSockets.
+
 ## **2. AWS WebSocket Api Gateway**
+
+In API Gateway you can create a WebSocket API as a stateful frontend for an AWS service or for an HTTP endpoint.   
+The WebSocket API invokes your backend based on the content of the messages it receives from client apps.
+
+I was **unable to make a SignalR Core app work with AWS WebSocket Api Gateway**.
+   
+The problem lies with how the API Gateway handles the connections and route messages. The backend application receives an event containing $connect/$disconnect and a connection id and need to act accordingly.
+
+In fact, it seems that integrating a SignalR Core app with an AWS WebSocket Api Gateway is not possible.    
+
+If someone knows a way to do it, contact me.
+
 
 # **Backplane**
 
@@ -42,7 +69,11 @@ This is where a backplane becomes necessary. When a client makes a connection, t
 
 <add diagram>
 
-Exists a few AWS services that can be used as a SignalR backplane, and in the following sections we're going to talk about when and how to use them.
+In  this section will see a few AWS services that can be used as a SignalR backplane, those services are the following ones:
+- AWS ElastiCache for Redis.
+- AWS MemoryDb.
+- AWS RDS for SQL Server.
+- Azure SignalR Service.
 
 ## **1. AWS ElastiCache**
 
@@ -113,7 +144,6 @@ services
         opts.Configuration.Ssl = true;
     });
 ```
-
 
 ### **Usage**
 
