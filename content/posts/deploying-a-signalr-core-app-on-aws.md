@@ -49,8 +49,14 @@ The WebSocket API invokes your backend based on the content of the messages it r
 
 I was **unable to make a SignalR Core app work with AWS WebSocket Api Gateway**.
    
-The problem lies with how the API Gateway handles the connections and route messages. The backend application receives an event containing $connect/$disconnect and a connection id and need to act accordingly.
+The problem lies with how the API Gateway handles the connections and route messages. The API Gateway uses three predefined routes to communicate with the app: `$connect`, `$disconnect`, and ``$default`. In addition, you can create custom routes.
 
+- API Gateway calls the `$connect` route when a persistent connection between the client and a WebSocket API is being initiated.
+- API Gateway calls the `$disconnect` route when the client or the server disconnects from the API.
+- API Gateway calls a custom route after the route selection expression is evaluated against the message if a matching route is found; the match determines which integration is invoked.
+- API Gateway calls the `$default` route if the route selection expression cannot be evaluated against the message or if no matching route is found.
+
+This is specific way to handle connections and route messages does not sit well with SignalR.   
 In fact, it seems that integrating a SignalR Core app with an AWS WebSocket Api Gateway is not possible.    
 
 If someone knows a way to do it, contact me.
