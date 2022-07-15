@@ -6,33 +6,39 @@ description: "In this post I'll try to talk a little bit about which possibiliti
 draft: true
 ---
 Once every full moon I get asked about using SignalR app on AWS, usually the questions are along the lines of: 
-- Can I use this service to deploy my app?
-- Should I deploy my app on a Windows machine or can I use Linux one?
-- I have a load balancer/API Gateway in front of my app and it doesn't work properly, what's wrong?
-- I need to scale out the app, which service should I use? 
+- Can I use this service to deploy my SignalR app?
+- I have a load balancer/API Gateway in front of my SignalR app and it doesn't work properly, what's wrong?
+- I need to scale out the SignalR app, which service should I use for the backplane? 
 - I have multiple instances of my app and some messages seems to be getting lost, what's wrong?
 - Can I use the Azure SignalR Service when my application is deployed in AWS?
 
 I usually find that there is a lack of knowledge when trying to deploy a SignalR on AWS, so in this post I'll try to talk a little bit about which possibilities are available when you want to deploy a **SignalR Core** application on AWS.   
 
-# **Compute**
-
-## **1. AWS ECS**
-
-## **2. AWS EC2**
-
-## **3. AWS EKS**
-
 # **Network**
 
-In this section I want to talk about AWS services that can control and balance network traffic and how to use them with SignalR.
+In this first section I want to talk about AWS services that can control and balance network traffic and how to use them with SignalR.
 
 The services we're going to review are the following ones:
 - AWS Application Load Balancer
 - AWS WebSocket Api Gateway
 
-
 ## **1. AWS Application Load Balancer**
+
+### **WebSockets**
+
+The ALB allows us to forward the traffic to an application by leveraging a couple of resources:
+- A Target Group.
+- A Listener.
+
+The Target Group defines where to send the traffic. We can configure the port and protocol of the traffic that is forwarded, as well as a health check, so that the load balancer doesn't send traffic to a dead service.
+
+The Listener defines how the load balancer gets its traffic from outside. That's where you define the port and the protocol to reach the load balancer, and what is the default behavior for the traffic hitting that listener. 
+
+Amazon ALB Listeners only offer HTTP or HTTPS protocol, but the good news is that WebSocket initially contacts the server with HTTP if you use ws:// or HTTPS if you use wss:// your server will then reply with ``101 Switching Protocols``, telling the client to upgrade to a WebSocket connection.
+
+SignalR uses the WebSocket transport where available and falls back to older transports where necessary, but you don't need to do anything on an ALB to start using them.
+
+### **Sticky sessions**
 
 SignalR requires that all HTTP requests for a specific connection be handled by the same instance. When a SignalR app is running behind a load balancer with multiple instances of the same service, "sticky sessions" must be used.
 
@@ -41,6 +47,34 @@ The only circumstances in which sticky sessions are not required are:
 - When hosting on a single instance of the application.
 - When using the Azure SignalR Service (later we'll talk a little bit about it).
 - When all clients are configured to only use WebSockets.
+
+The next code snippet shows how to create a Target Group with sticky sesion enabled.
+
+```csharp
+new ApplicationTargetGroup(this,
+    "tg-app-ecs-signalr-core-demo",
+    new ApplicationTargetGroupProps
+    {
+        TargetGroupName = "tg-app-ecs-signalr-core-demo",
+        Vpc = vpc,
+        TargetType = TargetType.IP,
+        ProtocolVersion = ApplicationProtocolVersion.HTTP1,
+        StickinessCookieDuration = Duration.Days(1),
+        HealthCheck = new HealthCheck
+        {
+            Protocol = Amazon.CDK.AWS.ElasticLoadBalancingV2.Protocol.HTTP,
+            HealthyThresholdCount = 3,
+            Path = "/health",
+            Port = "80",
+            Interval = Duration.Millis(10000),
+            Timeout = Duration.Millis(8000),
+            UnhealthyThresholdCount = 10,
+            HealthyHttpCodes = "200"
+        },
+        Port = 80,
+        Targets = new IApplicationLoadBalancerTarget[] { target }
+    });
+```
 
 ## **2. AWS WebSocket Api Gateway**
 
@@ -260,9 +294,33 @@ services
     });
 ```
 
+# **Compute**
+
+In the last section will see in which AWS services you can use to deploy your app:
+- AWS ECS
+- AWS EC2
+- AWS EKS
+
+## **1. AWS ECS**
+
+Nothing worth mentioning here.   
+Just build the container like any other .NET6 application and deploy it. No extra steps or configuration required here.
+
+## **2. AWS EC2**
+
+The part where you deploy the app into the server is simple, there is nothing new here, it's business as usual, it's like deploying another .NET6 application
+
+The issue comes when trying to configure the WebServer:
+- If you're using Windows with IIS you need to enable WebSockets. You can do it in a single command using Powershell: ``Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets``
+- If you're using Linux with NGINX 
+
+## **3. AWS EKS**
+
+
+
 # Example
 
-On my GitHub account you can find a repository that contains a concrete example about how to deploy a SignalR Core App on AWS.
+On my GitHub account you can find a repository that contains a quick example about how to deploy a SignalR Core App on AWS.
 
 The source code can be found here:
 - https://github.com/karlospn/deploy-signalr-core-app-on-aws
