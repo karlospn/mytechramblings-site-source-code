@@ -7,6 +7,7 @@ draft: true
 ---
 Once every full moon I get asked about using SignalR app on AWS, usually the questions are along the lines of: 
 - Can I use this service to deploy my SignalR app?
+- Should I deploy my app on a Windows VM? Can I use a Linux VM?
 - I have a load balancer/API Gateway in front of my SignalR app and it doesn't work properly, what's wrong?
 - I need to scale out the SignalR app, which service should I use for the backplane? 
 - I have multiple instances of my app and some messages seems to be getting lost, what's wrong?
@@ -308,11 +309,70 @@ Just build the container like any other .NET6 application and deploy it. No extr
 
 ## **2. AWS EC2**
 
-The part where you deploy the app into the server is simple, there is nothing new here, it's business as usual, it's like deploying another .NET6 application
+The part where you deploy the SignalR app into the server is business as usual, it's like deploying another .NET6 application.
 
-The issue comes when trying to configure the WebServer:
-- If you're using Windows with IIS you need to enable WebSockets. You can do it in a single command using Powershell: ``Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets``
-- If you're using Linux with NGINX 
+### **Using a Windows EC2 with IIS as WebServer**
+- Enable WebSockets. 
+  - You can do it in a single command using Powershell: ``Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets``
+- Sticky session should be set in the load balancer.
+
+### **Using a Linux EC2 with Apache as WebServer**
+- Create a VirtualHost configuration. Here's an example:
+```xml
+<VirtualHost *:80>
+    ProxyPass / ws://127.0.0.1:5000/
+    ProxyPassReverse / ws://127.0.0.1:5000/
+</VirtualHost>
+```
+"127.0.0.1:5000" is the local address where the SignalR app is running.
+
+You can also set the VirtualHost configuration like this:
+
+```xml
+<VirtualHost *:80>
+    ProxyPass / http://127.0.0.1:5000/
+    ProxyPassReverse / http://127.0.0.1:5000/
+</VirtualHost>
+```
+In this case it will use SSE instead of WebSockets.
+
+- Sticky session should be set in the load balancer.
+
+### **Using a Linux EC2 with NGINX as WebServer**
+- Create a new configuration on the "http" section. Here's an example:
+```javascript
+map $http_connection $connection_upgrade {
+    "~*Upgrade" $http_connection;
+    default keep-alive;
+}
+```
+
+- Create a new "Location" configuration on the "server" section. Here's an example:
+
+```javascript
+location / {
+    # App server url
+    proxy_pass http://localhost:5000;
+
+    # Configuration for WebSockets
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_cache off;
+    # WebSockets were implemented after http/1.0
+    proxy_http_version 1.1;
+
+    # Configuration for ServerSentEvents
+    proxy_buffering off;
+
+    # Configuration for LongPolling or if your KeepAliveInterval is longer than 60 seconds
+    proxy_read_timeout 100s;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+- Sticky session should be set in the load balancer.
 
 ## **3. AWS EKS**
 
