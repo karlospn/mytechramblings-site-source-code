@@ -376,7 +376,138 @@ location / {
 
 ## **3. AWS EKS**
 
+### **Using AWS Load Balancer Controller**
 
+AWS Load Balancer Controller is a controller to help manage Elastic Load Balancers for a Kubernetes cluster.
+
+- It satisfies Kubernetes Ingress resources by provisioning Application Load Balancers.
+- It satisfies Kubernetes Service resources by provisioning Network Load Balancers.
+
+For our SignalR app we need **to create an Ingress resource**.
+
+Here's a quick explanation about how the AWS Load Balancer Controller creates an configures and ALB for us.
+
+- The controller watches for ingress events from the API server. When it finds ingress resources that satisfy its requirements, it begins the creation of AWS resources.
+- An ALB is created in AWS for the new ingress resource. This ALB can be internet-facing or internal. You can also specify the subnets it's created in using annotations.
+- Target Groups are created in AWS for each unique Kubernetes service described in the ingress resource.
+- Listeners are created for every port detailed in your ingress resource annotations. When no port is specified, sensible defaults (80 or 443) are used. Certificates may also be attached via annotations.
+- Rules are created for each path specified in your ingress resource. This ensures traffic to a specific path is routed to the correct Kubernetes Service.
+
+I'm not going into further detail the AWS Load Balancer Controller, because this is out of scope for this post, for a SignalR Core app the only thing you'll need to know is that you need add the ``alb.ingress.kubernetes.io/target-group-attributes`` metadata when the Ingress resource is created.
+
+- ``alb.ingress.kubernetes.io/target-group-attributes`` specifies Target Group Attributes which should be applied to Target Groups.
+
+Previously on the "Network" section, I talked about how you need to enable "sticky sessions" for a SignalR Core app to work properly with an ALB.    
+Here we're going to use the ``alb.ingress.kubernetes.io/target-group-attributes`` metadata annotation to tell the AWS Load Balancer Controller that when he creates the Target Group it needs to enable "sticky session".
+
+Like this:
+
+```yaml
+alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=86400
+```
+
+For better understanding of how to setup the Ingress Resource, here's an example of how a  Kubernetes manifest that deploys an Ingress resource, a Service resource and a Deployment resource looks like:
+
+```yaml
+# Source: chat/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chat
+  labels:
+    helm.sh/chart: chat-0.1.0
+    app.kubernetes.io/name: chat
+    app.kubernetes.io/instance: chat
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=86400
+    alb.ingress.kubernetes.io/target-type: ip
+    kubernetes.io/ingress.class: alb
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: chat
+            port:
+              number: 80
+---              
+# Source: chat/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat
+  labels:
+    helm.sh/chart: chat-0.1.0
+    app.kubernetes.io/name: chat
+    app.kubernetes.io/instance: chat
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: chat
+    app.kubernetes.io/instance: chat
+---
+# Source: chat/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat
+  labels:
+    helm.sh/chart: chat-0.1.0
+    app.kubernetes.io/name: chat
+    app.kubernetes.io/instance: chat
+    app.kubernetes.io/version: "1.16.0"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chat
+      app.kubernetes.io/instance: chat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chat
+        app.kubernetes.io/instance: chat
+    spec:
+      serviceAccountName: chat
+      securityContext:
+        {}
+      containers:
+        - name: chat
+          securityContext:
+            {}
+          image: "242519123014.dkr.ecr.eu-west-1.amazonaws.com/signalr-chatroom:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            {}
+```
+
+I'm aware that there are other ways to consume a SignalR app that has been deployed into EKS, for example using a NGINX Ingress Controller, but I'm not going to talk about them in this section because I lack knowledge about them. 
 
 # Example
 
