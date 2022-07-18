@@ -1,15 +1,15 @@
 ---
-title: "How to deploy a SignalR Core application on AWS"
+title: "How to deploy a SignalR Core application to AWS"
 date: 2022-07-11T16:58:40+02:00
 tags: ["aws", "signalr", "dotnet"]
-description: "This post is about which AWS services can be used when you want to deploy a SignalR Core application and how to set them up properly."
+description: "This post is about which AWS services can be used and how to set them up properly when you want to deploy a SignalR Core application to AWS."
 draft: true
 ---
-Once every full moon I get asked by someone that wants to deploy a SignalR Core app on AWS, and usually the questions are more in line with which AWS services to use with SignalR app. Some of the questions are along these lines:
+Once every full moon I get asked by someone that wants to deploy a SignalR Core app on AWS, and usually the questions are more in line with wanting to know about which AWS services should they use to have a functional SignalR Core app on AWS. Some of the questions are along these lines:
 - Can I use this service to deploy my SignalR app?
 - Should I deploy my app on a Windows VM? Can I use a Linux VM?
 - Can I use an API Gateway in front of my SignalR application?
-- How should configure a Load Balancer to work properly with SignalR and WebSockets?
+- How an load balancer should be configured to work properly with WebSockets?
 - I need to scale out the SignalR app, which AWS service should I use for the backplane? 
 - Can I use the Azure SignalR Service if my application is hosted on AWS?
 
