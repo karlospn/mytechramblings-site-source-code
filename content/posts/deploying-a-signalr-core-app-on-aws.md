@@ -322,7 +322,7 @@ In the last section I want to talk about a few AWS services that can be used to 
 
 Just build the container like any other .NET6 application and deploy it. No extra steps or configuration required here.
 
-Keep in mind to enable sticky sessions on the ALB Target Group.
+Just remember to enable sticky sessions on the ALB Target Group and to setup a proper backplane.
 
 ## **2. AWS EC2**
 
@@ -331,19 +331,19 @@ The part where you deploy the SignalR app into the server is business as usual, 
 ### **Using a Windows EC2 with IIS as WebServer**
 - Enable WebSockets. 
   - You can do it in a single command using Powershell: ``Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets``.
-- Sticky session should be set in the load balancer.
+- Sticky session should be set on the load balancer not in the WebServer.
 
 ### **Using a Linux EC2 with Apache as WebServer**
-- Create a VirtualHost configuration. Here's a simple example:
+- Create a VirtualHost configuration to enable WebServer communication. Like this:
 ```xml
 <VirtualHost *:80>
     ProxyPass / ws://127.0.0.1:5000/
     ProxyPassReverse / ws://127.0.0.1:5000/
 </VirtualHost>
 ```
-"127.0.0.1:5000" is the local address where the SignalR app is running.
+`127.0.0.1:5000` is the local address where the SignalR app is running.
 
-You can also set the VirtualHost configuration like this:
+If you set the VirtualHost configuration to use `http` instead of `ws`, like this:
 
 ```xml
 <VirtualHost *:80>
@@ -351,9 +351,9 @@ You can also set the VirtualHost configuration like this:
     ProxyPassReverse / http://127.0.0.1:5000/
 </VirtualHost>
 ```
-In this case it will use SSE instead of WebSockets.
+It will use SSE (Server Sent Events) instead of WebSockets.
 
-- Sticky session should be set in the load balancer.
+- Sticky session should be set on the load balancer not in the WebServer.
 
 ### **Using a Linux EC2 with NGINX as WebServer**
 - Create a new configuration on the "http" section. Like this one:
@@ -363,7 +363,6 @@ map $http_connection $connection_upgrade {
     default keep-alive;
 }
 ```
-
 - Create a new "Location" configuration on the "server" section. Like this one:
 
 ```javascript
@@ -389,20 +388,27 @@ location / {
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
-- Sticky session should be set in the load balancer.
+- Sticky session should be set on the load balancer not in the WebServer.
 
 ## **3. AWS EKS**
 
+Just build the container like any other .NET6 application and deploy it into the EKS cluster. No extra steps or configuration required here.
+
+I'm no fan of deploying stateful resources into a K8S cluster if it can be avoided, so I'm assuming that you are using a managed AWS service (Redis, MemoryDb, RDS, etc) for the backplane.
+
+The tricky part here is configuring the Ingress Controller properly.   
+I'm aware that there are other ways to consume a SignalR app that has been deployed into EKS, for example using a NGINX Ingress Controller, but I'm not going to talk about them in this section because I lack knowledge about them. 
+
 ### **Using AWS Load Balancer Controller**
 
-AWS Load Balancer Controller is a controller to help manage Elastic Load Balancers for a Kubernetes cluster.
+AWS Load Balancer Controller is a controller that helps manage Elastic Load Balancers for a EKS cluster.
 
 - It satisfies Kubernetes Ingress resources by provisioning Application Load Balancers.
 - It satisfies Kubernetes Service resources by provisioning Network Load Balancers.
 
 For our SignalR app we need **to create an Ingress resource**.
 
-Here's a quick explanation about how the AWS Load Balancer Controller creates an configures and ALB for us.
+Here's a quick explanation about how the AWS Load Balancer Controller creates and configures an ALB for us.
 
 - The controller watches for ingress events from the API server. When it finds ingress resources that satisfy its requirements, it begins the creation of AWS resources.
 - An ALB is created in AWS for the new ingress resource. This ALB can be internet-facing or internal. You can also specify the subnets it's created in using annotations.
@@ -410,12 +416,11 @@ Here's a quick explanation about how the AWS Load Balancer Controller creates an
 - Listeners are created for every port detailed in your ingress resource annotations. When no port is specified, sensible defaults (80 or 443) are used. Certificates may also be attached via annotations.
 - Rules are created for each path specified in your ingress resource. This ensures traffic to a specific path is routed to the correct Kubernetes Service.
 
-I'm not going into further detail the AWS Load Balancer Controller, because this is out of scope for this post, for a SignalR Core app the only thing you'll need to know is that you need add the ``alb.ingress.kubernetes.io/target-group-attributes`` metadata when the Ingress resource is created.
+I'm not going into further detail about how the AWS Load Balancer Controller works, because this is out of scope for this post, for a SignalR Core app the only thing you'll need to know is that you need to add the ``alb.ingress.kubernetes.io/target-group-attributes`` metadata when the Ingress resource is created.
 
 - ``alb.ingress.kubernetes.io/target-group-attributes`` specifies Target Group Attributes which should be applied to Target Groups.
 
-Previously on the "Network" section, I talked about how you need to enable "sticky sessions" for a SignalR Core app to work properly with an ALB.    
-Here we're going to use the ``alb.ingress.kubernetes.io/target-group-attributes`` metadata annotation to tell the AWS Load Balancer Controller that when he creates the Target Group it needs to enable "sticky session".
+Previously on the "Network" section, I talked about how you need to enable "sticky sessions" for a SignalR Core app to work properly with an ALB. Now, we're going to use the ``alb.ingress.kubernetes.io/target-group-attributes`` metadata annotation to tell the AWS ALB Controller that when he creates the Target Group it needs to enable "sticky session".
 
 Like this:
 
@@ -423,7 +428,7 @@ Like this:
 alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=true,stickiness.lb_cookie.duration_seconds=86400
 ```
 
-For better understanding of how to setup the Ingress Resource, here's an example of how a  Kubernetes manifest that deploys an Ingress resource, a Service resource and a Deployment resource looks like:
+For better understanding of how to setup the Ingress Resource, here's an example of a  Kubernetes manifest that contains an Ingress, a Service and a Deployment resource.
 
 ```yaml
 # Source: chat/templates/ingress.yaml
@@ -524,7 +529,7 @@ spec:
             {}
 ```
 
-I'm aware that there are other ways to consume a SignalR app that has been deployed into EKS, for example using a NGINX Ingress Controller, but I'm not going to talk about them in this section because I lack knowledge about them. 
+
 
 # Example
 
@@ -533,9 +538,9 @@ On my GitHub account you can find a repository that contains a quick example abo
 The source code can be found here:
 - https://github.com/karlospn/deploy-signalr-core-app-on-aws
 
-The repository contains a `/cdk` folder, where you can find an AWS CDK app, that creates the following infrastructure on AWS:
+The repository contains a `/cdk` folder, where you can find a CDK app, that creates the following infrastructure on AWS:
 
-- A VPC with 10.55.0.0/16 CIDR range.
+- A VPC.
 - An Application Load Balancer.
 - A Fargate service.
 - An ElasticCache instance.
