@@ -9,11 +9,11 @@ Once every full moon I get asked by someone that wants to deploy a SignalR Core 
 - Can I use this service to deploy my SignalR app?
 - Should I deploy my app on a Windows VM? Can I use a Linux VM?
 - Can I use an API Gateway in front of my SignalR application?
-- How an load balancer should be configured to work properly with WebSockets?
+- How a load balancer should be configured to work properly with WebSockets?
 - I need to scale out the SignalR app, which AWS service should I use for the backplane? 
 - Can I use the Azure SignalR Service if my application is hosted on AWS?
 
-I usually find that there is a gap of knowledge when trying to deploy a SignalR Core app on AWS, so in this post I'll try to talk a little bit about which AWS services can be used when you want to deploy a SignalR Core application and how to set them up properly.   
+I usually find that there is a gap of knowledge when trying to deploy a SignalR Core app on AWS, so in this post I'm going to talk a little bit about which AWS services can be used and how to set them up properly when you want to deploy a SignalR Core application to AWS. 
 
 # **Network**
 
@@ -125,7 +125,7 @@ In  this section will review a few AWS services that can be used as a SignalR ba
 
 Amazon ElastiCache is a fully managed, in-memory caching service. You can use ElastiCache for caching or as a primary data store for use cases that don't require durability like session stores, gaming leaderboards, streaming, and analytics. ElastiCache is compatible with Redis and Memcached. 
 
-Using Redis as a backplane is the recommended way for scaling-out SignalR Core apps hosted on AWS, and ElastiCache is probably the service that better fits.
+Using Redis as a backplane is the recommended way for scaling-out SignalR Core apps hosted on AWS, and ElastiCache is probably the best fit.
 
 How it works? The SignalR Redis backplane uses the Redis pub/sub feature to forward messages to other servers. When a client makes a connection, the connection information is passed to the backplane. When a server wants to send a message to all clients, it sends to the backplane. The backplane knows all connected clients and which servers they're on. It sends the message to all clients via their respective servers.
 
@@ -181,9 +181,9 @@ There is no extra configuration required on MemoryDb to make it work as a Signal
 
 ### **How to configure the application**
 
-Go read the previous section where I talked about how to configure your application to use a ElastiCache Redis instance, because the use is exactly the same for both services.
+Go read the previous section where I talked about how to configure your application with a ElastiCache as a backplane, because the use is exactly the same for both services.
 
-The only thing worth mentioning is that when creating a MemoryDb Cluster you have to set up authentication, meanwhile authentication on ElastiCache is optional, which means that when setting up your SignalR app to use MemoryDb as a backplane you'll need to specify the user and password, like this:
+The only thing worth mentioning is that when creating a MemoryDb Cluster you have to set up authentication, meanwhile authentication on ElastiCache is optional, which means that when configuring your SignalR app to use MemoryDb as a backplane you'll need to specify the user and password, like this:
 
 ```csharp
 services
@@ -264,7 +264,7 @@ The traces includes: connection connected/disconnected events and message receiv
 ![azure-signalr-service-live-trace-tool](/img/signalr-trace-live-tool.png)
 
 
-Probably you're asking yourself why I'm talking about an Azure service, that's because you can use the Azure SignalR Service as a backplane with a SignalR Core app hosted in AWS as long as the application and the service are visible.   
+Probably you're asking yourself why I'm talking about an Azure service, that's because you can use the Azure SignalR Service as a backplane with a SignalR Core app hosted in AWS as long as both: application and service are visible.   
 
 The optimal solution when choosing a backplane service is having the backplane as close as possible to the app, having the backplane on another cloud provider seems far from ideal, so if you want to use it be mindful about network latency, throughput and the amount of data that will be transferred outside of AWS. 
 
@@ -394,10 +394,7 @@ location / {
 
 Just build the container like any other .NET6 application and deploy it into the EKS cluster. No extra steps or configuration required here.
 
-I'm no fan of deploying stateful resources into a K8S cluster if it can be avoided, so I'm assuming that you are using a managed AWS service (Redis, MemoryDb, RDS, etc) for the backplane.
-
-The tricky part here is configuring the Ingress Controller properly.   
-I'm aware that there are other ways to consume a SignalR app that has been deployed into EKS, for example using a NGINX Ingress Controller, but I'm not going to talk about them in this section because I lack knowledge about them. 
+The tricky part here is configuring the Ingress Controller properly.
 
 ### **Using AWS Load Balancer Controller**
 
@@ -529,7 +526,7 @@ spec:
             {}
 ```
 
-
+I'm aware that there are other ways to consume a SignalR app that has been deployed into EKS, for example using a NGINX Ingress Controller, but I'm not going to talk about them in this section because I lack knowledge about them. 
 
 # Example
 
