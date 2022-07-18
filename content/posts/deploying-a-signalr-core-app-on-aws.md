@@ -2,28 +2,30 @@
 title: "How to deploy a SignalR Core application on AWS"
 date: 2022-07-11T16:58:40+02:00
 tags: ["aws", "signalr", "dotnet"]
-description: "In this post I'll try to talk a little bit about which possibilities are available when you want to deploy a SignalR Core application on AWS."
+description: "This post is about which AWS services can be used when you want to deploy a SignalR Core application and how to set them up properly."
 draft: true
 ---
-Once every full moon I get asked about using SignalR app on AWS, usually the questions are along the lines of: 
+Once every full moon I get asked by someone that wants to deploy a SignalR Core app on AWS, and usually the questions are more in line with which AWS services to use with SignalR app. Some of the questions are along these lines:
 - Can I use this service to deploy my SignalR app?
 - Should I deploy my app on a Windows VM? Can I use a Linux VM?
-- I have a load balancer/API Gateway in front of my SignalR app and it doesn't work properly, what's wrong?
-- I need to scale out the SignalR app, which service should I use for the backplane? 
-- I have multiple instances of my app and some messages seems to be getting lost, what's wrong?
-- Can I use the Azure SignalR Service when my application is deployed in AWS?
+- Can I use an API Gateway in front of my SignalR application?
+- How should configure a Load Balancer to work properly with SignalR and WebSockets?
+- I need to scale out the SignalR app, which AWS service should I use for the backplane? 
+- Can I use the Azure SignalR Service if my application is hosted on AWS?
 
-I usually find that there is a lack of knowledge when trying to deploy a SignalR on AWS, so in this post I'll try to talk a little bit about which possibilities are available when you want to deploy a **SignalR Core** application on AWS.   
+I usually find that there is a gap of knowledge when trying to deploy a SignalR Core app on AWS, so in this post I'll try to talk a little bit about which AWS services can be used when you want to deploy a SignalR Core application and how to set them up properly.   
 
 # **Network**
 
-In this first section I want to talk about AWS services that can control and balance network traffic and how to use them with SignalR.
+In this first section I want to talk about AWS services that controls and balances network traffic and how to use them with SignalR Core.
 
 The services we're going to review are the following ones:
-- AWS Application Load Balancer
-- AWS WebSocket Api Gateway
+- **AWS Application Load Balancer**
+- **AWS WebSocket Api Gateway**
 
 ## **1. AWS Application Load Balancer**
+
+There are 2 things worth mentioning when setting up an AWS ALB: WebSockets and Sticky Sessions.
 
 ### **WebSockets**
 
@@ -35,13 +37,18 @@ The Target Group defines where to send the traffic. We can configure the port an
 
 The Listener defines how the load balancer gets its traffic from outside. That's where you define the port and the protocol to reach the load balancer, and what is the default behavior for the traffic hitting that listener. 
 
-Amazon ALB Listeners only offer HTTP or HTTPS protocol, but the good news is that WebSocket initially contacts the server with HTTP if you use ws:// or HTTPS if you use wss:// your server will then reply with ``101 Switching Protocols``, telling the client to upgrade to a WebSocket connection.
+Amazon ALB Listeners only offer HTTP or HTTPS protocol, but the good news is that WebSocket initially contacts the server with HTTP if you use ws:// or HTTPS if you use wss://.
 
-SignalR uses the WebSocket transport where available and falls back to older transports where necessary, but you don't need to do anything on an ALB to start using them.
+Your server will then reply with ``101 Switching Protocols``, telling the client to upgrade to a WebSocket connection and from this point forward the communication will be via WebSocket.
+
+SignalR uses the WebSocket transport where available and falls back to older transports where necessary.
+
+You **don't need to do any extra configuration on the ALB to start using WebSockets**, but it's good to know how it works.
+
 
 ### **Sticky sessions**
 
-SignalR requires that all HTTP requests for a specific connection be handled by the same instance. When a SignalR app is running behind a load balancer with multiple instances of the same service, "sticky sessions" must be used.
+SignalR requires that all HTTP requests for a specific connection be handled by the same instance. When a SignalR app is running behind a load balancer with multiple instances of the same service, **sticky sessions must be used**.
 
 The only circumstances in which sticky sessions are not required are:
 
@@ -49,7 +56,7 @@ The only circumstances in which sticky sessions are not required are:
 - When using the Azure SignalR Service (later we'll talk a little bit about it).
 - When all clients are configured to only use WebSockets.
 
-The next code snippet shows how to create a Target Group with sticky sesion enabled.
+The next code snippet shows an example of a CDK app that creates an ALB Target Group with sticky sesion enabled.
 
 ```csharp
 new ApplicationTargetGroup(this,
@@ -79,53 +86,54 @@ new ApplicationTargetGroup(this,
 
 ## **2. AWS WebSocket Api Gateway**
 
-In API Gateway you can create a WebSocket API as a stateful frontend for an AWS service or for an HTTP endpoint.   
+In AWS API Gateway you can create a WebSocket API, which can be use as a stateful frontend for an AWS service or an HTTP endpoint.   
 The WebSocket API invokes your backend based on the content of the messages it receives from client apps.
 
 I was **unable to make a SignalR Core app work with AWS WebSocket Api Gateway**.
    
-The problem lies with how the API Gateway handles the connections and route messages. The API Gateway uses three predefined routes to communicate with the app: `$connect`, `$disconnect`, and ``$default`. In addition, you can create custom routes.
+The problem lies with how the API Gateway handles the connections and route messages. The API Gateway uses three predefined routes to communicate with the app: `$connect`, `$disconnect`, and `$default`.
 
 - API Gateway calls the `$connect` route when a persistent connection between the client and a WebSocket API is being initiated.
 - API Gateway calls the `$disconnect` route when the client or the server disconnects from the API.
-- API Gateway calls a custom route after the route selection expression is evaluated against the message if a matching route is found; the match determines which integration is invoked.
 - API Gateway calls the `$default` route if the route selection expression cannot be evaluated against the message or if no matching route is found.
 
-This is specific way to handle connections and route messages does not sit well with SignalR.   
-In fact, it seems that integrating a SignalR Core app with an AWS WebSocket Api Gateway is not possible.    
+This is a very specific way to handle connections and route messages and does not sit well with SignalR. In fact, it seems that integrating a SignalR Core app with an AWS WebSocket Api Gateway is not possible.    
 
 If someone knows a way to do it, contact me.
 
 
 # **Backplane**
 
-A SignalR application needs to keep track of ALL connected clients, which creates a problem in an environment where applications can scale out either automatically or manually like AWS.
+A SignalR application needs to keep track of ALL connected clients, which creates a problem in an environment like AWS where applications can scale out automatically.
 
 On the diagram below we have 2 instances of a SignalR Core application behind a load balancer. When client A interacts with the application it gets routed to instance A. When client B interacts with the application it gets routed to instance B.    
-In this scenario instance A is unaware of the connected clients on instance B, and viceversa, so if a client who is connected to instance A tries to broadcast a message, it will only be send to the clients connected to that instance.
+In this scenario instance A is unaware of the connected clients on instance B, and viceversa, so if a client who is connected to instance A tries to broadcast a message, only the clients connected to instance A will receive the message.
 
-<add diagram>
+![signalr-core-application-lb](/img/signalr-lb.png)
 
-This is where a backplane becomes necessary. When a client makes a connection, the connection information is passed to the backplane. When a server wants to send a message to all clients, it sends to the backplane. The backplane knows all connected clients and which servers they're on. It sends the message to all clients via their respective servers.
+This is where a backplane becomes necessary. When a client makes a connection, the connection information is passed to the backplane. When a server wants to send a message to all clients, it sends it to the backplane. The backplane knows all connected clients and which servers they're on.
 
-<add diagram>
+![signalr-core-application-lb-backplane](/img/signalr-lb-backplane.png)
 
-In  this section will see a few AWS services that can be used as a SignalR backplane, those services are the following ones:
-- AWS ElastiCache for Redis.
-- AWS MemoryDb.
-- AWS RDS for SQL Server.
-- Azure SignalR Service.
+In  this section will review a few AWS services that can be used as a SignalR backplane, those services are the following ones:
+- **AWS ElastiCache for Redis**.
+- **AWS MemoryDb**.
+- **AWS RDS for SQL Server**.
+- **Azure SignalR Service**.
 
-## **1. AWS ElastiCache**
+## **1. AWS ElastiCache for Redis**
 
-Amazon ElastiCache is a fully managed, in-memory caching service. You can use ElastiCache for caching or as a primary data store for use cases that don't require durability like session stores, gaming leaderboards, streaming, and analytics. 
-ElastiCache is compatible with Redis and Memcached. 
+Amazon ElastiCache is a fully managed, in-memory caching service. You can use ElastiCache for caching or as a primary data store for use cases that don't require durability like session stores, gaming leaderboards, streaming, and analytics. ElastiCache is compatible with Redis and Memcached. 
 
-The SignalR Redis backplane uses the Redis pub/sub feature to forward messages to other servers. When a client makes a connection, the connection information is passed to the backplane. When a server wants to send a message to all clients, it sends to the backplane. The backplane knows all connected clients and which servers they're on. It sends the message to all clients via their respective servers.
+Using Redis as a backplane is the recommended way for scaling-out SignalR Core apps hosted on AWS, and ElastiCache is probably the service that better fits.
 
-Using a Redis backplane is the recommended way for scaling-out apps hosted on AWS and ElastiCache works fine with SignalR Core and it's pretty simple to use.
+How it works? The SignalR Redis backplane uses the Redis pub/sub feature to forward messages to other servers. When a client makes a connection, the connection information is passed to the backplane. When a server wants to send a message to all clients, it sends to the backplane. The backplane knows all connected clients and which servers they're on. It sends the message to all clients via their respective servers.
 
-### **Usage**
+### **How to configure the service**
+
+There is no extra configuration required on ElastiCache to make it work as a SignalR backplane.
+
+### **How to configure the application**
 
 1. Install the `Microsoft.AspNetCore.SignalR.StackExchangeRedis` NuGet package.
 2. In `ConfigureServices` in `Startup.cs`, configure SignalR with `.AddStackExchangeRedis()`:
@@ -134,15 +142,15 @@ Using a Redis backplane is the recommended way for scaling-out apps hosted on AW
 ```csharp
 services
     .AddSignalR()
-    .AddStackExchangeRedis("connection_string");
+    .AddStackExchangeRedis("elasticache_redis_connection_string");
 ```
 
-If you're using one ElastiCache server for multiple SignalR apps, use a different channel prefix for each SignalR app. Like this
+If you're using a single ElastiCache server for multiple SignalR apps, use a different channel prefix for each app. Like this:
 
 ```csharp
 services
     .AddSignalR()
-    .AddStackExchangeRedis("connection_string", opts => {
+    .AddStackExchangeRedis("elasticache_redis_connection_string", opts => {
         opts.Configuration.ChannelPrefix = "ChatRoom";
     });
 ```
@@ -161,24 +169,26 @@ The difference between Amazon ElastiCache and MemoryDB is that the former is int
 
 We could say that MemoryDB for Redis is AWS's answer to Redis Enterprise and it exists to try to fill the gap for customers seeking a durable counterpart to ElastiCache. Consider Amazon MemoryDB, in essence, a premium tier of ElastiCache for Redis.
 
-Both MemoryDb and ElastiCache supports the Redis pub/sub feature, so you can use both services as a SignalR backplane.   
+Both MemoryDb and ElastiCache supports the Redis pub/sub feature, so you can use both services as a SignalR backplane. 
+
 I tend to prefer ElastiCache over MemoryDb, for two reasons:
 - ElastiCache is cheaper.
-- The extra features that MemoryDb has over ElastiCache, like durability and persistence, are not really useful for SignalR.
+- The extra features that MemoryDb has over ElastiCache, like durability and persistence, are not really useful for a backplane.
  
+ ### **How to configure the service**
 
-### **Usage**
+There is no extra configuration required on MemoryDb to make it work as a SignalR backplane.
 
-If you want to use MemoryDb with SignalR Core go read the ElastiCache "Usage" section, because the use is exactly the same for both services.
+### **How to configure the application**
 
-The only thing worth mentioning is that when setting a MemoryDb Redis Cluster you'll find that authentication is required, meanwhile with on ElastiCache is optional. 
+Go read the previous section where I talked about how to configure your application to use a ElastiCache Redis instance, because the use is exactly the same for both services.
 
-Keep that in mind when configuring SignalR on your application.
+The only thing worth mentioning is that when creating a MemoryDb Cluster you have to set up authentication, meanwhile authentication on ElastiCache is optional, which means that when setting up your SignalR app to use MemoryDb as a backplane you'll need to specify the user and password, like this:
 
 ```csharp
 services
     .AddSignalR()
-    .AddStackExchangeRedis("connection_string", opts => {
+    .AddStackExchangeRedis("memorydb_redis_connection_string", opts => {
         opts.Configuration.ChannelPrefix = "ChatRoom";
         opts.Configuration.User = "user1";
         opts.Configuration.Password = "pasword12345!";
@@ -186,21 +196,21 @@ services
     });
 ```
 
-### **Usage**
-
-The use is the same as the one used for ElastiCache.
-
 ## **3. Amazon RDS for SQL Server**
 
 Amazon RDS for SQL Server makes it easy to set up, operate, and scale SQL Servers in the cloud.
 
-This is not the right solution for applications with a need for very high throughput, or very high degrees of scale-out. Consider to use one of the Redis services (ElasticCache or MemoryDb)  for such cases. 
+Using SQL Server as a backplane is not the right solution for applications with a need for very high throughput, or very high degrees of scale-out. Consider to use one of the Redis services (ElasticCache or MemoryDb)  for such cases. 
 
-There is no official Microsoft implementation for that, if you want to use it you'll need to use the `IntelliTect.AspNetCore.SignalR.SqlServer` NuGet package.   
+There is no official Microsoft implementation to use SQL Server as a backplane, if you want to use it you'll need to use the `IntelliTect.AspNetCore.SignalR.SqlServer` NuGet package.   
 More info about this package here: 
 - https://github.com/IntelliTect/IntelliTect.AspNetCore.SignalR.SqlServer
 
-### **Usage**
+ ### **How to configure the service**
+
+There is no extra configuration required on RDS for SQL Server to make it work as a SignalR backplane.
+
+### **How to configure the application**
 
 1. Install the `IntelliTect.AspNetCore.SignalR.SqlServer` NuGet package.
 2. In `ConfigureServices` in `Startup.cs`, configure SignalR with `.UseSqlServer()`:
@@ -210,7 +220,7 @@ Simple configuration:
 ```csharp
 services
     .AddSignalR()
-    .AddSqlServer(Configuration.GetConnectionString("Default"));
+    .AddSqlServer(Configuration.GetConnectionString("rds_sqlserver_connection_string"));
 ```
 
 Advanced configuration:
@@ -220,7 +230,7 @@ services
     .AddSignalR()
     .AddSqlServer(o =>
     {
-        o.ConnectionString = Configuration.GetConnectionString("Default");
+        o.ConnectionString = Configuration.GetConnectionString("rds_sqlserver_connection_string");
         // See above - attempts to enable Service Broker on the database at startup
         // if not already enabled. Default false, as this can hang if the database has other sessions.
         o.AutoEnableServiceBroker = true;
@@ -240,18 +250,25 @@ services
 
 ## **4. Azure SignalR Service**
 
-Azure SignalR Service is a managed backplane, it eliminates having to manage your own Redis/SQL Server instance.
-This services has a few advantages over the Redis backplane alternative:
+Azure SignalR Service is a managed SignalR backplane, it eliminates the need of having to manage your own Redis/SQL Server instance.
 
-- Sticky sessions, also known as client affinity, is not required, because clients are immediately redirected to the Azure SignalR Service when they connect.
+This services has a few advantages over the other backplane alternatives:
+
+- Sticky sessions are not required, because clients are immediately redirected to the Azure SignalR Service when they connect.
 - A SignalR app can scale out based on the number of messages sent, while the Azure SignalR Service scales to handle any number of connections. For example, there could be thousands of clients, but if only a few messages per second are sent, the SignalR app won't need to scale out to multiple servers just to handle the connections themselves.
 - A SignalR app won't use significantly more connection resources than a web app without SignalR.
 
-Probably you're asking yourself why I'm talking about an Azure service, that's because you can use the Azure SignalR Service with a SignalR app hosted in AWS as long as visibility exists between the application and the service.   
+Another nice feature this service provides is the "Live Trace Tool", it is is a single web application that exposes SignalR traces that went through the service.    
+The traces includes: connection connected/disconnected events and message received/left events.
 
-The optimal solution when choosing a backplane service is having the backplane as close as possible to the app, having the backplane on another cloud provider seems far from ideal, so if you want to use it be mindful about network latency, throughput and the amount of data transferred outside of AWS. 
+![azure-signalr-service-live-trace-tool](/img/signalr-trace-live-tool.png)
 
-### **Usage**
+
+Probably you're asking yourself why I'm talking about an Azure service, that's because you can use the Azure SignalR Service as a backplane with a SignalR Core app hosted in AWS as long as the application and the service are visible.   
+
+The optimal solution when choosing a backplane service is having the backplane as close as possible to the app, having the backplane on another cloud provider seems far from ideal, so if you want to use it be mindful about network latency, throughput and the amount of data that will be transferred outside of AWS. 
+
+### **How to configure the application**
 
 1. Install the `Microsoft.Azure.SignalR` NuGet package.
 2. In `ConfigureServices` in `Startup.cs`, configure SignalR with `.AddAzureSignalR()`:
@@ -261,10 +278,9 @@ Simple configuration:
 ```csharp
 services
     .AddSignalR()
-    .AddAzureSignalR("connection_string");
+    .AddAzureSignalR("azure_signalr_service_connection_string");
 ```
-The ``AddAzureSignalR()`` method can be used without passing the connection string parameter, in this case it tries to use the default configuration key for the SignalR Service resource connection string: ``Azure:SignalR:ConnectionString``.
-
+The ``AddAzureSignalR()`` method can be used without passing the "connection string" parameter, in this case it tries to use the default configuration key: ``Azure:SignalR:ConnectionString``.
 
 Advanced configuration:
 
@@ -297,27 +313,28 @@ services
 
 # **Compute**
 
-In the last section will see in which AWS services you can use to deploy your app:
-- AWS ECS
-- AWS EC2
-- AWS EKS
+In the last section I want to talk about a few AWS services that can be used to deploy your SignalR Core application, those services are the following ones:
+- **AWS ECS**
+- **AWS EC2**
+- **AWS EKS**
 
 ## **1. AWS ECS**
 
-Nothing worth mentioning here.   
 Just build the container like any other .NET6 application and deploy it. No extra steps or configuration required here.
+
+Keep in mind to enable sticky sessions on the ALB Target Group.
 
 ## **2. AWS EC2**
 
-The part where you deploy the SignalR app into the server is business as usual, it's like deploying another .NET6 application.
+The part where you deploy the SignalR app into the server is business as usual, it's like deploying any kind of .NET6 application. On the other hand setting up the web server tends to be more problematic, so let's talk a little bit about it.
 
 ### **Using a Windows EC2 with IIS as WebServer**
 - Enable WebSockets. 
-  - You can do it in a single command using Powershell: ``Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets``
+  - You can do it in a single command using Powershell: ``Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets``.
 - Sticky session should be set in the load balancer.
 
 ### **Using a Linux EC2 with Apache as WebServer**
-- Create a VirtualHost configuration. Here's an example:
+- Create a VirtualHost configuration. Here's a simple example:
 ```xml
 <VirtualHost *:80>
     ProxyPass / ws://127.0.0.1:5000/
@@ -339,7 +356,7 @@ In this case it will use SSE instead of WebSockets.
 - Sticky session should be set in the load balancer.
 
 ### **Using a Linux EC2 with NGINX as WebServer**
-- Create a new configuration on the "http" section. Here's an example:
+- Create a new configuration on the "http" section. Like this one:
 ```javascript
 map $http_connection $connection_upgrade {
     "~*Upgrade" $http_connection;
@@ -347,7 +364,7 @@ map $http_connection $connection_upgrade {
 }
 ```
 
-- Create a new "Location" configuration on the "server" section. Here's an example:
+- Create a new "Location" configuration on the "server" section. Like this one:
 
 ```javascript
 location / {
@@ -524,4 +541,4 @@ The repository contains a `/cdk` folder, where you can find an AWS CDK app, that
 - An ElasticCache instance.
 - A NAT Gateway.
 
-<add diagram>
+![signalr-core-application-diagram](/img/signalr_core_application.png)
