@@ -23,7 +23,7 @@ One of the most important things you can do to protect your supply chain is to p
 
 There are quite a few tools that allow you to scan you appn for vulnerable dependencies, one of my favorites is (Snyk)[https://snyk.io/], also if your project is hosted on GitHub, you can leverage GitHub Security to find vulnerable depedencies in your project and Dependabot will fix them by opening up a pull request against your codebase.
 
-If you don't use tool for scanning your dependencies right now, you should know that the dotnet CLI has a NuGet dependency scanner feature ready to use. 
+If you don't use any tool for scanning your dependencies right now, you should know that the dotnet CLI has a NuGet dependency scan feature ready to use. 
 
 # How to use the .NET CLI to check if your app has any vulnerable NuGet dependency
 
@@ -34,9 +34,87 @@ This command gets the security information from the centralized GitHub Advisory 
 - A CVE is Common Vulnerabilities and Exposures. This is a list of publicly disclosed computer security flaws.
 - A GHSA is a GitHub Security Advisory. GitHub is a CVE Numbering Authority (CNA) and is authorized to assign CVE identification numbers.
 
-To scan for vulnerabilities within your projects using the dotnet CLI you'll need to have installed the **.NET SDK version 5.0.200** (or a higher version) or **Visual Studio 2019 16.9** (or a higher version).
+To scan for vulnerabilities within your projects using the dotnet CLI you'll need to have installed the **.NET SDK version 5.0.200** (or higher).
 
-# How to integrate it with your CI/CD pipelines
+The `dotnet list package --vulnerable` command only works with projects that are using the ``PackageReference `` format, you won't be able to use it if your project still uses the ``packages.config`` format.
+
+Here's how the output of the ``dotnet list package --vulnerable`` command  looks like on an application that has multiple projects.
+
+```bash
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+The given project `VulnerableApp.Library.Contracts` has no vulnerable packages given the current sources.
+The given project `VulnerableApp.Library.Impl` has no vulnerable packages given the current sources.
+The given project `VulnerableApp.Repository.Contracts` has no vulnerable packages given the current sources.
+The given project `VulnerableApp.Repository.Impl` has no vulnerable packages given the current sources.
+Project `VulnerableApp.Core.Extensions` has the following vulnerable packages
+   [netstandard2.0]: 
+   Top-level Package      Requested   Resolved   Severity   Advisory URL                                     
+   > Newtonsoft.Json      12.0.3      12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+
+Project `VulnerableApp.WebApi` has the following vulnerable packages
+   [net5.0]: 
+   Top-level Package                                    Requested   Resolved   Severity   Advisory URL                                     
+   > Microsoft.AspNetCore.Authentication.JwtBearer      5.0.6       5.0.6      Moderate   https://github.com/advisories/GHSA-q7cg-43mg-qp69
+   > Newtonsoft.Json                                    12.0.3      12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+
+The given project `VulnerableApp.WebApi.IntegrationTest` has no vulnerable packages given the current sources.
+The given project `VulnerableApp.Library.Impl.UnitTest` has no vulnerable packages given the current sources.
+```
+
+As you can see the ``dotnet list package --vulnerable`` command will show if there is any package that contains a vulnerability, in which version the vulnerability has been resolved, the severity of the vulnerability, and a link to the advisory for you to view.
+
+However, the ``dotnet list package --vulnerable`` command **ONLY** checks dependencies that are directly installed on your app (top-level packages), if you are interested in seeing vulnerabilities within your dependencies you'll need to use the `--include-transitive` parameter, like this `dotnet list package --vulnerable --include-transitive`.
+
+Let's execute the ``dotnet list package --vulnerable --include-transitive`` command on the same app than before.
+
+```bash
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+Project `VulnerableApp.Library.Contracts` has the following vulnerable packages
+   [netstandard2.0]: 
+   Transitive Package      Resolved   Severity   Advisory URL                                     
+   > Newtonsoft.Json       12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+
+Project `VulnerableApp.Library.Impl` has the following vulnerable packages
+   [netstandard2.0]: 
+   Transitive Package      Resolved   Severity   Advisory URL                                     
+   > Newtonsoft.Json       12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+
+The given project `VulnerableApp.Repository.Contracts` has no vulnerable packages given the current sources.
+The given project `VulnerableApp.Repository.Impl` has no vulnerable packages given the current sources.
+Project `VulnerableApp.Core.Extensions` has the following vulnerable packages
+   [netstandard2.0]: 
+   Top-level Package      Requested   Resolved   Severity   Advisory URL                                     
+   > Newtonsoft.Json      12.0.3      12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+
+Project `VulnerableApp.WebApi` has the following vulnerable packages
+   [net5.0]: 
+   Top-level Package                                    Requested   Resolved   Severity   Advisory URL                                     
+   > Microsoft.AspNetCore.Authentication.JwtBearer      5.0.6       5.0.6      Moderate   https://github.com/advisories/GHSA-q7cg-43mg-qp69
+   > Newtonsoft.Json                                    12.0.3      12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+
+Project `VulnerableApp.WebApi.IntegrationTest` has the following vulnerable packages
+   [net5.0]: 
+   Transitive Package                                   Resolved   Severity   Advisory URL                                     
+   > Microsoft.AspNetCore.Authentication.JwtBearer      5.0.6      Moderate   https://github.com/advisories/GHSA-q7cg-43mg-qp69
+   > Newtonsoft.Json                                    12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+   > System.Net.Http                                    4.3.0      High       https://github.com/advisories/GHSA-7jgj-8wvc-jh57
+   > System.Text.RegularExpressions                     4.3.0      Moderate   https://github.com/advisories/GHSA-cmhx-cq75-c4mj
+
+Project `VulnerableApp.Library.Impl.UnitTest` has the following vulnerable packages
+   [net5.0]: 
+   Transitive Package                    Resolved   Severity   Advisory URL                                     
+   > Newtonsoft.Json                     12.0.3     High       https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+   > System.Net.Http                     4.3.0      High       https://github.com/advisories/GHSA-7jgj-8wvc-jh57
+   > System.Text.RegularExpressions      4.3.0      Moderate   https://github.com/advisories/GHSA-cmhx-cq75-c4mj
+```
+
+As you can see the list of vulnerable dependencies has grown quite a bit from the previous execution, so when using this feature use **ALWAYS** the ``--use-transitive`` parameter.
+
+# How to integrate the .NET CLI vulnerability scan feature with your CI/CD pipelines
 
 You can check for any known NuGet vulnerability and break the pipeline execution with just a couple of lines of bash script, so there is little to no excuse for you not to do it.
 
