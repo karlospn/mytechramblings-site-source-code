@@ -21,13 +21,13 @@ The term software supply chain is used to refer to everything that goes into you
 
 One of the most important things you can do to protect your supply chain is to patch your vulnerable dependencies and keep track of the outdated ones.
 
-There are quite a few tools that allow you to scan you appn for vulnerable dependencies, one of my favorites is (Snyk)[https://snyk.io/], also if your project is hosted on GitHub, you can leverage GitHub Security to find vulnerable depedencies in your project and Dependabot will fix them by opening up a pull request against your codebase.
+There are quite a few well-known tools that will allow you to scan you app for vulnerable dependencies, and if your project is hosted on GitHub you can leverage GitHub Security to find vulnerable dependencies and Dependabot will fix them by opening up a pull request against your codebase.
 
 If you don't use any tool for scanning your dependencies right now, you should know that the dotnet CLI has a NuGet dependency scan feature ready to use. 
 
-# How to use the .NET CLI to check if your app has any vulnerable NuGet dependency
+# **How to use the .NET CLI to check if your app has any vulnerable NuGet dependency**
 
-You can list any known vulnerabilities in your dependencies within your application with the `dotnet list package --vulnerable` command.
+You can list any known vulnerabilities in your NuGet dependencies within your application with the `dotnet list package --vulnerable` command.
 
 This command gets the security information from the centralized GitHub Advisory Database. This database provides two main listings of vulnerabilities:
 
@@ -38,7 +38,7 @@ To scan for vulnerabilities within your projects using the dotnet CLI you'll nee
 
 The `dotnet list package --vulnerable` command only works with projects that are using the ``PackageReference `` format, you won't be able to use it if your project still uses the ``packages.config`` format.
 
-Here's how the output of the ``dotnet list package --vulnerable`` command  looks like on an application that has multiple projects.
+Let me show you an example, I have built an N-Layer application that has a few NuGet vulnerabilities, and here's how the output of the ``dotnet list package --vulnerable`` command  looks like:
 
 ```bash
 The following sources were used:
@@ -63,11 +63,12 @@ The given project `VulnerableApp.WebApi.IntegrationTest` has no vulnerable packa
 The given project `VulnerableApp.Library.Impl.UnitTest` has no vulnerable packages given the current sources.
 ```
 
-As you can see the ``dotnet list package --vulnerable`` command will show if there is any package that contains a vulnerability, in which version the vulnerability has been resolved, the severity of the vulnerability, and a link to the advisory for you to view.
+As you can see this command will tell you if there are any packages that contains a vulnerability, in which version the vulnerability has been resolved, the severity of the vulnerability, and a link to the advisory for you to view.
 
-However, the ``dotnet list package --vulnerable`` command **ONLY** checks dependencies that are directly installed on your app (top-level packages), if you are interested in seeing vulnerabilities within your dependencies you'll need to use the `--include-transitive` parameter, like this `dotnet list package --vulnerable --include-transitive`.
+However, the ``dotnet list package --vulnerable`` command **ONLY** checks direct dependencies, which means that it will only scan the NuGet packages that are directly installed on your app (top-level packages).    
+If you are interested in seeing vulnerabilities within your dependencies as well, you'll need to use the `--include-transitive` parameter, like this `dotnet list package --vulnerable --include-transitive`.
 
-Let's execute the ``dotnet list package --vulnerable --include-transitive`` command on the same app than before.
+Let's execute the `dotnet list package --vulnerable --include-transitive` command on the same app as before.
 
 ```bash
 The following sources were used:
@@ -112,15 +113,231 @@ Project `VulnerableApp.Library.Impl.UnitTest` has the following vulnerable packa
    > System.Text.RegularExpressions      4.3.0      Moderate   https://github.com/advisories/GHSA-cmhx-cq75-c4mj
 ```
 
-As you can see the list of vulnerable dependencies has grown quite a bit from the previous execution, so when using this feature use **ALWAYS** the ``--use-transitive`` parameter.
+As you can see the list of vulnerable dependencies has grown quite a bit from the previous execution.   
 
-# How to integrate the .NET CLI vulnerability scan feature with your CI/CD pipelines
+To put it simply, remember to use **ALWAYS** the ``--use-transitive`` parameter when running the ``dotnet list package --vulnerable`` command, because the NuGet packages you have installed on your app have their own dependencies and those dependencies can be have their own dependencies, and so on and so forth.   
+In the end if you want to check if there is a vulnerability on the entire chain of dependencies not only on your top-level packages.
 
-You can check for any known NuGet vulnerability and break the pipeline execution with just a couple of lines of bash script, so there is little to no excuse for you not to do it.
+# **How to integrate the .NET CLI vulnerability scan feature with your CI/CD pipelines**
+
+The `dotnet list package --vulnerable --use-transitive` command **ONLY** list any known vulnerabilities in your dependencies, if a vulnerability if found within your application the dotnet CLI won't thrown an exception, which means that there is not a native way to stop the execution if a vulnerability is found.
+
+But that's no excuse at all, because you can check for any known NuGet vulnerability and break the pipeline execution with just a couple of lines of bash script.
+
+```bash
+dotnet list package --vulnerable --include-transitive 2>&1 | tee build.log
+grep -q -i "critical\|high\|moderate\|low" build.log; [ $? -eq 0 ] && echo "Security Vulnerabilities found on the log output" && exit 1
+```
+
+- The first line runs the `dotnet list package --vulnerable --include-transitive` command and stores the result on a file named "build.log"
+- The second one searches the "build.log" file for the "critical", "high", "moderate" or "low" keywords. If there is a match breaks the execution returning a general error.
+
+As you can see it's a pretty simple script, now let me show you how an Azure DevOps pipeline and a GitHub Action will look like.
+
+## **Azure Pipeline**
+
+The pipeline is a run of the mill .NET pipeline (`dotnet restore`, `dotnet build`, `dotnet test` and `dotnet publish`), the only thing that's different is that there is an extra step where the `dotnet list package --vulnerable --include-transitive` command is being executed.
+
+The only worth mentioning here is that  ``dotnet list package --vulnerable --include-transitive`` command needs to run after the ``dotnet restore`` command or it will error out.
+
+```yaml
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  buildConfiguration: 'Release'
+ 
+steps:
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'restore'
+    projects: '**/*.csproj'
+  displayName: 'Restore Nuget Packages'
+
+- task: Bash@3
+  displayName: Check NuGet vulnerabilities
+  inputs:
+    targetType: 'inline'
+    script: |
+      dotnet list package --vulnerable --include-transitive 2>&1 | tee build.log
+      echo "Analyze dotnet list package command log output..."
+      grep -q -i "critical\|high\|moderate\|low" build.log; [ $? -eq 0 ] && echo "Security Vulnerabilities found on the log output" && exit 1
+    
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'build'
+    projects: '**/*.csproj'
+    arguments: '--no-restore'
+  displayName: 'Build projects'
+ 
+
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'test'
+    projects: '**/*Test.csproj'
+    arguments: '--no-restore --no-build'
+  displayName: 'Run Tests'
+ 
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'publish'
+    publishWebProjects: false
+    projects: '**/VulnerableApp.WebApi.csproj'
+    arguments: '--configuration $(buildConfiguration) --no-restore'
+    modifyOutputPath: false
+  displayName: 'Publish Api'
+```
+
+## **GitHub Action**
+
+The same thing happens here, the pipeline is a run of the mill .NET pipeline with an extra step where the ``dotnet list package --vulnerable --include-transitive`` command is being executed.
+
+```yaml
+name: dotnet build pipeline checking nuget vulnerabilities
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 6.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Checking NuGet vulnerabilites
+      run: |
+        dotnet list package --vulnerable --include-transitive 2>&1 | tee build.log
+        echo "Analyze dotnet list package command log output..."
+        grep -q -i "critical\|high\|moderate\|low" build.log; [ $? -eq 0 ] && echo "Security Vulnerabilities found on the log output" && exit 1
+    - name: Build
+      run: dotnet build --no-restore
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+```
 
 
-# How to check if your app has outdated or deprecated NuGet versions
+# **How to check if your app has any outdated or deprecated dependencies**
 
-To ensure a secure supply chain of dependencies, you will want to ensure that all of your dependencies & tooling are regularly updated to the latest stable version as they will often include the latest functionality and security patches to known vulnerabilities
+To ensure a secure supply chain of dependencies, you will want to ensure that all of your dependencies are regularly updated to the latest stable version as they will often include the latest functionality and security patches to known vulnerabilities.
 
-You can use the dotnet CLI to list any known deprecated  dependencies you may have inside your project or solution. You can use the command `dotnet list package --deprecated` to provide you a list of any known deprecations.
+You can also use the dotnet CLI to list any known deprecated or outdate dependencies you may have inside your project or solution.
+
+The commands are the following ones:
+- `dotnet list package --outdated`
+- `dotnet list package --deprecated`
+
+## **Check outdated dependencies**
+
+The `dotnet list package --outdated` lists packages that have been outdated.
+
+Here's how the output of the `dotnet list package --outdated` command looks like when executed on the same application I have used in the previous section.
+
+```bash
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+The given project `VulnerableApp.Library.Contracts` has no updates given the current sources.
+Project `VulnerableApp.Library.Impl` has the following updates to its packages
+   [netstandard2.0]: 
+   Top-level Package                                            Requested   Resolved   Latest
+   > AutoMapper                                                 10.1.1      10.1.1     11.0.1
+   > Microsoft.Extensions.DependencyInjection.Abstractions      5.0.0       5.0.0      6.0.0 
+   > Microsoft.Extensions.Logging                               5.0.0       5.0.0      6.0.0 
+   > Microsoft.Extensions.Options.ConfigurationExtensions       5.0.0       5.0.0      6.0.0 
+
+The given project `VulnerableApp.Repository.Contracts` has no updates given the current sources.
+Project `VulnerableApp.Repository.Impl` has the following updates to its packages
+   [netstandard2.0]: 
+   Top-level Package                                            Requested   Resolved   Latest
+   > Microsoft.Extensions.DependencyInjection.Abstractions      5.0.0       5.0.0      6.0.0 
+   > Microsoft.Extensions.Options.ConfigurationExtensions       5.0.0       5.0.0      6.0.0 
+
+Project `VulnerableApp.Core.Extensions` has the following updates to its packages
+   [netstandard2.0]: 
+   Top-level Package      Requested   Resolved   Latest
+   > Newtonsoft.Json      12.0.3      12.0.3     13.0.1
+
+Project `VulnerableApp.WebApi` has the following updates to its packages
+   [net5.0]: 
+   Top-level Package                                          Requested   Resolved   Latest
+   > AutoMapper.Extensions.Microsoft.DependencyInjection      8.1.1       8.1.1      11.0.0
+   > Microsoft.AspNetCore.Authentication.JwtBearer            5.0.6       5.0.6      6.0.7 
+   > Microsoft.AspNetCore.Authentication.OpenIdConnect        5.0.6       5.0.6      6.0.7 
+   > Microsoft.AspNetCore.Mvc.NewtonsoftJson                  5.0.6       5.0.6      6.0.7 
+   > Microsoft.Identity.Web                                   1.11.0      1.11.0     1.25.1
+   > Newtonsoft.Json                                          12.0.3      12.0.3     13.0.1
+   > Serilog.AspNetCore                                       4.1.0       4.1.0      6.0.1 
+   > Serilog.Sinks.Console                                    3.1.1       3.1.1      4.0.1 
+   > Serilog.Sinks.File                                       4.1.0       4.1.0      5.0.0 
+   > Swashbuckle.AspNetCore                                   6.1.4       6.1.4      6.4.0 
+   > Swashbuckle.AspNetCore.Annotations                       6.1.4       6.1.4      6.4.0 
+   > Swashbuckle.AspNetCore.Newtonsoft                        6.1.4       6.1.4      6.4.0 
+
+Project `VulnerableApp.WebApi.IntegrationTest` has the following updates to its packages
+   [net5.0]: 
+   Top-level Package                       Requested   Resolved   Latest
+   > coverlet.collector                    1.3.0       1.3.0      3.1.2 
+   > Microsoft.AspNetCore.Mvc.Testing      5.0.6       5.0.6      6.0.7 
+   > Microsoft.NET.Test.Sdk                16.7.1      16.7.1     17.2.0
+   > xunit                                 2.4.1       2.4.1      2.4.2 
+   > xunit.runner.visualstudio             2.4.3       2.4.3      2.4.5 
+
+Project `VulnerableApp.Library.Impl.UnitTest` has the following updates to its packages
+   [net5.0]: 
+   Top-level Package                Requested   Resolved   Latest
+   > coverlet.collector             1.3.0       1.3.0      3.1.2 
+   > Microsoft.NET.Test.Sdk         16.7.1      16.7.1     17.2.0
+   > Moq                            4.16.1      4.16.1     4.18.2
+   > xunit                          2.4.1       2.4.1      2.4.2 
+   > xunit.runner.visualstudio      2.4.3       2.4.3      2.4.5 
+```
+
+The `dotnet list package --outdated` command only checks for outdated references on the top-level packages, if you want to check for outdated dependencies in the entire chain of dependencies you can use the `--use-transitive` parameter.
+
+
+## **Check deprecated dependencies**
+
+The `dotnet list package --deprecated` lists packages that have been deprecated.
+
+Here's how the output of the `dotnet list package --deprecated` command looks like when executed on the same application I have used in the previous section.
+
+```bash
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+The given project `VulnerableApp.Library.Contracts` has no deprecated packages given the current sources.
+Project `VulnerableApp.Library.Impl` has the following deprecated packages
+   [netstandard2.0]: 
+   Top-level Package                                            Requested   Resolved   Reason(s)      Alternative
+   > Microsoft.Extensions.DependencyInjection.Abstractions      5.0.0       5.0.0      Other,Legacy              
+   > Microsoft.Extensions.Logging                               5.0.0       5.0.0      Other,Legacy              
+   > Microsoft.Extensions.Options.ConfigurationExtensions       5.0.0       5.0.0      Other,Legacy              
+
+The given project `VulnerableApp.Repository.Contracts` has no deprecated packages given the current sources.
+Project `VulnerableApp.Repository.Impl` has the following deprecated packages
+   [netstandard2.0]: 
+   Top-level Package                                            Requested   Resolved   Reason(s)      Alternative
+   > Microsoft.Extensions.DependencyInjection.Abstractions      5.0.0       5.0.0      Other,Legacy              
+   > Microsoft.Extensions.Options.ConfigurationExtensions       5.0.0       5.0.0      Other,Legacy              
+
+The given project `VulnerableApp.Core.Extensions` has no deprecated packages given the current sources.
+The given project `VulnerableApp.WebApi` has no deprecated packages given the current sources.
+The given project `VulnerableApp.WebApi.IntegrationTest` has no deprecated packages given the current sources.
+The given project `VulnerableApp.Library.Impl.UnitTest` has no deprecated packages given the current sources.
+```
+
+.NET5 reached the "End of Support" status a couple of months ago, that's the reason why the scan is telling me that those 5.0.0 dependencies are deprecated.
+
+The `dotnet list package --deprecated`  only checks for deprecated references on the top-level packages, if you want to check for outdated dependencies in the entire chain of dependencies you can use the `--use-transitive` parameter.
+
