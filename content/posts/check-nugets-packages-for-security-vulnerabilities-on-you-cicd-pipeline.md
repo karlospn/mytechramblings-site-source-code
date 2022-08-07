@@ -64,7 +64,11 @@ The given project `VulnerableApp.Library.Impl.UnitTest` has no vulnerable packag
 
 As you can see this command will tell you if there are any packages that contains a vulnerability, the severity of the vulnerability, and a link with more information about the vulnerability.
 
-However, the ``dotnet list package --vulnerable`` command **ONLY** checks direct dependencies, which means that it will only scan the NuGet packages that are directly installed on your app (top-level packages).    
+The "Requested" and "Resolved" columns might lead to confusion, so let me explain what they mean:
+- The "Requested" column will include the version that the developer has indicated in the package reference within the project file, which means it can be a range.  
+- The "Resolved" column will include the version that the project is currently using and will always be a single value.
+
+The ``dotnet list package --vulnerable`` command **ONLY** checks direct dependencies, which means that it will only scan the NuGet packages that are directly installed on your app (top-level packages).    
 If you are interested in seeing vulnerabilities within your dependencies as well, you'll need to use the `--include-transitive` parameter, like this `dotnet list package --vulnerable --include-transitive`.
 
 Let's execute the `dotnet list package --vulnerable --include-transitive` command on the same app.
