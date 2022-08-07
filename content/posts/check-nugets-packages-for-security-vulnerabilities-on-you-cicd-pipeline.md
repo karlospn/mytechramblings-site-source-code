@@ -1,44 +1,43 @@
 ---
-title: "How to easily check on your CI/CD pipeline if your app contains a NuGet package with a security vulnerability"
+title: "How to easily check on your CI/CD pipelines if your app has a NuGet package with a security vulnerability"
 date: 2022-08-06T17:06:21+02:00
 tags: ["devops", "dotnet", "nuget"]
-description: "ToDo"
+description: "Almost every dotnet application contains dozens of NuGet dependencies, and those dependencies may have their own dependencies, and so on and so forth. What if any of those dependencies you're using contains a security vulnerability? You can check on your CI/CD pipeline for any known NuGet vulnerability with just a couple of lines of bash script."
 draft: true
 ---
 
 > **Just show me the code**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/check-nuget-packages-for-security-vulnerabilities).
 
-Almost every dotnet application contains a few NuGet dependencies, and those dependencies may have their own dependencies, and so on and so forth.
-That means that your application ends up depending on dozens of dependencies.
+Almost every dotnet application contains dozens of NuGet dependencies, and those dependencies may have their own dependencies, and so on and so forth.   
+That means that your application ends up depending on hundreds of external dependencies.
 
 What if any of those dependencies you're using are vulnerable? That could pose a risk of a supply chain attack.   
-What is software supply chain attack?  It is an upstream vulnerability in one of your dependencies that can be fatal, making your app vulnerable to a potential compromise.
+What is software supply chain attack?  It is an upstream vulnerability in one of your dependencies that can be fatal, making your app vulnerable to a potential compromise.   
+
+The term supply chain is used to refer to everything that goes into your software and where it comes from. It is the dependencies and properties of your dependencies that your software supply chain depends on. A dependency can be code, binaries, or other components, and where they come from, such as a repository or package manager. 
 
 If you don't live under a rock, then you've likely heard about last year Log4j vulnerability, this was a software supply chain vulnerability in which having the popular Java logging framework installed on your app could compromise your business.
 
-The term software supply chain is used to refer to everything that goes into your software and where it comes from. It is the dependencies and properties of your dependencies that your software supply chain depends on. A dependency can be code, binaries, or other components, and where they come from, such as a repository or package manager.   
-
-One of the most important things you can do to protect your supply chain is to patch your vulnerable dependencies and keep track of the outdated ones.
-
 There are quite a few well-known tools that will allow you to scan you app for vulnerable dependencies, and if your project is hosted on GitHub you can leverage GitHub Security to find vulnerable dependencies and Dependabot will fix them by opening up a pull request against your codebase.
 
-If you don't use any tool for scanning your dependencies right now, you should know that the dotnet CLI has a NuGet dependency scan feature ready to use. 
+If you don't use any tool for scanning your vulnerable dependencies right now, you should know that the **dotnet CLI is capable of doing it without any external tool.**.
 
 # **How to use the .NET CLI to check if your app has any vulnerable NuGet dependency**
 
-You can list any known vulnerabilities in your NuGet dependencies within your application with the `dotnet list package --vulnerable` command.
+Within your application you can list any known vulnerabilities in your dependencies using the `dotnet list package --vulnerable` command.
 
 This command gets the security information from the centralized GitHub Advisory Database. This database provides two main listings of vulnerabilities:
 
 - A CVE is Common Vulnerabilities and Exposures. This is a list of publicly disclosed computer security flaws.
 - A GHSA is a GitHub Security Advisory. GitHub is a CVE Numbering Authority (CNA) and is authorized to assign CVE identification numbers.
 
-To scan for vulnerabilities within your projects using the dotnet CLI you'll need to have installed the **.NET SDK version 5.0.200** (or higher).
+To use this feature you'll need to have installed the **.NET SDK version 5.0.200** (or higher).
 
-The `dotnet list package --vulnerable` command only works with projects that are using the ``PackageReference `` format, you won't be able to use it if your project still uses the ``packages.config`` format.
+The `dotnet list package --vulnerable` command only works with projects that are using the `PackageReference` format, you won't be able to use it if your project still uses the `packages.config` format.
 
-Let me show you an example, I have built an N-Layer application that has a few NuGet vulnerabilities, and here's how the output of the ``dotnet list package --vulnerable`` command  looks like:
+Let me show you an example.   
+I have built a .NET5 N-Layer application that has a few NuGet vulnerabilities, and here's how the output of the ``dotnet list package --vulnerable`` command  looks like:
 
 ```bash
 The following sources were used:
@@ -63,12 +62,12 @@ The given project `VulnerableApp.WebApi.IntegrationTest` has no vulnerable packa
 The given project `VulnerableApp.Library.Impl.UnitTest` has no vulnerable packages given the current sources.
 ```
 
-As you can see this command will tell you if there are any packages that contains a vulnerability, in which version the vulnerability has been resolved, the severity of the vulnerability, and a link to the advisory for you to view.
+As you can see this command will tell you if there are any packages that contains a vulnerability, the severity of the vulnerability, and a link with more information about the vulnerability.
 
 However, the ``dotnet list package --vulnerable`` command **ONLY** checks direct dependencies, which means that it will only scan the NuGet packages that are directly installed on your app (top-level packages).    
 If you are interested in seeing vulnerabilities within your dependencies as well, you'll need to use the `--include-transitive` parameter, like this `dotnet list package --vulnerable --include-transitive`.
 
-Let's execute the `dotnet list package --vulnerable --include-transitive` command on the same app as before.
+Let's execute the `dotnet list package --vulnerable --include-transitive` command on the same app.
 
 ```bash
 The following sources were used:
@@ -115,12 +114,11 @@ Project `VulnerableApp.Library.Impl.UnitTest` has the following vulnerable packa
 
 As you can see the list of vulnerable dependencies has grown quite a bit from the previous execution.   
 
-To put it simply, remember to use **ALWAYS** the ``--use-transitive`` parameter when running the ``dotnet list package --vulnerable`` command, because the NuGet packages you have installed on your app have their own dependencies and those dependencies can be have their own dependencies, and so on and so forth.   
-In the end if you want to check if there is a vulnerability on the entire chain of dependencies not only on your top-level packages.
+To put it simply, remember to use **ALWAYS** the ``--use-transitive`` parameter when running the ``dotnet list package --vulnerable`` command, because the NuGet packages you have installed on your app have their own dependencies and those dependencies can be have their own dependencies, and so on and so forth. And you want to check if there is a vulnerability on the entire chain of dependencies not only on your top-level packages.
 
 # **How to integrate the .NET CLI vulnerability scan feature with your CI/CD pipelines**
 
-The `dotnet list package --vulnerable --use-transitive` command **ONLY** list any known vulnerabilities in your dependencies, if a vulnerability if found within your application the dotnet CLI won't thrown an exception, which means that there is not a native way to stop the execution if a vulnerability is found.
+The `dotnet list package --vulnerable --use-transitive` command **only lists** vulnerabilities found on your dependencies, if a vulnerability is found within your application the dotnet CLI won't thrown any kind of error, which means that there is not a native way to stop the execution of a pipeline if a vulnerability is found.
 
 But that's no excuse at all, because you can check for any known NuGet vulnerability and break the pipeline execution with just a couple of lines of bash script.
 
@@ -130,15 +128,15 @@ grep -q -i "critical\|high\|moderate\|low" build.log; [ $? -eq 0 ] && echo "Secu
 ```
 
 - The first line runs the `dotnet list package --vulnerable --include-transitive` command and stores the result on a file named "build.log"
-- The second one searches the "build.log" file for the "critical", "high", "moderate" or "low" keywords. If there is a match breaks the execution returning a general error.
+- The second one searches the "build.log" file for the "critical", "high", "moderate" or "low" keywords. If there is a match, it breaks the pipeline execution by returning a general error.
 
-As you can see it's a pretty simple script, now let me show you how an Azure DevOps pipeline and a GitHub Action will look like.
+As you can see it's a pretty simple script, now let me show you how an Azure DevOps Pipeline and a GitHub Action will look like.
 
 ## **Azure Pipeline**
 
-The pipeline is a run of the mill .NET pipeline (`dotnet restore`, `dotnet build`, `dotnet test` and `dotnet publish`), the only thing that's different is that there is an extra step where the `dotnet list package --vulnerable --include-transitive` command is being executed.
+The pipeline is a run of the mill .NET pipeline (`dotnet restore`, `dotnet build`, `dotnet test` and `dotnet publish`), the only thing that's different is that there is an extra step where the `dotnet list package --vulnerable --include-transitive` command is being executed and evaluated.
 
-The only worth mentioning here is that  ``dotnet list package --vulnerable --include-transitive`` command needs to run after the ``dotnet restore`` command or it will error out.
+It is also worth mentioning that the  ``dotnet list package --vulnerable --include-transitive`` command needs to run after the ``dotnet restore`` command or it will error out.
 
 ```yaml
 trigger:
@@ -193,7 +191,7 @@ steps:
 
 ## **GitHub Action**
 
-The same thing happens here, the pipeline is a run of the mill .NET pipeline with an extra step where the ``dotnet list package --vulnerable --include-transitive`` command is being executed.
+The same thing happens here, the pipeline is a run of the mill .NET pipeline with an extra step where the ``dotnet list package --vulnerable --include-transitive`` command is being executed and evaluated.
 
 ```yaml
 name: dotnet build pipeline checking nuget vulnerabilities
@@ -231,7 +229,7 @@ jobs:
 
 To ensure a secure supply chain of dependencies, you will want to ensure that all of your dependencies are regularly updated to the latest stable version as they will often include the latest functionality and security patches to known vulnerabilities.
 
-You can also use the dotnet CLI to list any known deprecated or outdate dependencies you may have inside your project or solution.
+You can also use the dotnet CLI to list any known deprecated or outdated dependencies you may have inside your project or solution.
 
 The commands are the following ones:
 - `dotnet list package --outdated`
@@ -302,6 +300,8 @@ Project `VulnerableApp.Library.Impl.UnitTest` has the following updates to its p
    > xunit                          2.4.1       2.4.1      2.4.2 
    > xunit.runner.visualstudio      2.4.3       2.4.3      2.4.5 
 ```
+Having an outdated package is not as problematic as having a vulnerable one, but nonetheless it is good to know about them.   
+In this case I'm evaluating a .NET5 app that was built a couple years ago, so it is completely normal that some of the dependencies are outdated.
 
 The `dotnet list package --outdated` command only checks for outdated references on the top-level packages, if you want to check for outdated dependencies in the entire chain of dependencies you can use the `--use-transitive` parameter.
 
