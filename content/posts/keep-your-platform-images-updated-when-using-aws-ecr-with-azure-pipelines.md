@@ -47,15 +47,95 @@ I see 3 main things we'll need to implement to automate the creation/update of a
 - Update of an existing platform image because the base image has a new updated version available.
 - Update of an existing platform image because we have modified something and want to create a new version of the image.
 
-# **Platform image creation/update process**
+# **dotnet platform image creation/update automated process diagram**
 
-The following diagram contains the necessary steps we're going to build to automate the creation or update of a platform image.
+The following diagram shows the necessary steps we're going to build to automate the creation or update of a platform image.  
+
+The platform image creation/update process is going to be executed on an **Azure DevOps Pipeline**.   
+Every platform image will have its own Azure DevOps pipeline.
 
 ![pipeline-diagram](/img/update-platform-images-pipeline.png)
 
 The pipeline gets triggered on a scheduled basis (every Monday at 6:00 UTC), it uses a scheduled trigger because we want to periodically poll the Microsoft container registry (https://mcr.microsoft.com/) to check if there is any update available for the base image.
 
 When trying to update an image if there is NO new update available on the base image then the pipeline just ends there.   
-If there is a new updated base image on the Microsoft registry then the pipeline will create a new version of the platform image, test it, store it into ECR and notify the update into a Teams Channel.
 
-Also if you want to change something on an existing platform image (install some new software, update some existing one, set some permissions, etc) you will want to create a new version of the platform image right away, you can do it setting the ``skip_update = true`` pipeline parameter, that parameter will skip the Microsoft container registry update check and go straight into creating a new platform image.
+If there is a new updated base image on the Microsoft registry then the pipeline will create a new version of the platform image, test it, store it into ECR and notify the update into a Teams channel.
+
+Also if you want to change something on an existing platform image (for example, install some new software, update some existing one, set some permissions, etc) you will want to create a new version of the platform image right away, you can do it setting the ``force_update`` pipeline parameter to ``true``, that parameter will skip the Microsoft container registry update check and go straight into creating a new platform image.
+
+## **How to know if there is a new updated base image?**
+
+If you're using Azure Container Registry (ACR) as your container registry you can use ACR Tasks to automate the creation of a new platform image when a container's base image is updated.
+- _More info here about it: https://docs.microsoft.com/en-us/azure/container-registry/container-registry-tutorial-base-image-update_
+
+But this kind of functionality does not exist for AWS ECR, so you'll need to build something on the side.
+
+There are some third party tools like Diun or image-watch that allows us to receive notifications when a Docker image is updated on a Docker registry, but there is a much easier approach that using those tools:
+- Use Azure Pipelines (or any other CI/CD service like GitHub Action) with a Cron Trigger that runs a pipelines thats checks if the base image has been updated.
+
+But, how do we know if a dotnet base image has been updated?     
+We can query the Microsoft Artifact Registry (https://mcr.microsoft.com) for any dotnet image to obtain when was pushed last time.   
+For example, if we want to know when the "mcr.microsoft.com/dotnet/runtime:6.0-bullseye-slim" image whas pushed last image we can go fetch that information from here: "https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime/tags".
+
+From this point forward we can fetch the last time our platform image was pushed into AWS ECR and if this value is inferior then it means we're not using the most up to date base image and a new platform image needs to be built.
+
+## **What's the test step all about?**
+
+You'll see a "Test Platform Image" if you take a look at the diagram from above, but what does it mean?
+
+When updating a platform image we need to validate that the updated version are not going to break anything that could potentially affect our enterprise applications.   
+
+The pipeline test step validates that you can run the platform image version that you're building in a real application without any unexpected error.
+
+## **What tagging strategy are we going to use?**
+
+A tagging strategy is important for managing multiple versions of containers and make consuming images easier across your organization.
+
+The platform images will be tagged using the upstream version of the platform with some minor tweaks.
+
+Let's take a look at how Microsoft tags their images:
+
+- _{dotnet-version}-{os-version}-{architecture-os}_
+ 
+ Here's a few example of how the .NET runtime image is tagged:
+
+- 6.0.8-bullseye-slim-amd64
+- 6.0-bullseye-slim-amd64
+- 6.0.8-bullseye-slim
+- 6.0-bullseye-slim
+- 6.0.8
+- 6.0
+
+For my platform images I'm going to use a similar approach
+
+- _{dotnet-version}-{os-version}-{versioning}_
+
+And it will look like this:
+
+- 6.0-bullseye-slim-1.0.0  
+- 6.0-bullseye-slim.1.1.0  
+
+A version is added at the end of the tag so if there is the necessity to use a previous platform image we can use a specific version.
+
+
+
+
+
+
+
+# **Building the dotnet platform image creation/update automated process.**
+
+## **Key points**
+From the previous section I can extract the following key points to keep in mind when building this solution:
+
+- Platform images are going to be stored in AWS ECR.
+- Azure Pipelines to run the process of creation/update the platform images.
+- An Azure Pipeline scheduled trigger will be used to periodically check if any dotnet base image contains a new update.
+- The ``Dockerfile`` for any platform image will be hosted on Azure DevOps Repos.
+- Every time a new version of a platform is created
+- Every time a new version of a platform is created a notification to a Teams Channel needs to be sent.
+
+## **Repository structure**
+
+## **Building the pipeline**
