@@ -260,6 +260,8 @@ I decided to use shell script to implement every step of the pipeline. Let's get
 
 ### **force-update-process script**
 
+First step of the pipeline is 
+
 ```bash
 #!/bin/bash
 
@@ -337,6 +339,15 @@ echo "##vso[task.setvariable variable=aws_tag_version]$new_tag_version"
 
 ### **check-if-ecr-repository-exists script**
 
+This scripts checks if the ECR repository exists using the ``aws ecr describe-repositories`` command.
+
+- If the repository doesn't exist:
+    - It sets the platform image tag version to 1.0.0 and stores it in a pipeline variable. 
+    - It sets the ``skip_update_check`` pipeline variable to ``true``. This pipeline variable is used to skip the step that validates if there is a new update available in the Microsoft registry, if the repository doesn't exists it means that we're building a new platform image from the ground up, so it makes no sense to check if there is a new base image update available.
+
+> The image tag version that the script stored in a pipeline variable will be used later on when it's time to push the image into ECR.
+
+
 ```bash
 #!/bin/bash
 if [ -z "$1" ]; then
@@ -381,6 +392,18 @@ echo "Private ECR Repository found"
 ```
 
 ### **check-if-update-is-needed script**
+
+This scripts checks if there is a new base image available.
+
+How we do that? The script does the following steps
+
+- Queries the Microsoft Artifact Registry (https://mcr.microsoft.com) to obtain the ``lastModifiedDate`` property of the base image.
+- Fetches when was the last time that our platform image was pushed into AWS ECR, and if this value is inferior than the one retrieved from the Microsoft Artifact Registry then it means we're not using the most up to date base image and a new platform image needs to be built.
+- It retrieves the version of the platform image, auto-increments the value and stores it in a pipeline variable.    
+For example, if our latest platform image stored in ECR contains this tag: "6.0-bullseye-slim-1.3.0", we want to generate the "6.0-bullseye-slim-1.4.0" for our new platform image.
+
+> The image tag version that the script stored in a pipeline variable will be used later on when it's time to push the image into ECR.
+
 
 ```bash
 #!/bin/bash
@@ -459,9 +482,9 @@ if [ -z "$aws_image_pushed_at" ]; then
     exit 1
 fi
 
-echo "Contaimer with name: $aws_ecr_repository_name was pushed on Vy ECR last time at: $aws_image_pushed_at"
+echo "Contaimer with name: $aws_ecr_repository_name was pushed on ECR last time at: $aws_image_pushed_at"
 
-if [[ "$aws_image_pushed_at" < "$mcr_push_date_cleaned" ]] ;
+if [[ "$aws_image_pushed_at" > "$mcr_push_date_cleaned" ]] ;
 then
     echo "There are no new versions of the image in the MCR registry. Nothing further to do."
     echo "##vso[task.setvariable variable=skip_tasks]true"
@@ -520,6 +543,8 @@ echo "##vso[task.setvariable variable=aws_tag_version]$new_tag_version"
 
 ### **docker-build script**
 
+This script builds the new platform image. Simple as that.
+
 ```bash
 #!/bin/bash
 if [ -z "$1" ]; then
@@ -538,6 +563,15 @@ docker build -t platform.image:tmp $image_context
 ```
 
 ### **integration-test script**
+
+This script validates that the platform image created in the script above can be used to create an image of a real application.
+
+The script does the following steps:
+- Retrieves the test application from the ``/integration-tests/{dotnet version}``
+- Overrides the ``FROM`` statement from the integration test ``Dockerfile`` with the platform image we're building.
+- Checks that the ``docker build`` process didn't thrown any warning or error.
+- Starts the application using the ``docker run`` command.
+- Sends an Http Request to the running application using cURL and expects that the response is a 200 OK status Code.
 
 ```bash
 #!/bin/bash
@@ -620,6 +654,14 @@ fi
 
 ### **push-to-private-ecr script**
 
+The script creates the ECR repository if it doesn't exists and then pushes the platform image into ECR
+
+The script does the following steps:
+- Creates the ECR repository using the ``aws ecr create-repository`` command.
+- Retrieves the tag version set in the previous scripts.
+- Tags the image with the ``latest`` tag, the tag version tag and some extra tags we can pass it as a parameter.
+- Pushes the tags and the image into ECR.
+
 ```bash
 #!/bin/bash
 if [ -z "$1" ]; then
@@ -682,6 +724,13 @@ done
 ```
 
 ### **send-teams-notification script**
+
+This scripts notifies to a Teams Channel that a new platform image is available.
+
+The script does the following steps:
+- Builds an adaptative card for Microsoft Teams.
+- Sends the card to Microsoft Teams using a HTTP WebHook.
+
 
 ```bash
 #!/bin/bash
