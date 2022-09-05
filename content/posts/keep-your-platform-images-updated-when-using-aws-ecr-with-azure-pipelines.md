@@ -133,7 +133,6 @@ From the previous section I can extract the following key points to keep in mind
 - Azure Pipelines to run the process of creation/update the platform images.
 - An Azure Pipeline scheduled trigger will be used to periodically check if any dotnet base image contains a new update.
 - The ``Dockerfile`` for any platform image will be hosted on Azure DevOps Repos.
-- Every time a new version of a platform is created
 - Every time a new version of a platform is created a notification to a Teams Channel needs to be sent.
 
 ## **Repository structure**
@@ -228,29 +227,30 @@ This folder contains a set of shared scripts and assets used by the platform ima
 
 ### **/platform-images folder**
 
-The ``/platform-images/{dotnet version}`` folder will contain all your platform images, the platform images are segregated by dotnet version (net5, net6, net7, etc).   
+The ``/platform-images/{dotnet version}`` folder will contain all your platform images, the platform images will be segregated by dotnet version (net5, net6, net7, etc).   
 
 For any platform image you'll need:
-- A ``Dockerfile`` which contains a set of instructions and commands that will be used to create/build the platform image.
-- An ``azure-pipelines.yml`` pipeline, it will be use to create/update the corresponding platform image.   
+- A ``Dockerfile`` which contains a set of instructions and commands that will be used to build the platform image.
+- An ``azure-pipelines.yml`` pipeline that it will be used to create and update the corresponding platform image.   
 
 ## **Integration Test step**
 
 When updating a platform image we need to validate that the update doesn't break anything that could potentially affect our applications.   
 
-The ``/shared/integration-tests`` folder contains an series of applications that are going to be used as an integration test application. Every dotnet version will have its own integration test application.
+The ``/shared/integration-tests`` folder will contain a series of applications that are going to be used as an integration test application. Every dotnet version will have its own integration test application.
 
-When building a new version of a platform image, we will test that this new platform image doesn't break anything by using it in this integration test app.
+When building a new version of a platform image, we will test that the new platform image doesn't break anything by building a real world application that is going to use the platform image as base image.
 
-The validation steps runs the following commands: 
+
+The integration test step runs the following commands: 
 
 - Retrieves the test application from the ``/integration-tests/{dotnet version}``
 - Overrides the ``FROM`` statement from the integration test ``Dockerfile`` with the platform image we're building.
-- Checks that the ``docker build`` process didn't thrown any warning or error.
+- Builds an image of the integration test app  and checks that the ``docker build`` process didn't thrown any warning or error.
 - Starts the application using the ``docker run`` command.
 - Sends an Http Request to the running application using cURL and expects that the response is a 200 OK status Code.
 
-If all those steps run without any problem then the integration test is a success, if any of those steps fails the integration test fails and breaks the pipeline.
+If all those steps run without any problem then the integration test is a success, if any of those steps fails then the integration test fails and breaks the pipeline.
 
 ## **Building the pipeline**
 
@@ -264,8 +264,7 @@ I decided to use shell script to implement every step of the pipeline. Let's get
 
 This particular script runs only if the ``force_update`` parameter is set to ``true`` in the pipeline.
 
-This parameter is used in the pipeline if you want to change something on an existing platform image (for example, install some new software, update some existing one, set some permissions, etc) and create a new version of the platform image right away.   
-This parameter skips the Microsoft container registry update check and go straight into creating a new platform image.
+This parameter is used if you want to manually force the creation of a new platform image version. It skips the Microsoft container registry update check and goes straight into creating a new platform image.
 
 This script does the following steps:
 - It retrieves the version of the last platform image, increments the version value and stores it in a pipeline variable.    
@@ -355,7 +354,7 @@ This script checks if the ECR repository exists using the ``aws ecr describe-rep
 - If the repository doesn't exist:
     - It sets the platform image tag version to 1.0.0 and stores it in a pipeline variable. 
     - It sets the ``skip_update_check`` pipeline variable to ``true``. 
-      - This pipeline variable is used to skip the step that validates if there is a new update available in the Microsoft registry, if the repository doesn't exists it means that we're building a new platform image from the ground up, so it makes no sense to check if there is a new base image update available.
+      - This pipeline variable is used to skip the step that validates if there is a new update available in the Microsoft registry. If the repository doesn't exists it means that we're building a new platform image from the ground up, so it makes no sense to check if there is a new base image update available.
 
 > The image tag version that the script stored in a pipeline variable will be used later on when it's time to push the image into ECR.
 
@@ -405,14 +404,14 @@ echo "Private ECR Repository found"
 
 ### **check-if-update-is-needed script**
 
-This scripts checks if there is a new base image available.
+This script checks if there is a new base image available.
 
 How we do that? The script does the following steps:
 
 - Queries the Microsoft Artifact Registry (https://mcr.microsoft.com) to obtain the ``lastModifiedDate`` property of the base image.
 - Fetches when was the last time that our platform image was pushed into AWS ECR, and if this value is inferior than the one retrieved from the Microsoft Artifact Registry then it means we're not using the most up to date base image and a new platform image needs to be built.
-- It retrieves the version of the last platform image, increments the version value and stores it in a pipeline variable.    
-Here's an example, if our latest platform image stored in ECR has this tag: _"6.0-bullseye-slim-1.3.0"_, we need to create the tag _"6.0-bullseye-slim-1.4.0"_ for the platform image we're creating right now.
+- It retrieves the tag version of the current platform image, increments the version value and stores it in a pipeline variable.    
+For example, if our current platform image stored in ECR has the tag: _"6.0-bullseye-slim-1.3.0"_, we want to create a new tag called _"6.0-bullseye-slim-1.4.0"_ for the platform image we're creating right now.
 
 > The image tag version that this script stores in a pipeline variable will be used later on when it's time to push the image into ECR.
 
@@ -554,7 +553,7 @@ echo "##vso[task.setvariable variable=aws_tag_version]$new_tag_version"
 
 ### **docker-build script**
 
-This script builds the new platform image. Simple as that.
+This script builds the platform image. Simple as that.
 
 ```bash
 #!/bin/bash
@@ -575,7 +574,7 @@ docker build -t platform.image:tmp $image_context
 
 ### **integration-test script**
 
-This script validates that the platform image created in the script above can be used to create an image of a real application.
+This script validates that the platform image created in the script above works in a real world application without any error or warning.
 
 The script does the following steps:
 - Retrieves the test application from the ``/integration-tests/{dotnet version}``
@@ -665,12 +664,12 @@ fi
 
 ### **push-to-private-ecr script**
 
-The script creates the ECR repository if it doesn't exists and then pushes the platform image into ECR
+This script creates the ECR repository if it doesn't exists and afterwards it pushes the platform image and tags into the repository.
 
 The script does the following steps:
-- Creates the ECR repository using the ``aws ecr create-repository`` command.
-- Retrieves the tag version set in the previous scripts.
-- Tags the image with the ``latest`` tag, the tag version tag and some extra tags we can pass it as a parameter.
+- Creates the ECR repository using the ``aws ecr create-repository`` command, if needed.
+- Retrieves the tag version set in the previous scripts and tags the image.
+- Tags the image with the ``latest`` tag and and some extra tags we can pass them as a parameter.
 - Pushes the tags and the image into ECR.
 
 ```bash
@@ -736,7 +735,7 @@ done
 
 ### **send-teams-notification script**
 
-This scripts notifies to a Teams Channel that a new platform image is available.
+This script notifies to a Teams Channel that a new platform image is available.
 
 The script does the following steps:
 - Builds an adaptative card for Microsoft Teams.
@@ -791,7 +790,7 @@ fi
 
 In the previous section we have been building the different steps we're going to need, now it's time to put them together.
 
-Instead of having to orchestrate every script in every platform image pipeline I decided to build an Azure DevOps Template Pipeline and reuse it for any platform image pipeline.
+I decided to build an Azure DevOps Template Pipeline and reuse it in every platform image pipeline.
 
 Here's how the resulting Azure DevOps YAML template looks like:
 
@@ -920,7 +919,7 @@ The pipeline needs to have the following capabilities:
 - The ``trigger`` attribute is set to ``none`` because there is not need to define a push trigger. The only way to generate a new platform image is via the scheduled trigger or using the ``force_update`` parameter.
 - An scheduled trigger to periodically execute the pipeline. The schedule functionality is useful to poll the Microsoft container registry (https://mcr.microsoft.com/) to check if there is any update available for the base image.
 - The ``force_update`` parameter is going to be a runtime parameter (https://docs.microsoft.com/en-us/azure/devops/pipelines/process/runtime-parameters).
-This parameter is used to execute the pipeline if you want to manually create a new version of a platform image. 
+This parameter is used if you want to manually create a new version of a platform image. 
 - Use the pipeline YAML template we have built in the previous section.
 
 Here's how a pipeline looks like:
