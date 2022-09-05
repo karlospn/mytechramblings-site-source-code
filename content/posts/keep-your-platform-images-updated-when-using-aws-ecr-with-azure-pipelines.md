@@ -900,10 +900,10 @@ This YAML template has the following parameters:
 Here's an example, let's say we set it to ``6.0-bullseye-slim``, if the platform image doesn't exist yet a tag named ``6.0-bullseye-slim-1.0.0`` will be added to the image , if the platform image already exists a tag named ``6.0-bullseye-slim-1.1.0`` will be added to the image, and so forth and so on in the following executions.
 - ``aws_ecr_extra_tags``: Extra tags we want to add to this platform image, like the build Id, build Number, dotnet version, etc.
 - ``mcr_registry_uri``: The URI of the Microsoft Registry which we will be used to check if the base image contains a new update.   
-Here's an example, if the platform image is using the ``dotnet/runtime:6.0-bullseye-slim`` image as a base image, then the ``mcr_registry_uri`` has to be  ``https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime/tags``.   
+For example, if the platform image is using the ``dotnet/runtime:6.0-bullseye-slim`` image as a base image, then the ``mcr_registry_uri`` has to be  ``https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime/tags``.   
 If the platform image is using the ``dotnet/runtime-deps:6.0-bullseye-slim`` image as a base image, then the ``mcr_registry_uri`` has to be ``https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime-deps/tags``.
 - ``mcr_tag_name``: The specific image tag from the Microsoft Registry which we will used to search if the base image contains a new update.   
-Here's an example, if the platform image is using the ``dotnet/runtime:6.0-bullseye-slim`` image as a base image, then the ``mcr_tag_name`` has to be  ``6.0-bullseye-slim``
+For example, if the platform image is using the ``dotnet/runtime:6.0-bullseye-slim`` image as a base image, then the ``mcr_tag_name`` has to be  ``6.0-bullseye-slim``
 - ``dockerfile_context_path``: The location of the platform image build context.
 - ``integration_test_dockerfile_local_path``: The location of the integration test dockerfile.
 - ``integration_test_dockerfile_local_overwrite_image_name``: Which ``FROM`` statement needs to be overridden on the integration test Dockerfile.
@@ -915,14 +915,13 @@ Here's an example, if the platform image is using the ``dotnet/runtime:6.0-bulls
 
 Now it's time to create an actual platform image pipeline.
 
-The pipeline needs to have the following capabilities:
-- The ``trigger`` attribute is set to ``none`` because there is not need to define a push trigger. The only way to generate a new platform image is via the scheduled trigger or using the ``force_update`` parameter.
-- An scheduled trigger to periodically execute the pipeline. The schedule functionality is useful to poll the Microsoft container registry (https://mcr.microsoft.com/) to check if there is any update available for the base image.
-- The ``force_update`` parameter is going to be a runtime parameter (https://docs.microsoft.com/en-us/azure/devops/pipelines/process/runtime-parameters).
-This parameter is used if you want to manually create a new version of a platform image. 
+The pipeline needs to contain the following features:
+- The ``trigger`` attribute set to ``none`` because there is not need to create a push trigger. The only way to generate a  platform image will be via the scheduled trigger or using the ``force_update`` parameter.
+- An scheduled trigger to periodically execute the pipeline. The schedule functionality will be used to poll the Microsoft Container Registry (https://mcr.microsoft.com/) to check if there is any update available for the base image.
+- The ``force_update`` parameter is going to be a runtime parameter (https://docs.microsoft.com/en-us/azure/devops/pipelines/process/runtime-parameters). This parameter is used if you want to manually create a new version of a platform image. 
 - Use the pipeline YAML template we have built in the previous section.
 
-Here's how a pipeline looks like:
+Here's a real example of how a Pipeline will look like:
 
 ```yaml
 trigger: none
@@ -965,16 +964,7 @@ extends:
 
 # **5. Testing everything out**
 
-Let's start by creating a new platform image.
-
-This platform image will have the following features:
-- Uses the ``dotnet/runtime:6.0-bullseye-slim`` as a base image.
-- Uses a non-root container image.
-- Sets the starting port as ``8080``
-
-By default, your app runs as root inside a container. Root in a container is not the same as root on the host. Docker restricts users in containers. But to decrease the security-attack surface, you’d want to run the container as an unprivileged user.
-
-A non-root user cannot run on port 80. A new port needs to be specified.
+Let's start by building a ``Dockerfile`` for our new platform image.
 
 ```yaml
 FROM mcr.microsoft.com/dotnet/runtime:6.0-bullseye-slim
@@ -993,10 +983,19 @@ USER devsecops
 ENV ASPNETCORE_URLS=http://+:8080
 ```
 
-Now let's create the Azure DevOps pipeline.
 
-- The main tag for this image is going to be ``6.0-bullseye-slim``. This tag will be automatically version by the pipeline, which means that after the first execution the image will contain the ``6.0-bullseye-slim-1.0.0`` tag.
-- The Microsoft Registry Artifact endpoint that we want to monitor to check if a new version of the base image is avaible is this one: ``https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime/tags``.
+This platform image contains the following features:
+- Uses the ``dotnet/runtime:6.0-bullseye-slim`` as a base image.
+- Uses a non-root container image.
+- Sets the starting port as ``8080``
+
+By default a dotnet app runs as root inside a container. Root in a container is not the same as root on the host. Docker restricts users in containers. But to decrease the security-attack surface, you’d want to run the container as an unprivileged user.   
+A non-root user cannot run on port 80. A new port needs to be specified.
+
+Now let's create the Azure DevOps pipeline that will be used to create and update this platform image.
+
+- The main tag for this image is going to be ``6.0-bullseye-slim``. This tag will be automatically version by the pipeline, which means that after the first execution the image will have assoaciated the ``6.0-bullseye-slim-1.0.0`` tag.
+- The Microsoft Registry Artifact endpoint that we want to monitor to check if a new version of the base image is available is this one: ``https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime/tags``.
 
 
 ```yaml
@@ -1052,26 +1051,25 @@ Let's run the pipeline for the first time. Here's the result:
 
 As you can see the step that checks if a new update is available has not been executed because we're creating a platform image for the first time.
 
-And if we take a look at the Teams Channel where we added the "Incoming WebHook" a new notification has popped up.
+If we take a look at the Teams Channel where we added the "Incoming WebHook" a new notification has popped up.
 
 ![platform-img-channel-notification](/img/platform-img-channel-notification.png)
 
-Now let's wait for the scheduled execution of the pipeline to be executed, here's the result of the pipeline execution:
+Now let's wait for the scheduled trigger to execute the pipeline, here's the result of the pipeline execution:
 
 ![platform-img-existing-pipeline-execution](/img/platform-img-existing-pipeline-execution.png)
 
-As you can see the pipeline was executed successfully, but the execution stopped on the "Check if there is a new update" step.    
-Now let's drill-down on this concrete step.
+As you can see the pipeline was executed successfully, but the execution stopped on the "Check if there is a new update" step, if we drill-down on this concrete step.
 
 ![platform-img-no-new-update](/img/platform-img-no-new-update.png)
 
-As you can see in the image below there is no new image on the Microsoft Artifact Registry so the pipeline ended there.
+In the image below you can see that there were no new update available on the Microsoft Artifact Registry so the pipeline ended there.
 
 Now let's force the creation of a new platform image, to do that we need to check the ``force_update`` parameter in the pipeline.
 
 ![platform-img-force-update](/img/platform-img-force-update.png)
 
-Let's force the creation of this platform images a couple more of times. Now let's take a look at AWS ECR.    
+Let's take a look at AWS ECR after forcing the creation of a new platform image version a couple more times.    
 
 ![platform-img-autoincrement-version-tag](/img/platform-img-autoincrement-version-tag.png)
 
