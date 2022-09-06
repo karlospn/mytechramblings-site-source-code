@@ -1,34 +1,33 @@
 ---
 title: "Keep your .NET platform images up to date using AWS ECR and Azure Pipelines"
 date: 2022-08-23T15:36:41+02:00
-tags: ["aws", "dotnet", "devops", "ecr", "containers"]
-description: "When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images will become the base for your company applications. In this post I'm going to show you an opinionated implementation of how to automate the creation and update of your own .NET platform images."
+tags: ["aws", "dotnet", "devops", "ecr", "containers", "docker"]
+description: "When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images are the base for your company applications. In this post I'm going to show you an opinionated implementation of how to automate the creation and update of your own .NET platform images using Azure Pipelines."
 draft: true
 ---
 
-> **Just show me the code**   
+> **Just show me the code!**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/keep-your-platform-images-updated-when-using-aws-ecr-and-azure-pipelines).
 
 In this post I'm going to show you an opinionated implementation of how to automate the creation and update your own .NET platform images.
 
-This implementation is going to be built to work solely with **AWS Elastic Container Registry** (AWS ECR) as image registry, **Azure Repos** as VCS (Version Control Sofware) and **Azure Pipelines** as a runner to execute the creation/update of the platform images.  
+This implementation is going to be built to work solely with **AWS Elastic Container Registry** (AWS ECR) as image registry, **Azure Repos** as VCS (Version Control Sofware) and **Azure Pipelines** as a runner to execute the process of creation and update of your own platform images.  
 
 But first, let's talk a little bit about what's a platform image.
 
 # **1. What's a platform image?**
 
-When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images will be the base for your company applications.
+When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images are the base for your company applications.
 
 ![platform-images-diagram](/img/platform-images.png)
 
-The point of having and using a platform image instead of a base image is to ensure that the resulting containers are hardened according to any corporate policies before being deployed to production.   
-Also if your enterprise applications need some kind of software baked into the image to run properly, it is far better to install it on the platform image, instead of having to install it in each and every one of the application images.
+The point of having a platform image instead of directly using a base image is to ensure that the resulting containers are hardened according to any corporate policies before being deployed to production.   
+Also if your enterprise applications need some kind of software baked into the images to run properly, it is far better to install it on the platform images, instead of having to install it in each and every one of the application images.
 
-When talking about dotnet, there are quite a few official docker images avalaible (https://hub.docker.com/_/microsoft-dotnet/), but we don't want to use those images directly on our enterprise applications, instead we want to use those official images from Microsoft as a base image to build a platform image that is going to be own by our company.    
+When working with .NET, there are quite a few official base images availables (https://hub.docker.com/_/microsoft-dotnet/), but we don't want to use those images directly on our enterprise applications, instead we want to use those official images from Microsoft as a base image to build a platform image that is going to be own by our company.    
+The official Microsoft .NET images are not inherently bad and often include many security best practices, but a more secure way is to not rely solely on third party images, because you lose the ability to control scanning, patching, and hardening across your organization. The recommended way is using the official Microsoft images as the base for building everyone of your company platform images.
 
-The Microsoft official dotnet images are not inherently bad and often include many security best practices, but a more secure way is to not rely solely on third party images, because you lose the ability to control scanning, patching, and hardening across your organization. The recommended way is using the official Microsoft images as the base for building any of your company platform images.
-
-# **2. Create and update a dotnet platform image**
+# **2. Create and update a .NET platform image**
 
 Create a new platform image is an easy task, but you also want to keep the image up to date. 
 
@@ -38,20 +37,18 @@ The Microsoft image update policy for dotnet images is the following one:
 - The .NET base images are updated within 12 hours of any updates to the underlying OS (e.g. debian:buster-slim, windows/nanoserver:ltsc2022, buildpack-deps:bionic-scm, etc.).
 - When a new version of .NET (includes major/minor and servicing versions) gets released the dotnet base images gets updated.
 
-According to these policies the .NET base images are updated quite frequently, which means that automating the update process of our platform images is paramount.
-
-Automate the creation or update of any platform image is paramount, but it is also important being able to update an existing platform image easily because we have the need to install some new software on the platform image or update some existing one or set some permissions.
+The .NET base images might get updated quite frequently according to these policies, which means that automating the creation and update of our platform images is paramount, but automation is not the only important step, it is also important being able to manually update an existing platform image (maybe because we have installed a new piece of software on the platform image or updated some existing one or set some permissions).
 
 There are 3 main flows to implement when trying to automate the creation/update of a platform image:
-- Creation of a new platform image.
-- Update an existing platform image because the base image has a new updated version available.
-- Update an existing platform image because we have modified something on the platform image itself and want to create a new version of the image.
+- Create a new platform image from scratch.
+- Update an existing platform image because the base image has a new update available.
+- Update an existing platform image because we have modified something on the platform image itself and we need to create a new version of the image.
 
-# **3. Platform image creation/update automated process diagram**
+# **3. .NET Platform image creation/update process diagram**
 
 ## **Diagram**
 
-The following diagram shows the necessary steps we're going to build to automate the creation/update of a platform image.  
+The following diagram shows the necessary steps we're going to build to automate the creation/update of a .NET platform image.  
 
 The platform image creation/update process is going to be executed on an **Azure DevOps Pipeline**.   
 Every platform image will have its own Azure DevOps pipeline.
@@ -61,10 +58,10 @@ Every platform image will have its own Azure DevOps pipeline.
 The pipeline uses a scheduled trigger because we need to periodically poll the Microsoft container registry (https://mcr.microsoft.com/) to check if there is any update available for the base image.   
 
 When trying to update a platform image if there is NO new update available on the base image then the pipeline needs to end there.   
-If there is a new updated base image on the Microsoft registry then the pipeline needs to create a new version of the platform image, test it, store it into ECR and notify the update via Teams channel.   
-Also, if you want to change something on an existing platform image (for example, install some new software, update some existing one, set some permissions, etc) you will want to create a new version of the platform image right away, you will be able to do it setting the ``force_update`` pipeline parameter to ``true``, that parameter will skip the Microsoft container registry update check and go straight into creating a new platform image.
+If there is a new updated base image on the Microsoft registry then the pipeline needs to create a new version of the platform image, test it, store it into ECR and notify that an update has ocurred via Teams channel.   
+If you modify an existing platform image (for example, install some new software, update some existing one, set some permissions, etc) and want to create a new version of the platform image right away, you will be able to do it setting the ``force_update`` pipeline parameter to ``true``, that parameter will skip the Microsoft container registry update check and go straight into creating a new platform image.
 
-## **How to know if there is a new updated base image?**
+## **How to know if a base image update is available**
 
 If you're using Azure Container Registry (ACR) as your container registry you can use ACR Tasks to automate the creation of a new platform image when a container's base image is updated.
 - More info about it: https://docs.microsoft.com/en-us/azure/container-registry/container-registry-tutorial-base-image-update
@@ -124,7 +121,7 @@ This is how I will tag the platform images:
 - 6.0-bullseye-slim-1.0.0  
 - 6.0-bullseye-slim-1.1.0  
 
-# **4. Building the platform image creation/update automated process.**
+# **4. Building the .NET platform image creation/update process**
 
 ## **Key points**
 From the previous section I can extract the following key points to keep in mind when building this solution:
