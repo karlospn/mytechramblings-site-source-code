@@ -802,11 +802,11 @@ fi
 
 ## **Create the Azure DevOps Pipeline**
 
-### **Create an Azure DevOps YAML template**
+### **Create a YAML template**
 
-In the previous section we have been building the different steps we're going to need, now it's time to put them together.
+In the previous section I have been building the different steps we're going to need on our pipeline, now it's time to put them all together.
 
-I decided to build an Azure DevOps Template Pipeline and reuse it in every platform image pipeline.
+I decided to build an Azure DevOps YAML Template (https://docs.microsoft.com/en-us/azure/devops/pipelines/process/templates) and reuse it in every platform image pipeline.
 
 Here's how the resulting Azure DevOps YAML template looks like:
 
@@ -913,31 +913,31 @@ This YAML template has the following parameters:
 - ``private_ecr_region``: AWS Region
 - ``aws_ecr_repository_name``: Name of the ECR repository where the image is going to be stored.
 - ``aws_ecr_tag_without_version``: The main tag we want to add to the platform image. The main tag will be automatically versioned by the pipeline.   
-Here's an example, let's say we set it to ``6.0-bullseye-slim``, if the platform image doesn't exist yet a tag named ``6.0-bullseye-slim-1.0.0`` will be added to the image , if the platform image already exists a tag named ``6.0-bullseye-slim-1.1.0`` will be added to the image, and so forth and so on in the following executions.
-- ``aws_ecr_extra_tags``: Extra tags we want to add to this platform image, like the build Id, build Number, dotnet version, etc.
-- ``mcr_registry_uri``: The URI of the Microsoft Registry which we will be used to check if the base image contains a new update.   
+For example, let's say we set it to ``6.0-bullseye-slim``, if the platform image doesn't exist yet a tag named ``6.0-bullseye-slim-1.0.0`` will be added to the image , if the platform image already exists a tag named ``6.0-bullseye-slim-1.1.0`` will be added to the image, and so forth and so on in the following executions.
+- ``aws_ecr_extra_tags``: Extra tags we want to add to this platform image, like the build ID, build Number, dotnet version, etc.
+- ``mcr_registry_uri``: The URI of the Microsoft Registry that will be used to check if the base image contains a new update.   
 For example, if the platform image is using the ``dotnet/runtime:6.0-bullseye-slim`` image as a base image, then the ``mcr_registry_uri`` has to be  ``https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime/tags``.   
 If the platform image is using the ``dotnet/runtime-deps:6.0-bullseye-slim`` image as a base image, then the ``mcr_registry_uri`` has to be ``https://mcr.microsoft.com/api/v1/catalog/dotnet/runtime-deps/tags``.
-- ``mcr_tag_name``: The specific image tag from the Microsoft Registry which we will used to search if the base image contains a new update.   
+- ``mcr_tag_name``: The specific image tag from the Microsoft Registry that will be used to check if the base image contains a new update.   
 For example, if the platform image is using the ``dotnet/runtime:6.0-bullseye-slim`` image as a base image, then the ``mcr_tag_name`` has to be  ``6.0-bullseye-slim``
 - ``dockerfile_context_path``: The location of the platform image build context.
-- ``integration_test_dockerfile_local_path``: The location of the integration test dockerfile.
-- ``integration_test_dockerfile_local_overwrite_image_name``: Which ``FROM`` statement needs to be overridden on the integration test Dockerfile.
+- ``integration_test_dockerfile_local_path``: The location of the integration test Dockerfile.
+- ``integration_test_dockerfile_local_overwrite_image_name``: Which ``FROM`` statement needs to be overridden on the integration test app Dockerfile.
 - ``integration_test_dockerfile_context``: The location of the integration test build context.
-- ``teams_webhook_uri``: A Teams WebHook Uri. The pipelines notifies to a Teams Channel when a new platform image has been created or updated.
-- ``force_update``: If you want to create a new version of the platform image right away, you can do it setting this parameter to ``true`` and it will skip the Microsoft container registry update check and go straight into creating a new platform image.
+- ``teams_webhook_uri``: A Teams WebHook Uri. The pipeline notifies to a Teams Channel when a new platform image has been created or updated.
+- ``force_update``: This parameter is used if you want to manually force the creation of a new version of the platform image. It skips the Microsoft container registry update check and goes straight into creating a new platform image.
 
 ### **Create an Azure DevOps Pipeline using the YAML Template**
 
 Now it's time to create an actual platform image pipeline.
 
 The pipeline needs to contain the following features:
-- The ``trigger`` attribute set to ``none`` because there is not need to create a push trigger. The only way to generate a  platform image will be via the scheduled trigger or using the ``force_update`` parameter.
+- The ``trigger`` attribute set to ``none`` because there is no need for a push trigger. The only way to generate a platform image will be via the scheduled trigger or using the ``force_update`` parameter.
 - An scheduled trigger to periodically execute the pipeline. The schedule functionality will be used to poll the Microsoft Container Registry (https://mcr.microsoft.com/) to check if there is any update available for the base image.
 - The ``force_update`` parameter is going to be a runtime parameter (https://docs.microsoft.com/en-us/azure/devops/pipelines/process/runtime-parameters). This parameter is used if you want to manually create a new version of a platform image. 
-- Use the pipeline YAML template we have built in the previous section.
+- The pipelines needs tu use the YAML template we have built in the section above.
 
-Here's a real example of how a Pipeline will look like:
+Here's a real example of how a pipeline will look like:
 
 ```yaml
 trigger: none
@@ -1003,10 +1003,10 @@ ENV ASPNETCORE_URLS=http://+:8080
 This platform image contains the following features:
 - Uses the ``dotnet/runtime:6.0-bullseye-slim`` as a base image.
 - Uses a non-root container image.
-- Sets the starting port as ``8080``
+- Sets the starting port to ``8080``.
 
-By default a dotnet app runs as root inside a container. Root in a container is not the same as root on the host. Docker restricts users in containers. But to decrease the security-attack surface, you’d want to run the container as an unprivileged user.   
-A non-root user cannot run on port 80. A new port needs to be specified.
+By default a .NET app runs as root inside a container. Root in a container is not the same as root on the host, Docker restricts users in containers but to decrease the security-attack surface you’d want to run the container as an unprivileged user.   
+Also a non-root user cannot run Kestrel on port 80. A new port needs to be specified.
 
 Now let's create the Azure DevOps pipeline that will be used to create and update this platform image.
 
@@ -1053,7 +1053,7 @@ extends:
       force_update: ${{ parameters.force_update }}
 ```
 
-Now let's run this pipeline a few times to test it out, but first we need to add an "Incoming WebHook" to a Teams Channel. This WebHook will be used by the pipeline to notify that a new version of the platform image is available.
+Now let's run this pipeline a few times to test it out. But first we need to add an "Incoming WebHook" into a Microsoft Teams channel. This WebHook will be used by the pipeline to notify that a new version of the platform image is available.
 
 ![platform-img-incoming-webhook](/img/platform-img-incoming-webhook.png)
 
@@ -1067,7 +1067,7 @@ Let's run the pipeline for the first time. Here's the result:
 
 As you can see the step that checks if a new update is available has not been executed because we're creating a platform image for the first time.
 
-If we take a look at the Teams Channel where we added the "Incoming WebHook" a new notification has popped up.
+If we take a look at the Microsoft Teams channel where we added the "Incoming WebHook" a new notification has popped up.
 
 ![platform-img-channel-notification](/img/platform-img-channel-notification.png)
 
@@ -1079,19 +1079,19 @@ As you can see the pipeline was executed successfully, but the execution stopped
 
 ![platform-img-no-new-update](/img/platform-img-no-new-update.png)
 
-In the image below you can see that there were no new update available on the Microsoft Artifact Registry so the pipeline ended there.
+In the image above you can see that there were no new updates available on the Microsoft Artifact Registry so the pipeline ended there.
 
-Now let's force the creation of a new platform image, to do that we need to check the ``force_update`` parameter in the pipeline.
+Now let's force the creation of a new version of the platform image, to do that we need to check the ``force_update`` parameter when trying to manually execute the pipeline.
 
 ![platform-img-force-update](/img/platform-img-force-update.png)
 
-Let's take a look at AWS ECR after forcing the creation of a new platform image version a couple more times.    
+Let's take a look at the AWS ECR repository after creating a couple more versions of this image.
 
 ![platform-img-autoincrement-version-tag](/img/platform-img-autoincrement-version-tag.png)
 
 As you can see in the image above.
 - The tag _"6.0-bullseye-slim"_ has been automatically versioned everytime a new version of the platform image has been pushed into ECR.
-- The ``latest`` tag points to the latest version of this platform image.
-- The ``6`` tag points to the latest version of this platform image.
+- The ``latest`` tag is a mutable tag that always points at the latest version of the platform image.
+- The ``6`` is a mutable tag that always points at the latest version of the platform image.
 
 And that's it! 
