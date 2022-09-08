@@ -1,9 +1,9 @@
 ---
 title: "Keep your .NET platform images up to date using AWS ECR and Azure Pipelines"
-date: 2022-08-23T15:36:41+02:00
+date: 2022-09-08T11:06:41+02:00
 tags: ["aws", "dotnet", "devops", "ecr", "containers", "docker"]
-description: "When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images are the base for your company applications. In this post I'm going to show you an opinionated implementation of how to automate the creation and update of your own .NET platform images using Azure Pipelines."
-draft: true
+description: "When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images are the base for your company applications. In this post I'm going to show you an opinionated implementation of how to automate the creation and update of your own .NET platform images using Azure Pipelines and AWS ECR."
+draft: false
 ---
 
 > **Just show me the code!**   
@@ -11,7 +11,10 @@ draft: true
 
 In this post I'm going to show you an opinionated implementation of how to automate the creation and update your own .NET platform images.
 
-This implementation is going to be built to work solely with **AWS Elastic Container Registry** (AWS ECR) as image registry, **Azure Repos** as VCS (Version Control Sofware) and **Azure Pipelines** as a runner to execute the process of creation and update of your own platform images.  
+This implementation is going to be built to work solely with:
+-  **AWS Elastic Container Registry** (AWS ECR) as image registry.
+-  **Azure Repos** as VCS (Version Control Sofware).
+-  **Azure Pipelines** as a runner to execute the process of creation/update of your .NET platform images.  
 
 But first, let's talk a little bit about what's a platform image.
 
@@ -24,8 +27,9 @@ When talking about containers security on the enterprise one of the best practic
 The point of having a platform image instead of directly using a base image is to ensure that the resulting containers are hardened according to any corporate policies before being deployed to production.   
 Also if your enterprise applications need some kind of software baked into the images to run properly, it is far better to install it on the platform images, instead of having to install it in each and every one of the application images.
 
-When working with .NET, there are quite a few official base images availables (https://hub.docker.com/_/microsoft-dotnet/), but we don't want to use those images directly on our enterprise applications, instead we want to use those official images from Microsoft as a base image to build a platform image that is going to be own by our company.    
-The official Microsoft .NET images are not inherently bad and often include many security best practices, but a more secure way is to not rely solely on third party images, because you lose the ability to control scanning, patching, and hardening across your organization. The recommended way is using the official Microsoft images as the base for building everyone of your company platform images.
+When working with .NET, there are quite a few official base images available (https://hub.docker.com/_/microsoft-dotnet/), but we don't want to use those images directly on our enterprise applications, instead we want to use those official images from Microsoft as a base image to build a platform image that is going to be own by our company.   
+
+The official Microsoft .NET images are not inherently bad and often include many security best practices, but a more secure way is to not rely solely on third party images, because you lose the ability to control scanning, patching, and hardening across your organization. The recommended way is using the official Microsoft images as the base for building every one of your company platform images.
 
 # **2. Create and update a .NET platform image**
 
@@ -33,11 +37,11 @@ Create a new platform image is an easy task, but you also want to keep the image
 
 Every time the base image gets a new update from Microsoft you'll want to update your platform image, because the latest version it's usually the most secure one.
 
-The Microsoft image update policy for dotnet images is the following one:
+The Microsoft image update policy for .NET images is the following one:
 - The .NET base images are updated within 12 hours of any updates to the underlying OS (e.g. debian:buster-slim, windows/nanoserver:ltsc2022, buildpack-deps:bionic-scm, etc.).
 - When a new version of .NET (includes major/minor and servicing versions) gets released the dotnet base images gets updated.
 
-The .NET base images might get updated quite frequently according to these policies, which means that automating the creation and update of our platform images is paramount, but automation is not the only important step, it is also important being able to manually update an existing platform image (maybe because we have installed a new piece of software on the platform image or updated some existing one or set some permissions).
+The .NET base images might get updated quite frequently according to these policies, which means that automating the creation and update of our platform images is paramount, but automation is not the only important step, it is also important being able to manually update an existing platform image (maybe because we have installed a new piece of software on the platform image or set some permissions or whatever).
 
 There are 3 main flows to implement when trying to automate the creation/update of a platform image:
 - Create a new platform image from scratch.
@@ -58,18 +62,20 @@ Every platform image will have its own Azure DevOps pipeline.
 The pipeline uses a scheduled trigger because we need to periodically poll the Microsoft container registry (https://mcr.microsoft.com/) to check if there is any update available for the base image.   
 
 When trying to update a platform image if there is NO new update available on the base image then the pipeline needs to end there.   
-If there is a new updated base image on the Microsoft registry then the pipeline needs to create a new version of the platform image, test it, store it into ECR and notify that an update has ocurred via Teams channel.   
-If you modify an existing platform image (for example, install some new software, update some existing one, set some permissions, etc) and want to create a new version of the platform image right away, you will be able to do it setting the ``force_update`` pipeline parameter to ``true``, that parameter will skip the Microsoft container registry update check and go straight into creating a new platform image.
+
+If there is a new updated version of the base image on the Microsoft registry then the pipeline needs to create a new version of the platform image, test it, store it into ECR and notify that an update has ocurred via Teams channel.   
+
+If you modify an existing platform image (for example, install some new software, update some existing one, set some permissions, etc) and want to create a new version of the platform image right away, you will be able to do it by setting the ``force_update`` pipeline parameter to ``true``, that parameter will skip the Microsoft container registry update check and go straight into creating a new platform image.
 
 ## **How to know if a .NET base image has been updated**
 
-If you're using Azure Container Registry (ACR) as your container registry you can use ACR Tasks to automate the creation of a new platform image when a container's base image is updated.
+If you're using Azure Container Registry (ACR) as your container registry you can use ACR Tasks to automate the creation of a new platform image when a container base image is updated.
 - More info about it: https://docs.microsoft.com/en-us/azure/container-registry/container-registry-tutorial-base-image-update
 
 But this kind of functionality does not exist for AWS ECR, so you need to build something on the side.
 
 There are some third party tools like Diun or image-watch that allows us to receive notifications when a Docker image is updated on a Docker registry, but there is a much easier approach that using those tools:
-- **Using Azure Pipelines (or any other CI/CD runner like GitHub Actions) with a cron trigger that periodically runs a pipeline thats checks if the base image has a new update avaiable.**
+- **Using Azure Pipelines (or any other CI/CD runner like GitHub Actions) with a cron trigger that periodically runs a pipeline thats checks if the base image has a new update available.**
 
 _But, how do we know if a .NET base image has been updated?_   
 
@@ -99,9 +105,9 @@ From this point forward we can also fetch the last time our platform image was p
 
 In the diagram above, you'll see a "Test Platform Image" step, but what does it do?
 
-When creating a new version of a platform image we need to validate that the new image doesn't have any potential breaking change that could affect our enterprise applications.   
+When creating a new version of a platform image we need to validate that this new image doesn't have any potential breaking change that could affect our enterprise applications.   
 
-The pipeline test step validates that you can run the new platform image that you're building on a real world application without any error.
+The pipeline test step validates that you can run the new platform image version that you're building on a real .NET application without any error.
 
 ## **What tagging strategy to use**
 
@@ -113,7 +119,7 @@ This is how Microsoft tags their .NET images:
 
 - _(dotnet-version)-{os-version}-{architecture-os}_
 
-Here's an example of how the .NET6 runtime image is tagged:
+Here's an example of how the Microsoft .NET6 runtime image is tagged:
 
 - 6.0.8-bullseye-slim-amd64
 - 6.0-bullseye-slim-amd64
@@ -129,12 +135,13 @@ For my platform images I'm going to use a similar approach with a couple of mino
 
 - _{dotnet-version}-{os-version}-{versioning}_
 
-I'm going to drop the "architecture os" part and I'm going to add a "versioning" at the end of the tag, that "versioning" helps if the necessity to use a previous version of a platform image arises in the future.    
+I'm going to drop the "architecture os" part and I'm going to add a "versioning" at the end of the tag, that "versioning" helps if the necessity to use a previous version of the platform image arises in the future.    
 This is how I will tag the platform images:
 
 - 6.0-bullseye-slim-1.0.0  
 - 6.0-bullseye-slim-1.1.0 
 - 6.0-bullseye-slim-1.2.0  
+
 
 # **4. Building the .NET platform image creation/update process**
 
@@ -143,9 +150,9 @@ From the previous sections I can extract the following key points to keep in min
 
 - Platform images are going to be stored in AWS ECR.
 - Azure Pipelines to execute the process of creation/update the platform images.
-- An Azure Pipeline scheduled trigger will be used to periodically check if any dotnet base image contains a new update.
+- An Azure Pipeline scheduled trigger will be used to periodically check if any .NET base image has been updated.
 - Every platform image will have its own pipeline.
-- The ``Dockerfile`` for every platform image will be hosted on Azure DevOps Repos.
+- The ``Dockerfile`` for every platform image will be hosted on Azure Repos.
 - Every time a new version of a platform is created a notification to a Teams Channel needs to be sent.
 
 ## **Repository structure**
@@ -236,8 +243,8 @@ Here's an example about how the repository will look like with a few platform im
 This folder contains a set of scripts and assets used by the platform images pipelines.
 
 - The ``/scripts`` folder contains a set of shell scripts used by the Azure Pipelines YAML template.
-- The ``/templates`` folder contains an Azure Pipeline YAML template. This template is used by every platform images pipeline.
-- The ``/integration-tests/{dotnet version}`` folder contains a real application that is going to be used as an integration test.
+- The ``/templates`` folder contains an Azure Pipeline YAML template. This template is used by every platform image pipeline.
+- The ``/integration-tests/{dotnet version}`` folder contains some real .NET applications that are going to be used to test if the platform image we're building contains any breaking change.
 
 ### **/platform-images folder**
 
@@ -252,7 +259,7 @@ For any platform image you'll need:
 When updating a platform image we need to validate that the update doesn't break anything that could potentially affect our applications.   
 
 The ``/shared/integration-tests`` folder will contain a series of applications that are going to be used as an integration test application. Every dotnet version will have its own integration test application.   
-When building a new version of a platform image, we will test that the new image doesn't break anything by using the platform image as a base image on a real .NET application.
+When building a new version of a platform image, we will test that the new image doesn't break anything by using the platform image as a base image on the integration test app.
 
 The integration test step runs the following commands: 
 
@@ -262,7 +269,7 @@ The integration test step runs the following commands:
 - Starts the application using the ``docker run`` command.
 - Sends an Http Request to the running application using cURL and expects that the response is a 200 OK status Code.
 
-If all those steps run without any problem then the integration test is a success, if any of those steps fails then the integration test fails and breaks the pipeline.
+If all those steps run without any problem then the integration test step is a success, if any of those steps fails then the integration test fails step and breaks the pipeline execution.
 
 ## **Building the pipeline**
 
@@ -276,11 +283,11 @@ I decided to use shell script to implement every step of the pipeline. Let's get
 
 This particular script runs only if the ``force_update`` parameter is set to ``true`` in the pipeline.
 
-This parameter is used if you want to manually force the creation of a new version of the platform image. It skips the Microsoft container registry update check and goes straight into creating a new platform image.
+The ``force_update`` parameter is used to manually force the creation of a new version of the platform image. It skips the Microsoft container registry update check and goes straight into creating a new platform image.
 
 This script does the following steps:
 - Uses the ``aws ecr describe-images`` command to retrieve the version tag of the current platform image.
-- Create a new version tag and stores the value in a pipeline variable.
+- Creates a new version tag and stores the value in a pipeline variable.
       
 For example, if our current platform image stored in ECR has the tag _"6.0-bullseye-slim-1.3.0"_, we'll want to create the tag _"6.0-bullseye-slim-1.4.0"_ for the platform image we're building right now.
 
@@ -425,7 +432,7 @@ How we do that? The script runs the following commands:
 - Queries the Microsoft Artifact Registry (https://mcr.microsoft.com) to obtain the ``lastModifiedDate`` property of the base image.
 - Retrieves when was the last time that our platform image was pushed into AWS ECR, if this value is inferior than the ``lastModifiedDate`` from the Microsoft Artifact Registry then it means we're not using the most up to date base image and a new platform image needs to be built.
 - Uses the ``aws ecr describe-images`` command to retrieve the version tag of the current platform image.
-- Create a new version tag and stores the value in a pipeline variable.
+- Creates a new version tag and stores the value in a pipeline variable.
 
 For example, if our current platform image stored in ECR has the tag _"6.0-bullseye-slim-1.3.0"_, we'll want to create the tag _"6.0-bullseye-slim-1.4.0"_ for the platform image we're building right now.
 
@@ -590,7 +597,7 @@ docker build -t platform.image:tmp $image_context
 
 ### **integration-test script**
 
-This script validates that the platform image created in the script above works in a real world application without any error or warning.
+This script validates that the platform image created in the script above works in a real .NET application without any error or warning.
 
 This script does the following steps:
 - Retrieves the test application from the ``/integration-tests/{dotnet version}``
@@ -755,7 +762,7 @@ This script notifies to a Teams Channel that a new platform image is available.
 
 The script does the following steps:
 - Builds an adaptative card for Microsoft Teams.
-- Sends the adaptative card to a Microsoft Teams using an "Incoming HTTP WebHook".
+- Sends a message to a Microsoft Teams channel using an "Incoming HTTP WebHook".
 
 ```bash
 #!/bin/bash
