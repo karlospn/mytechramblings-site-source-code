@@ -2,12 +2,14 @@
 title: "Getting started with OpenTelemetry Metrics in .NET. Part 1: Core concepts"
 date: 2022-09-23T11:13:32+02:00
 tags: ["opentelemetry", "dotnet", "csharp", "metrics", "prometheus", "grafana"]
-description: "OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. In this post I’m going to show you how you can start using OpenTelemetry to generate metrics with .NET Core."
+description: "OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. In this  2 part series-post I’m going to show you how you can start using OpenTelemetry to generate metrics with .NET Core and how to visualize those metrics using Prometheus and Grafana."
 draft: true
 ---
 
-> **Just show me the code!**   
-> As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/opentelemetry-metrics-demo).
+> This is a 2 part-series post.
+> - **Part 1**: Key concepts that you should know about metrics and OpenTelemetry on .NET.
+> - **Part 2**: A practical example about how to add OpenTelemetry metrics on a real life .NET app and how to visualize those metrics using Prometheus and Grafana (_Part 2 will be available later this week_).
+
 
 OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as **traces**, **metrics**, and **logs**. 
 
