@@ -196,16 +196,452 @@ This method is used to configure the exporter that sends all the metric data to 
 
 ## **2 - Create the Meter and the Instruments**
 
+After setting up the ``MeterProvider``, it's time to create a ``Meter`` and use it to create ``Instruments``.   
+
+There are a few ways to do that, but I'm going to show you how I tend to do it.   
+First of all I'm going to create a ``Singleton`` class which will contain:
+- A meter.
+- Every instrument needed.
+- A bunch of helper methods to record measurements. 
+
+Here's how the entire class looks like:
+
+```csharp
+using System.Collections.Generic;
+using System.Diagnostics.Metrics;
+using System.Threading;
+
+namespace BookStore.Infrastructure.Metrics
+{
+    public class OtelMetrics
+    {
+        //Books meters
+        private  Counter<int> BooksAddedCounter { get; }
+        private  Counter<int> BooksDeletedCounter { get; }
+        private  Counter<int> BooksUpdatedCounter { get; }
+        private  ObservableGauge<int> TotalBooksGauge { get; }
+        private int _totalBooks = 0;
+
+        //Categories meters
+        private Counter<int> CategoriesAddedCounter { get; }
+        private Counter<int> CategoriesDeletedCounter { get; }
+        private Counter<int> CategoriesUpdatedCounter { get; }
+        private ObservableGauge<int> TotalCategoriesGauge { get; }
+        private int _totalCategories = 0;
+
+        //Order meters
+        private Histogram<double> OrdersPriceHistogram { get; }
+        private Histogram<int> NumberOfBooksPerOrderHistogram { get; }
+        private ObservableCounter<int> OrdersCanceledCounter { get; }
+        private int _ordersCanceled = 0;
+        private Counter<int> TotalOrdersCounter { get; }
+
+        public string MetricName { get; }
+
+        public OtelMetrics(string meterName = "BookStore")
+        {
+            var meter = new Meter(meterName);
+            MetricName = meterName;
+
+            BooksAddedCounter = meter.CreateCounter<int>("books-added", "Book");
+            BooksDeletedCounter = meter.CreateCounter<int>("books-deleted", "Book");
+            BooksUpdatedCounter = meter.CreateCounter<int>("books-updated", "Book");
+            TotalBooksGauge = meter.CreateObservableGauge<int>("total-books", () => new[] { new Measurement<int>(_totalBooks) });
+            
+            CategoriesAddedCounter = meter.CreateCounter<int>("categories-added", "Category");
+            CategoriesDeletedCounter = meter.CreateCounter<int>("categories-deleted", "Category");
+            CategoriesUpdatedCounter = meter.CreateCounter<int>("categories-updated", "Category");
+            TotalCategoriesGauge = meter.CreateObservableGauge<int>("total-categories", () => _totalCategories);
+
+            OrdersPriceHistogram = meter.CreateHistogram<double>("orders-price", "Euros", "Price distribution of book orders");
+            NumberOfBooksPerOrderHistogram = meter.CreateHistogram<int>("orders-number-of-books", "Books", "Number of books per order");
+            OrdersCanceledCounter = meter.CreateObservableCounter<int>("orders-canceled", () => _ordersCanceled);
+            TotalOrdersCounter = meter.CreateCounter<int>("total-orders", "Orders");
+        }
+
+        //Books meters
+        public void AddBook() => BooksAddedCounter.Add(1);
+        public void DeleteBook() => BooksDeletedCounter.Add(1);
+        public void UpdateBook() => BooksUpdatedCounter.Add(1);
+        public void IncreaseTotalBooks() => _totalBooks++;
+        public void DecreaseTotalBooks() => _totalBooks--;
+
+        //Categories meters
+        public void AddCategory() => CategoriesAddedCounter.Add(1);
+        public void DeleteCategory() => CategoriesDeletedCounter.Add(1);
+        public void UpdateCategory() => CategoriesUpdatedCounter.Add(1);
+        public void IncreaseTotalCategories() => _totalCategories++;
+        public void DecreaseTotalCategories() => _totalCategories--;
+
+        //Orders meters
+        public void RecordOrderTotalPrice(double price) => OrdersPriceHistogram.Record(price);
+        public void RecordNumberOfBooks(int amount) => NumberOfBooksPerOrderHistogram.Record(amount);
+        public void IncreaseOrdersCanceled() => _ordersCanceled++;
+        public void IncreaseTotalOrders(string city) => TotalOrdersCounter.Add(1, KeyValuePair.Create<string, object>("City", city));
+
+    }
+}
+```
+In the class constructor we create a meter and use it to create every instrument needed. Also we create a series of public helper methods to record measurements.
+
+- _Why create all those helper methods?_  
+
+To improve code readability, it is easier to understand what this is line of code ``_meters.AddBook()`` is doing, than this other one ``CategoriesAddedCounter.Add(1)``.
 
 
-## **3 - Use the Instruments to record Measurements**
+## **3 - Use the instruments to record measurements**
+
+Now it's time to use the instrument we have created in the previous section to record measurements.   
+
+You just need to inject the ``OtelMetrics`` instance whenever you want to record a measurement and use any of the helper methods exposed on the ``OtelMetrics`` class.
+
+### **Book metrics**
+
+- Every time a new book gets added into the database.
+  - Increase +1 the ``BooksAddedCounter`` and the ``TotalBooksGauge``.
+- Every time a new book gets updated.
+  - Increase +1 the ``BooksUpdatedCounter``.
+- Every time a new book gets deleted from the database.
+  - Increase +1 the ``BooksDeletedCounter`` and decrease -1 the ``TotalBooksGauge``.
+
+The next snippet of code shows how I record those measurements every time a book gets added, updated or deleted from the database.
+
+```csharp
+public class BookRepository : Repository<Book>, IBookRepository
+{
+    private readonly OtelMetrics _meters;
+
+    public BookRepository(
+        BookStoreDbContext context, 
+        OtelMetrics meters) : base(context)
+    {
+        _meters = meters;
+    }
+
+    public override async Task<List<Book>> GetAll()
+    {
+        return await Db.Books.Include(b => b.Category)
+            .OrderBy(b => b.Name)
+            .ToListAsync();
+    }
+
+    public override async Task<Book> GetById(int id)
+    {
+        return await Db.Books.Include(b => b.Category)
+            .Where(b => b.Id == id)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<IEnumerable<Book>> GetBooksByCategory(int categoryId)
+    {
+        return await Search(b => b.CategoryId == categoryId);
+    }
+
+    public async Task<IEnumerable<Book>> SearchBookWithCategory(string searchedValue)
+    {
+        return await Db.Books.AsNoTracking()
+            .Include(b => b.Category)
+            .Where(b => b.Name.Contains(searchedValue) || 
+                        b.Author.Contains(searchedValue) ||
+                        b.Description.Contains(searchedValue) ||
+                        b.Category.Name.Contains(searchedValue))
+            .ToListAsync();
+    }
+
+    public override async Task Add(Book entity)
+    {
+        await base.Add(entity);
+
+        _meters.AddBook();
+        _meters.IncreaseTotalBooks();
+    }
+
+    public override async Task Update(Book entity)
+    {
+        await base.Update(entity);
+
+        _meters.UpdateBook();
+    }
+
+    public override async Task Remove(Book entity)
+    {
+        await base.Remove(entity);
+
+        _meters.DeleteBook();
+        _meters.DecreaseTotalBooks();
+    }
+}
+```
+
+### **Book Categories metrics**
+
+- Every time a new book category gets added into the database.
+  - Increase +1 the ``CategoriessAddedCounter`` and increase +1 the  ``TotalCategoriesGauge``.
+- Every time a new book category gets updated.
+  - Increase +1 the ``CategoriesUpdatedCounter``.
+- Every time a new book category gets deleted from the database.
+  - Increase +1 the ``CategoriesDeletedCounter`` and decrease -1 the ``TotalCategoriesGauge``.
+  
+The next snippet of code shows how I record those measurements every time a book category gets added, updated or deleted from the database.
+
+```csharp
+public class CategoryRepository : Repository<Category>, ICategoryRepository
+{
+    private readonly OtelMetrics _meters;
+
+    public CategoryRepository(BookStoreDbContext context, 
+        OtelMetrics meters) : base(context)
+    {
+        _meters = meters;
+    }
+
+    public override async Task Add(Category entity)
+    {
+        await base.Add(entity);
+        _meters.AddCategory();
+        _meters.IncreaseTotalCategories();
+    }
+
+    public override async Task Update(Category entity)
+    {
+        await base.Update(entity);
+        _meters.UpdateCategory();
+    }
+
+    public override async Task Remove(Category entity)
+    {
+        await base.Remove(entity);
+        _meters.DeleteCategory();
+        _meters.DecreaseTotalCategories();
+    }
+}
+```
+
+### **Orders metrics**
+
+- Every time a new order gets added into the database.
+  - Increase +1 the ``TotalOrdersCounter``.
+  - Record the order total price using the ``OrdersPriceHistogram``.
+  - Record the amount of books in the order using the ``NumberOfBooksPerOrderHistogram``
+- Every time a new order gets updated.
+  - Increase +1 the ``OrdersCanceledCounter``.
+  
+The next snippet of code shows how I record those measurements every time an order gets added or updated.
+
+```csharp
+public class OrderRepository : Repository<Order>, IOrderRepository
+{
+    private readonly OtelMetrics _meters;
+
+    public OrderRepository(BookStoreDbContext context, OtelMetrics meters) 
+        : base(context)
+    {
+        _meters = meters;
+    }
+
+    public override async Task<Order> GetById(int id)
+    {
+        return await Db.Orders
+            .Include(b => b.Books)
+            .FirstOrDefaultAsync(x => x.Id == id);
+    }
+
+    public override async Task<List<Order>> GetAll()
+    {
+        return await Db.Orders
+            .Include(b => b.Books)
+            .ToListAsync();
+    }
+
+    public override async Task Add(Order entity)
+    {
+        DbSet.Add(entity);
+        await base.SaveChanges();
+
+        _meters.RecordOrderTotalPrice(entity.TotalAmount);
+        _meters.RecordNumberOfBooks(entity.Books.Count);
+        _meters.IncreaseTotalOrders(entity.City);
+    }
+
+    public override async Task Update(Order entity)
+    {
+        await base.Update(entity);
+
+        _meters.IncreaseOrdersCanceled();
+    }
+
+    public async Task<List<Order>> GetOrdersByBookId(int bookId)
+    {
+        return await Db.Orders.AsNoTracking()
+            .Include(b => b.Books)
+            .Where(x => x.Books.Any(y => y.Id == bookId))
+            .ToListAsync();
+
+    }
+}
+```
+As you can see from the snippets of code below recording a measurement it's a really simple task, just invoke the instruments functions wherever you want to record a measurement. 
+
+## **4 - Setup the Histogram instruments bucket aggregation**
+
+A ``Histogram`` is a graphical representation of the distribution of numerical data. It groups values into buckets and then counts how many values fall into each bucket.
+
+When using a ``Histogram`` instrument, it’s important to make sure the buckets are also configured properly. The bucket histogram aggregation default values are [ 0, 5, 10, 25, 50, 75, 100, 250, 500, 1000 ], and that’s not always ideal. 
+
+In the BookStore app we are using 2 ``Histograms``:
+
+- ``OrdersPriceHistogram``: Shows the price distribution of the orders.
+- ``NumberOfBooksPerOrderHistogram``: Shows the number of books distribution per order.
+
+For the ``NumberOfBooksPerOrderHistogram`` makes no sense using the bucket aggregation default values because no one is going to make an order that contains 250, 500 or 1000 books. And the same could be said for the ``OrdersPriceHistogram``.
+
+For each ``Histogram`` we need to create a ``View``. A ``View`` in OpenTelemetry defines an aggregation, which takes a series of measurements and expresses them as a single metric value at that point in time. 
+
+To create a ``View`` we can use the ``AddView`` extension method from the ``MeterProvider``. Like this:
+
+```csharp
+builder.Services.AddOpenTelemetryMetrics(opts => opts
+    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("BookStore.WebApi"))
+    .AddMeter(meters.MetricName)
+    .AddAspNetCoreInstrumentation()
+    .AddRuntimeInstrumentation()
+    .AddView(
+        instrumentName: "orders-price",
+        new ExplicitBucketHistogramConfiguration { Boundaries = new double[] { 15, 30, 45, 60, 75 } })
+    .AddView(
+        instrumentName: "orders-number-of-books",
+        new ExplicitBucketHistogramConfiguration { Boundaries = new double[] { 1, 2, 5 } })
+    .AddOtlpExporter(opts =>
+    {
+        opts.Endpoint = new Uri(builder.Configuration["Otlp:Endpoint"]);
+    }));
+```
+
+# **OpenTelemetry Collector**
+
+The OpenTelemetry Collector consists of three components:
+- ``Receivers``: They can be push or pull based, is how data gets into the Collector.
+- ``Processors``: They run on data between being received and being exported.
+- ``Exporters``: They can be push or pull based, is how you send data to one or more backends/destinations. 
+
+In this case, the OpenTelemetry Collector receives the metric data from the BookStore API via gRPC and exports them into Prometheus.   
+Here's how the OTEL Collector config file looks like:
+
+```yml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+processors:
+  batch:
+
+extensions:
+  health_check:
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+```
 
 
-# **How to run the app**
+# **Prometheus**
 
-If you want to take a look at the BookStore app, you can go to my [GitHub repository](https://github.com/karlospn/opentelemetry-metrics-demo).
+Prometheus is configured to scrape the the OpenTelemetry Collector metrics endpoints.
 
-If you want to try for yourselves to execute this example, I have uploaded also a docker-compose file with everything you need, so you can run a compose up and you’re good to go.
+```yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'otel-collector'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['otel-collector:8889']
+      - targets: ['otel-collector:8888']
+```
+
+Now we are going to generate some traffic on the BookStore API and afterwards access Prometheus to start analyzing the metrics that the app is sending us.
+
+The business metrics from the BookStopre API are all available in Prometheus.
+
+<add-img>
+
+If we take a peek at the "orders-price" ``Histogram`` we can see that the bucket aggregation values are the ones that we defined in the ``MeterProvider`` using the ``AddView`` extension method.
+
+<add-img>
+
+The metrics about incoming requests generated by the ``OpenTelemetry.Instrumentation.AspNetCore`` NuGet package are also available
+
+<add-img>
+
+And the performance metrics generated by the ``OpenTelemetry.Instrumentation.Runtime`` NuGet package are also being ingested by Prometheus.
+
+<add-img>
+
+# **Grafana**
+
+Having the metric data from the BookStore API in Prometheus is great at all, but we need to visualize them in a more friendly manner, so let's build a few Grafana dashboards.
+
+> _Not going to explain how to build a Grafana dashboard, that's out of the scope for this post._
+
+I ended up building 3 dashboards.
+
+## **Custom metrics dashboard**
+
+This dashboard uses the business metrics instrumented directly on the application using the Metrics API.
+
+<add-img>
+
+## **Http Requests dashboard**
+
+This dashboard uses the metrics generated by the ``OpenTelemetry.Instrumentation.AspNetCore`` NuGet package.
+
+<add-img>
+
+## **Performance counters dashboard**
+
+This dashboard uses the metrics generated by the ``OpenTelemetry.Instrumentation.Runtime`` NuGet package.
+
+<add-img>
+
+# **How to test the BookStore Api**
+
+If you want to take a look at the BookStore API, you can go to my [GitHub repository](https://github.com/karlospn/opentelemetry-metrics-demo).
+
+If you want to test the BookStore API for yourselves, I have uploaded a ``docker-compose file`` that starts up the app and also the external dependencies.   
+The external dependencies (Prometheus, MSSQL Server, Grafana and OpenTelemetry Collector) are already preconfigured so you don't need to do any extra setup.
+
+Just run ``docker-compose`` up and your good to go!
+
+
+# **How to generate business metrics to test Prometheus and Grafana**
+
+**To execute the ``seed-data.sh`` you need to have cURL installed on your local machine.**
+
+In my GitHub repository you'll also find a ``seed-data.sh`` Shell script, this script  will invoke a few operations of the BookStore API via cURL.   
+
+The ``seed-data.sh`` script runs the following operations:
+
+- Adds 8 book categories.
+- Updates 3 book categories.
+- Deletes 2 book categories.
+- Adds 17 books into the store.
+- Updates 4 existing books.
+- Deletes 2 existing books.
+- Adds inventory for every book on the store.
+- Creates 10 orders.
+- Cancels 3 existing orders.
+
+The purpose behind this script is to generate a decent amount of metrics that later can be visualized in Grafana.   
 
 
 
