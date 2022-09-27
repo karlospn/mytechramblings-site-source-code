@@ -22,7 +22,7 @@ This is what we are going to build.
 ![otel-metrics-app-diagram](/img/otel-metrics-app-diagram.png)
 
 - The **BookStore WebAPI** will generate some business metrics and use the OTLP exporter package (``OpenTelemetry.Exporter.OpenTelemetryProtocol``) to send the metric data to the **OpenTelemetry Collector**.
-- The **Prometheus** server will obtain the metric data from the OpenTelemetry Collector.
+- **Prometheus** will obtain the metric data from the OpenTelemetry Collector.
 - We will have a **Grafana** dashboard to visualize the metrics emitted by the BookStore WebApi.
 
 # **Application**
@@ -57,7 +57,7 @@ The following business metrics will be instrumented directly on the application 
 - ``TotalCategoriesGauge`` is an ``ObservableGauge`` that contains the total number of book categories that the store has at any given time
 - ``OrdersPriceHistogram`` is a ``Histogram`` that records the price distribution of the orders.
 - ``NumberOfBooksPerOrderHistogram`` is a ``Histogram`` that records the number of books distribution per order.
-- ``OrdersCanceledCounter`` is a ``ObservableCounter`` that counts the total number of orders cancelled.
+- ``OrdersCanceledCounter`` is an ``ObservableCounter`` that counts the total number of orders cancelled.
 - ``TotalOrdersCounter`` is a ``Counter`` that counts the total number of orders that the store has received.
 
 ## Http requests metrics
@@ -157,7 +157,7 @@ AddOpenTelemetryMetrics()
 ```
 OpenTelemetry Metrics works by using the ``MeterProvider`` to create a ``Meter`` and associating it with one or more ``Instruments``, each of which is used to create a series of ``Measurements``.
 
-The ``MeterProvider`` will hold the configuration for metrics like Meter names, Readers or Views. 
+The ``MeterProvider`` holds the configuration for metrics like Meter names, Readers or Views. 
 
 The ``MeterProvider`` must be configured using the ``AddOpenTelemetryMetrics()`` extension method.    
 
@@ -169,7 +169,7 @@ With the ``SetResourceBuilder`` method we’re configuring the ``Resource`` for 
 
 The ``SetResourceBuilder`` gives us the possibility to configure attributes like the service name or the application name amongst others.
 
-Using the ``AddService("BookStore.Webapi")`` extension method we can set the service name as an attribute of the metric data. For example, if we take a look at the ``OrdersCanceledCounter`` instrument on Prometheus, we will see the following information:
+Using the ``AddService("BookStore.Webapi")`` method we can set the service name as an attribute of the metric data. For example, if we take a look at the ``OrdersCanceledCounter`` instrument on Prometheus, we will see the following information:
 
 ![otel-metrics-prometheus-resource-builder](/img/otel-metrics-prometheus-resource-builder.png)
 
@@ -178,7 +178,7 @@ AddMeter(meters.MetricName)
 ```
 Any ``Instrument`` that we create in our application needs to be associated with a ``Meter``. The ``AddMeter()`` extension method configures OpenTelemetry to transmit all the metrics collected by this concrete ``Meter``.
 
-As you'll see later, in the BookStore app I have a single ``Meter`` with multiple ``Instruments`` on it, but you can also have multiple ``Meters`` in a single application, in that case you'll have multiple calls to the ``AddMeter()``  method.
+As you'll see later, in the BookStore app I have a single ``Meter`` with multiple ``Instruments`` on it, but you can also have multiple ``Meters`` in a single application, in that case you'll need to add multiple calls to the ``AddMeter()``  method.
 
 ```csharp
 AddAspNetCoreInstrumentation()
@@ -198,15 +198,15 @@ AddOtlpExporter(opts =>
 ```
 The ``AddOtlpExporter`` method is used to configure the exporter that sends all the metric data to the OpenTelemetry Collector.
 
-## **2 - Create the Meter and the Instruments**
+## **2 - Create the Meter and Instruments**
 
 After setting up the ``MeterProvider``, it's time to create a ``Meter`` and use it to create ``Instruments``.   
 
 There are a few ways to do that, but I'm going to show you how I tend to do it.   
 First of all, I'm going to create a ``Singleton`` class which will contain:
 - A meter.
-- All the necesary instruments.
-- A bunch of helper methods to record measurements. 
+- The instruments associated with the meter.
+- A series of helper methods to record measurements with those instruments. 
 
 Here's how the class looks like:
 
@@ -286,16 +286,16 @@ namespace BookStore.Infrastructure.Metrics
     }
 }
 ```
-In the class constructor we create the meter and use it to create every necessary instrument. Also we create a series of public helper methods to record measurements.
+In the class constructor, we create the meter and then use it to create every necessary instrument. Also we create a series of public helper methods to record measurements.
 
 - _Why create all those helper methods?_  
 
 To improve code readability, it is easier to understand what this line of code ``_meters.AddBook()`` is doing, rather than this other one ``BooksAddedCounter.Add(1)``.
 
 
-## **3 - Use the instruments to record measurements**
+## **3 - Record measurements using the instruments**
 
-Now it's time to use the instrument we have created in the previous section to record measurements.   
+Now it's time to use the instruments we have created in the previous section to start recording measurements.   
 
 You just need to inject the ``OtelMetrics`` instance whenever we want to record a measurement and use any of the helper methods exposed on the ``OtelMetrics`` class.
 
@@ -308,7 +308,7 @@ You just need to inject the ``OtelMetrics`` instance whenever we want to record 
 - Every time a new book gets deleted from the database.
   - Increase +1 the ``BooksDeletedCounter`` instrument and decrease -1 the ``TotalBooksGauge`` instrument.
 
-The next snippet of code shows how I record those measurements every time a book gets added, updated or deleted from the database.
+The next snippet of code shows how to record those measurements every time a book gets added, updated or deleted from the database.
 
 ```csharp
 public class BookRepository : Repository<Book>, IBookRepository
@@ -386,7 +386,7 @@ public class BookRepository : Repository<Book>, IBookRepository
 - Every time a new book category gets deleted from the database.
   - Increase +1 the ``CategoriesDeletedCounter`` instrument and decrease -1 the ``TotalCategoriesGauge`` instrument.
   
-The next snippet of code shows how I record those measurements every time a book category gets added, updated or deleted from the database.
+The next snippet of code shows how to record those measurements every time a book category gets added, updated or deleted from the database.
 
 ```csharp
 public class CategoryRepository : Repository<Category>, ICategoryRepository
@@ -430,7 +430,7 @@ public class CategoryRepository : Repository<Category>, ICategoryRepository
 - Every time a new order gets updated.
   - Increase +1 the ``OrdersCanceledCounter`` instrument.
   
-The next snippet of code shows how I record those measurements every time an order gets added or updated.
+The next snippet of code shows how to record those measurements every time an order gets added or updated.
 
 ```csharp
 public class OrderRepository : Repository<Order>, IOrderRepository
@@ -484,7 +484,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
     }
 }
 ```
-As you can see from the snippets of code from this section recording a measurement it's a really simple task, just invoke the instrument functions wherever you want to record a measurement, and that's it!
+As you can see from the snippets of code from this section recording a measurement it's a really simple task, just invoke the instrument function wherever you want to record a measurement, and that's it!
 
 ## **4 - Setup the Histogram bucket aggregation accordingly**
 
@@ -606,6 +606,10 @@ This dashboard uses the business metrics instrumented directly on the applicatio
 
 ![otel-metrics-bookstore-custom-metrics](/img/otel-metrics-bookstore-custom-metrics.png)
 
+Here's a closer look of how the "Orders" panel from the dashboard look like:
+
+![otel-metrics-bookstore-custom-orders-metrics](/img/otel-metrics-bookstore-custom-orders-metrics.png)
+
 ## **Http Requests dashboard**
 
 This dashboard uses the metrics generated by the ``OpenTelemetry.Instrumentation.AspNetCore`` NuGet package.
@@ -620,7 +624,7 @@ This dashboard uses the metrics generated by the ``OpenTelemetry.Instrumentation
 
 # **How to test the BookStore Api**
 
-If you want to take a look at the BookStore API, you can go to my [GitHub repository](https://github.com/karlospn/opentelemetry-metrics-demo).
+If you want to take a look at the source code, you can go to my [GitHub repository](https://github.com/karlospn/opentelemetry-metrics-demo).
 
 If you want to execute the BookStore API for yourselves, I have uploaded a ``docker-compose`` file that starts up the app and also the external dependencies.   
 The external dependencies (Prometheus, MSSQL Server, Grafana and OpenTelemetry Collector) are already preconfigured so you don't need to do any extra setup. Just run ``docker-compose`` up and you're good to go!
@@ -714,7 +718,7 @@ The ``seed-data.sh`` script runs the following actions:
 - Create 10 orders.
 - Cancel 3 existing orders.
 
-The purpose behind this script is to generate a decent amount of business metrics that later can be visualized in Grafana or Prometheus.   
+The purpose behind this script is to generate a decent amount of business metrics that later can be visualized in Grafana and Prometheus.   
 
 
 
