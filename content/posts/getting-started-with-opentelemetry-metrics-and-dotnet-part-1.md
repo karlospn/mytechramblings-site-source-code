@@ -17,7 +17,7 @@ In one of my [previous posts](https://www.mytechramblings.com/posts/getting-star
 
 At the end of this 2 part-series post we will have a .NET6 app that emits a series of metrics, those metrics will be send to the OpenTelemetry Collector, a Prometheus Server will receive the metrics from the OTEL Collector and we will have a Grafana dashboard to visualize them.
 
-![app-otel-metrics-diagram](/img/app-otel-metrics-diagram.png)
+![otel-metrics-app-diagram](/img/otel-metrics-app-diagram.png)
 
 But before jumping to the practical part there are a few key concepts about using OpenTelemetry Metrics with .NET that are worth talking about.
 
