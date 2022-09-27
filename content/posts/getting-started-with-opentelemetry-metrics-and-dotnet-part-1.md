@@ -1,9 +1,9 @@
 ---
 title: "Getting started with OpenTelemetry Metrics in .NET. Part 1: Key concepts"
-date: 2022-09-27T01:13:32+02:00
+date: 2022-09-27T10:01:32+02:00
 tags: ["opentelemetry", "dotnet", "csharp", "metrics", "prometheus", "grafana"]
 description: "In this 2 part series-post I’m going to show you how to use OpenTelemetry to generate custom metrics and how to visualize those metrics using Prometheus and Grafana. In part 1 I’ll be talking about some key concepts that you should know when using OpenTelemetry Metrics with .NET."
-draft: true
+draft: false
 ---
 
 > This is a 2 part-series post.
