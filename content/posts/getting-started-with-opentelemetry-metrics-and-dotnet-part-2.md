@@ -1,9 +1,9 @@
 ---
 title: "Getting started with OpenTelemetry Metrics in .NET. Part 2: Instrumenting the BookStore API"
-date: 2022-09-27T10:07:53+02:00
+date: 2022-09-28T10:01:53+02:00
 tags: ["opentelemetry", "dotnet", "csharp", "metrics", "prometheus", "grafana"]
 description: "In this 2 part series-post I’m going to show you how to use OpenTelemetry to generate custom metrics and how to visualize those metrics using Prometheus and Grafana. In part 2 I’ll be showing you how to add OpenTelemetry Metrics on a real life .NET app and how to visualize those metrics using Prometheus and Grafana."
-draft: true
+draft: false
 ---
 
 > This is a 2 part-series post.
