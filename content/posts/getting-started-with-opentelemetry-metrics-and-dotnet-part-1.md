@@ -8,7 +8,8 @@ draft: false
 
 > This is a 2 part-series post.
 > - **Part 1**: Key concepts that you should know when using OpenTelemetry Metrics with .NET.
-> - **Part 2**: A practical example about how to add OpenTelemetry Metrics on a real life .NET app and how to visualize those metrics using Prometheus and Grafana (_Available later this week_).
+> - **Part 2**: A practical example about how to add OpenTelemetry Metrics on a real life .NET app and how to visualize those metrics using Prometheus and Grafana. If you want to read it, click [here](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-metrics-and-dotnet-part-2/)
+
 
 
 OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as **traces**, **metrics**, and **logs**. 
