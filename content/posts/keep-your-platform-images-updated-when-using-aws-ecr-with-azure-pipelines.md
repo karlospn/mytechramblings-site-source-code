@@ -955,6 +955,7 @@ schedules:
   branches:
     include:
     - main
+  always: true
 
 parameters:
 - name: force_update
@@ -1030,6 +1031,7 @@ schedules:
   branches:
     include:
     - main
+  always: true
 
 parameters:
 - name: force_update
