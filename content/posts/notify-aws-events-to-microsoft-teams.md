@@ -2,7 +2,7 @@
 title: "How to notify AWS Events to Microsoft Teams using AWS EventBridge and AWS Lambda"
 date: 2022-10-14T12:28:12+02:00
 tags: ["aws", "eventbridge", "lambda", "teams", "python", "cdk", "iac", "devops"]
-description: "TBD"
+description: "An AWS event indicates a change in a service, a SaaS partner service or application. In this post I want to show you how you can notify those AWS events to a Microsoft Teams channel using AWS EventBridge and AWS Lambda."
 draft: true
 ---
 
@@ -63,16 +63,15 @@ The setup to notify an AWS Event to Microsoft Teams using AWS EventBridge and La
 ![notify-aws-event-to-teams-diagram](/img/notify-aws-event-to-teams-diagram.png)
 
 - An ``AWS EventBridge Rule`` matches a specific set of AWS events and sends them to a target.
-- The target is a ``Lambda function`` that sends the event to a ``Microsoft Teams Channel`` using an ``incoming HTTP WebHook``.
+- The target is a ``Lambda function`` that sends the event to a ``Microsoft Teams Channel`` using an ``Incoming HTTP WebHook``.
 
 # **Setting up an AWS EventBridge Rule**
 
 First step is to decide which AWS events we want to listen to on our ``EventBridge Rule``.
 
-In this post I'll be listening to ``ECR PUSH events``, so everytime a new container image or tag gets pushed to any ``ECR repository`` a notification pops on my Teams Chanel.
+In this post I'll be listening to ``ECR PUSH events``, so every time a new container image or tag gets pushed to an ``ECR repository`` a notification pops on my Teams Chanel.
 
-
-The next code snippet shows how to create an ``EventBridge Rule`` that listens to ``ECR Push Events``. I'm using  [AWS CDK](https://aws.amazon.com/cdk/?nc1=h_ls).
+The next code snippet shows how to create an ``EventBridge Rule`` that listens to ``ECR Push Events``. For creating the infrastructure I'm using  [AWS CDK](https://aws.amazon.com/cdk/?nc1=h_ls) with .NET.
 
 ```csharp
 var bus = EventBus.FromEventBusName(this,
@@ -99,17 +98,18 @@ var rule = new Rule(this,
     }
 });
 ```
+You can have multiple event bus on EventBridge but AWS Events are **only received on the default event bus**, that's why I'm retrieving the default bus with the ``EventBus.FromEventBusName`` command and using it later when creating the ``Rule``.
 
-The important part is the "EventPattern" block. 
+The most important part when configuring a ``Rule`` is the ``EventPattern`` block. 
 - ``Source``: Identifies the service that sourced the event.
 - ``DetailType``: The type of event.
-- ``Detail``: A JSON object, whose content is at the discretion of the service originating the event. In this case, I want push actions that ended up being succesful.
+- ``Detail``: A JSON object, whose content is at the discretion of the service originating the event.
 
-The easiest way of knowing which values use for the "DetailType" or the "Detail" attributes is to use the AWS Portal. An EventPattern builder is availaible on the AWS Portal when you try to create an EventBridge Rule.
+The easiest way of knowing which values to use when declaring the ``DetailType`` or the ``Detail`` attributes is to use the AWS Portal. An ``EventPattern`` builder is availaible on the AWS Portal when you try to create an EventBridge Rule.
 
 <add-img>
 
-If you're using IaC to create those EventBridge Rules, the best way to do it is using first the AWS Portal to create the EventPattern expression and then move it into your IaC files.
+If you're using IaC to create those ``EventBridge Rules``, the easiest way to do it is using the AWS Portal to create the EventPattern expression and then move it into your IaC files.
 
 # **Building the Lambda function Target**
 
@@ -118,7 +118,7 @@ A target is a resource or endpoint that EventBridge sends an event to when the e
 The Lambda function only has to do one thing:
 - Get the event sent by the EventBridge Rule and send it to Teams using an HTTP WebHook.
 
-This time instead of dotnet I'll be using Python. For this kind of functions, Python is a better and cheaper option.
+For building the lambda instead of .NET I'll be using Python. For this kind of functions, Python is a better and cheaper option.
 
 ```python
 import json
@@ -143,24 +143,29 @@ def lambda_handler(event, context):
     except URLError as err:
         logger.error(f"Server connection failed: {err.reason}")
 ```
-The function can be as simple as the above code snippet, it only needs to stringify the event object and send it to Teams via HTTP.   
-If we take a look at the end result on Teams, it doesn't look very nice.
+The function can be as simple as the above code snippet, just stringify the event and send it to Teams via HTTP WebHook.  
+Also before start using the function, we need to create an Incoming WebHook on Teams.
 
 <add-img>
 
-We can improve it using **Adaptative Cards for Microsoft Teams**.
+The Teams webhook Uri has been stored in a Lambda environment variable named  ``teams_webhook_uri``.
+
+If we take a look at how the end result looks on Teams, we'll see this:
+<add-img>
+
+Sending the AWS Event directly to Teams is probably not the best option because it is hard to really know what's happening, but we can improve the readability using **Adaptative Cards for Microsoft Teams**.
 
 ## **Adaptative Cards for Microsoft Teams**
 Adaptive Cards are a platform-agnostic method of displaying blocks of information without the complexity of customizing CSS or HTML to render them. 
 
-Adaptive Cards are in JSON format and when delivered to Microsoft Teams, the JSON is transformed into native UI that automatically adapts its looks. 
+Adaptive Cards have a JSON format and when delivered to Microsoft Teams, the JSON is transformed into native UI that automatically adapts its looks. 
 
 If you want to know more about it, you can read it in the following links:
 - https://learn.microsoft.com/en-us/power-automate/overview-adaptive-cards
 - https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/design-effective-cards?tabs=design
 - https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards-and-task-modules
 
-The next code snippet shows how you can build an adaptative card on the Lambda function, instead of using directly the event.
+The next code snippet shows the previous lambda function, but now it uses an adaptative card.
 
 ```python
 import json
@@ -220,10 +225,61 @@ def lambda_handler(event, context):
     except URLError as err:
         logger.error(f"Server connection failed: {err.reason}")
 ```
-
-If we take a look at Teams, the end result looks much better:
+The adaptative card built inside the Lambda function is quite simple, you can do more complex and interesting stuff if you want, but nonetheless if we take a look now at the end result on Teams:
 
 <add-img>
 
-# **How to test it**
+It has better readability.
+
+
+# **How to try it out**
+
+If you want to take a look at the source code, you can go to my [GitHub repository](https://github.com/karlospn/notify-aws-events-to-microsoft-teams).
+
+If you want to execute it by yourselves, this is want you need to know.
+
+## **Repository content**
+
+The repository contains a ``CDK app`` that creates 2 EventBridge Rules and 2 Lambda functions:
+
+- The first rule notifies when a new container image or tag gets pushed into ECR and a lambda function post this event to Teams.
+- The second rule notifies when an S3 Bucket is created or deleted and another lambda function post those events to Teams.
+
+## **How to deploy the CDK app**
+
+1 - Create an "Incoming Webhook" on one of your Microsoft Teams Channels.
+
+<add-img>
+
+2 - Deploy the CDK app.
+
+To deploy it, use the command:
+
+- ``cdk deploy --profile <profile> --parameters teamsWebHookUri=<incoming-teams-webhook-uri>``
+
+Or the command:
+- ``cdk deploy --parameters teamsWebHookUri=<incoming-teams-webhook-uri>``
+  
+The CDK app uses the ``CDK_DEFAULT_ACCOUNT`` and ``CDK_DEFAULT_REGION`` environment variables to specify the account and the region where the infrastructure will be created.
+
+If you hard-code the target account and region on your CDK app, the stack will always be deployed to that specific account and region.
+To make the stack deployable to a different target, but to determine the target at synthesis time, your stack can use two environment variables provided by the AWS CDK CLI: ``CDK_DEFAULT_ACCOUNT`` and ``CDK_DEFAULT_REGION``. These variables are set based on the AWS profile specified using the ``--profile option``, or the default AWS profile if you don't specify one.
+
+Here's an example of how to deploy the app:
+
+- ``cdk deploy --parameters teamsWebHookUri=https://cponsn.webhook.office.com/webhookb2/845c5df3-e285-4e3b-8a57-35a5543a05da@532ddc14-1479-45c7-b836-efbccb2bf6aa/IncomingWebhook/45a42011bfe54a2091567af10968422 2/a1d89e88-1b21-4da6-a2b1-dfb848d8b956``
+
+## **How to test it**
+
+Push a new image into an ECR repository, and take a look at your Teams Channel.
+
+<add-img>
+
+Create an S3 bucket, and take a look at your Teams Channel.
+
+<add-img>
+
+Delete an S3 bucket, and take a look at your Teams Channel.
+
+<add-img>
 
