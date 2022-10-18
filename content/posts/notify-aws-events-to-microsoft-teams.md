@@ -1,9 +1,9 @@
 ---
 title: "How to notify AWS events to Microsoft Teams using AWS EventBridge and AWS Lambda"
-date: 2022-10-14T12:28:12+02:00
+date: 2022-10-18T10:01:12+02:00
 tags: ["aws", "eventbridge", "lambda", "teams", "python", "cdk", "iac", "devops"]
 description: "An AWS event indicates a change in a service, and in this post I want to show you how you can notify those events to a Microsoft Teams channel using AWS EventBridge and AWS Lambda."
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
