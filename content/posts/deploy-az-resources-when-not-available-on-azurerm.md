@@ -38,19 +38,19 @@ Pairing the ``null_resource``  with the ``local-exec`` provisioner allows us to 
 The next code snippet shows an example of how you could execute a script that creates an Azure Resource Group using  the ``null_resource`` and the ``local-exec`` provisioner.
 
 ```yaml
-resource "null_resource" "az_res_group" {
-  triggers = {
-    location = "westus
-  }
-  provisioner "local-exec" {
-    command = "./create_resource_group.sh ${self.triggers.location}"
-    interpreter = ["/bin/bash", "-c"]
-  }
+resource "null_resource" "res_group" {
+    triggers = {
+        location = "westeurope"
+    }
+    provisioner "local-exec" {
+        command = "./create_resource_group.sh ${self.triggers.location}" 
+        interpreter = ["bash", "-c"]
+    }
 }
 ```
 And the ``create_resource_group.sh`` script will look like:
 
-```shell
+```bash
 #!/bin/bash
 LOCATION="$1"
 az group create -l $LOCATION -n MyResourceGroup
@@ -68,23 +68,30 @@ If ``when = destroy`` is specified, the provisioner will run when the resource i
 The next code snippet shows an example of how you could execute a script that creates and deletes an Azure Resource Group using  the ``null_resource`` and the ``local-exec`` provisioner.
 
 ```yaml
-resource "null_resource" "az_res_group" {
-  triggers = {
-    location = "westus
-  }
+resource "null_resource" "res_group" {
+    count = 0
+    triggers = {
+        location = "westeurope"
+    }
+    provisioner "local-exec" {
+        command = "./create_resource_group.sh ${self.triggers.location}" 
+        interpreter = ["bash", "-c"]
+    }
 
-  provisioner "local-exec" {
-    command = "./create_resource_group.sh ${self.triggers.location}"
-    interpreter = ["/bin/bash", "-c"]
-  }
-
-  provisioner "local-exec" {
-    when = destroy
-    command = "./destroy_resource_group.sh ${self.triggers.location}"
-    interpreter = ["/bin/bash", "-c"]
-  }
+    provisioner "local-exec" {
+        when = destroy
+        command = "./destroy_resource_group.sh"
+        interpreter = ["bash", "-c"]
+    }
 }
 ```
+And the ``destroy_resource_group.sh`` script will look like this:
+
+```bash
+#!/bin/bash
+az group delete -n MyResourceGroup --yes
+```
+
 But there is one big problem with this approach.
 
 When we remove a resource from the Terraform file and execute the ``apply`` command normally the resource gets deleted from the Terraform state file and from the provider. That's the common behaviour of Terraform, but it doesn't apply to the ``local-exec`` provisioner.
@@ -95,21 +102,38 @@ If a  ``null_resource`` block with a ``local-exec``  gets removed entirely from 
    - Remove the resource block entirely from configuration, along with its provisioner blocks.
    - Apply again, at which point no further action should be taken since the resources were already destroyed.
 
+The next code snippet shows an example of how you could destroy an Azure Resource Group that's been created using the ``null_resource`` and the ``local-exec`` provisioner.
 
-## **Downsides**
+```yaml
+resource "null_resource" "res_group" {
+    count = 0
+    triggers = {
+        location = "westeurope"
+    }
+    provisioner "local-exec" {
+        command = "./create_resource_group.sh ${self.triggers.location}" 
+        interpreter = ["bash", "-c"]
+    }
 
-Using this approach has a few downsides:
-- The information about the resource we have created or modified is not present in the state file. The only data available in the state file is the one from the ``triggers`` attributes.
-- Depending on how you build the script and if it errors out when it gets executed, it might happen that your state ends up in a inconsistent state.
-- To destroy a resource is not an easy feat.
-- If you want to be consistent you'll have to write not one but 2 scripts: one for provisioning the resource and one for destroying the resource.
-- Using this approach you can create or destroy a resource, but you can't update a resource.
-
+    provisioner "local-exec" {
+        when = destroy
+        command = "./destroy_resource_group.sh"
+        interpreter = ["bash", "-c"]
+    }
+}
+```
 
 ## **Benefits**
 
 - The ability to execute any command available in the Azure CLI using Terraform.
 
+## **Downsides**
+
+- The information about the resource we have created or modified is not present in the state file. The only data available in the state file is the one from the ``triggers`` attributes.
+- Depending on how you build the script and if it errors out when it gets executed, it might happen that your state ends up in a inconsistent state.
+- To destroy a resource is not an easy feat.
+- If you want to be consistent you'll have to write not one but 2 scripts: one for provisioning the resource and one for destroying the resource.
+- Using this approach you can create or destroy a resource, but you can't update a resource.
 
 # **Using the azurerm_resource_group_template_deployment resource + ARM Template**
 
@@ -118,11 +142,295 @@ The ``azurerm_resource_group_template_deployment`` is a resource from the offici
 
 This approach is the equivalent of deploying an Azure ARM Template, but using Terraform to do it.
 
-The next code snippet shows an example of how you could use the ``azurerm_resource_group_template_deployment`` to manage an Azure Resource Group.
+The next code snippet shows an example of how you could use the ``azurerm_resource_group_template_deployment`` to manage an ``Azure Network Watcher``.
 
 ```yaml
-resource "azurerm_resource_group_template_deployment" "az_res_group" {
-    name                  = "res-group-deploy"
+resource "azurerm_resource_group" "res_group" {
+    name      = "rg-test"
+    location  = "West US"
+}
+
+resource "azurerm_resource_group_template_deployment" "network_watcher" {
+    name                  = "network-watcher-deployment"
+    resource_group_name   = azurerm_resource_group.res_group.name
+    deployment_mode       = "Incremental"
+    template_content      = file("template.json")
+    parameters_content  = <<PARAMETERS
+    {
+        "name": {
+            "value": "network-wather-example"
+        },
+        "location": {
+            "value": "${azurerm_resource_group.res_group.location}"
+        }
+    }
+    PARAMETERS 
+    depends_on = [
+        azurerm_resource_group.res_group
+    ]
+}
+```
+
+And the ARM Template looks like this:
+```javascript
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "name": {
+            "type": "String"
+        },
+        "location": {
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkWatchers",
+            "apiVersion": "2022-01-01",
+            "name": "[parameters('name')]",
+            "location": "[parameters('location')]",
+            "properties": {}
+        }
+    ]
+}
+```
+
+## **Benefits**
+
+- The ability to deploy any resource available via Azure ARM REST Api.
+
+## **Downsides**
+
+- When an ARM template execution fails in Terraform, Terraform doesn't record the fact that the deployment was physically created in the state file. Which means that the next time you try to deploy the Terraform ARM template it will be error out, from this point forward the only solution is to manually delete the Azure deployment.
+- Terraform only understands changes made to the ARM template. If you modify a resource directly in Azure, Terraform is not capable to pick up those changes.
+- Not easy if you want to update an attribute or enable a feature of an existing resource. You'll need to describe the entire Azure Resource on your ARM template even if you want to update a single property of an existing resource.
+
+
+# **Using the AzAPI provider**
+
+> **Important**: The AzApi provider is the best solution right now when trying to create or update an Azure resource that is missing in the AzureRM provider.
+
+The ``AzAPI`` provider is a very thin layer on top of the Azure ARM REST APIs (This API is the same one that is used when we deploy an ARM Template).   
+
+The ``AzAPI`` provider contains only 3 resources:
+- ``azapi_resource``:  Used for managing Azure resources.
+- ``azapi_resource_action``: Used to perform any Azure resource manager resource action. It's recommended to use this resource to perform actions which change a resource's state.
+- ``azapi_update_resource``: Used to add or modify properties on an existing resource. When delete ``azapi_update_resource``, no operation will be performed, and these properties will stay unchanged. If you want to restore the modified properties to some values, you must apply the restored properties before deleting.
+
+The next code snippet shows an example of how you could use the ``AzApi`` provider to manage an ``Azure DNS Resolver``.
+
+```yaml
+resource "azurerm_resource_group" "res_group" {
+    name      = "rg-test"
+    location  = "West US"
+}
+
+resource "azurerm_virtual_network" "vnet" {
+    name                = "vnet-test"
+    location            = azurerm_resource_group.res_group.location
+    resource_group_name = azurerm_resource_group.res_group.name
+    address_space       = ["10.18.0.0/16"]
+}
+
+resource "azapi_resource" "dns_resolver" {
+    type      = "Microsoft.Network/dnsResolvers@2020-04-01-preview"
+    name      = "resolver-test"
+    parent_id = azurerm_resource_group.res_group.id
+    location  = azurerm_resource_group.res_group.location
+
+    body =  jsonencode({
+        properties = {
+
+            virtualNetwork = {
+                id = azurerm_virtual_network.vnet.id
+            }
+        }
+    })
+    response_export_values = ["*"]
+
+}
+```
+
+When creating or update a resource using the ``AzApi`` resource you'll need to specify the following attributes:
+- ``type``: The value for this field is the resource-type and the api-version, following the convention: ``<resource-type>@<api-version>`` as an example ``Microsoft.Network/dnsResolvers@2020-04-01-preview``.
+
+- ``parent_id`` Is the Id of the logical group the resource or item is deployed within, such as a resource group id.
+
+- ``body``: Is the JSON objected that contains the request body used to either create or update the Azure resource in question.   
+Want to know which attributes are required on the ``body`` when creating an Azure Service? Read the next section.
+
+## **Documentation**
+
+This is the "go to" website when using the ``AzApi`` provider:
+- https://learn.microsoft.com/es-es/azure/templates/?view=azurermps-6.0.0
+
+You'll find an inventory of all the Azure resources availables and how to create them using the ``AzApi`` provider.
+
+# **Examples**
+
+During this post we have seen some really simple examples of how to create or update an Azure resource using the ``local-exec`` provisioner, the ``azurerm_resource_group_template_deployment`` resource or the ``AzApi`` provider. 
+
+Before ending this post, let me show you a more complex ones.
+
+
+## **Benefits**
+
+- The ability to deploy any resource available via Azure ARM REST Api.
+- Full Terraform state file fidelity.
+- From the 3 options we have discussed in this post, it is the most "Terraform syntax friendly".
+- Really easy to update an attribute or enable a feature of an existing resource.
+- Don't need to use any external script or ARM Template.
+
+## **Downsides**
+
+- The fact that the ``body`` attribute is a ``jsonencode`` might sometimes trigger a false change when running the ``terraform command``.
+
+
+# **Examples**
+
+During this post we have seen some really simple examples of how to create or update an Azure resource using the ``local-exec`` provisioner, the ``azurerm_resource_group_template_deployment`` resource or the ``AzApi`` provider. 
+
+Before ending this post, let me show you a more complex ones.
+
+# **Example 1: Create an Azure App Configuration**
+
+I'm aware that you can create an Azure App Configuration using the ``azurerm_app_configuration`` resource available on the AzureRM provider, but this is just an example of how you can provision an Azure resource using Terraform without the AzureRM provider.
+
+## **Using the null_resource, local-exec provisioner an the AZ CLI**
+
+- This example uses:
+  - An  ``azurerm_resource_group`` to create a resource group.
+  - A ``null_resource`` with a couple of ``local-exec`` provisioners to create an ``Azure App Configuration``. 
+    - The first ``local-exec`` provisioner is triggered when the resource needs to be create and it invokes the ``create_app_config.sh`` script.
+    - The second ``local-exec`` provisioner has defined a ``when = destroy`` attribute. It is triggered when the resource needs to be destroyed and it invokes the ``destroy_app_config.sh`` script.
+-  The ``Azure App Configuration`` creation and deletion is done via Shell script.
+   -  The Shell scripts uses the ``AZ CLI`` to create or delete the ``App Configuration``.
+
+Here's how the Terraform file looks like:
+```yaml
+locals {
+    resource_group_name = "rg-provisioning-demo"
+    app_conf_name = "appconf-demo-dev"
+    app_conf_sku = "Free"
+    app_conf_enable_public_network = false
+    app_conf_disable_local_auth = false
+    app_conf_location = "westeurope"
+}
+
+## Create Resource Group
+resource "azurerm_resource_group" "rg_demo" {
+    name      = local.resource_group_name
+    location  = "West Europe"
+}
+
+## Create App Configuration using an external script
+resource "null_resource" "app_conf" {
+    triggers = {
+        app_conf_name = local.app_conf_name
+        res_group_name = local.resource_group_name
+        sku = local.app_conf_sku
+        enable_public_network = local.app_conf_enable_public_network
+        disable_local_auth = local.app_conf_disable_local_auth
+        location = local.app_conf_location
+    }
+    provisioner "local-exec" {
+        command = "./create_app_config.sh ${self.triggers.app_conf_name} ${self.triggers.res_group_name} ${self.triggers.sku} ${self.triggers.enable_public_network} ${self.triggers.disable_local_auth} ${self.triggers.location}" 
+        interpreter = ["bash", "-c"]
+    }
+
+    provisioner "local-exec" {
+        when = destroy
+        command = "./destroy_app_config.sh ${self.triggers.app_conf_name} ${self.triggers.res_group_name} ${self.triggers.sku} ${self.triggers.enable_public_network} ${self.triggers.disable_local_auth}"
+        interpreter = ["bash", "-c"]
+    }
+
+    depends_on = [
+        azurerm_resource_group.rg_demo
+    ]
+}
+```
+
+The ``create_app_config.sh`` script executes the following steps:
+- It checks if an App Configuration with the given name already exists.
+- If it doesn't exists, it creates a new ``App Configuration`` using the ``az appconfig create`` command.
+
+```bash
+#!/bin/bash
+
+APP_CONFIG_NAME="$1"
+RES_GROUP_NAME="$2"
+SKU="$3"
+ENABLE_PUBLIC_NETWORK="$4"
+DISABLE_LOCAL_AUTH="$5"
+LOCATION="$6"
+
+app_config_instance=$(az appconfig list | jq --arg name "$APP_CONFIG_NAME" -e '.[]|select(.name==$name).name')
+
+if [ -z "$app_config_instance" ]; then
+    echo "App Config doesn't exists. Creating a new one."
+    az appconfig create --name $APP_CONFIG_NAME --resource-group $RES_GROUP_NAME --sku $SKU --enable-public-network $ENABLE_PUBLIC_NETWORK --disable-local-auth $DISABLE_LOCAL_AUTH --location $LOCATION
+fi
+```
+
+The ``destroy_app_config.sh`` script executes the following steps:
+- It checks if an App Configuration with the given name already exists.
+- If it exists, it deletes the ``App Configuration`` using the ``az appconfig delete`` command.
+- Sleeps during 30 seconds. 
+ 
+With the ``local-exec`` provisioner we can't update a resource, the only option available is to delete it and afterwards recreate it with the new updated attributes.    
+
+To update an ``App Configuration`` using this method, Terraform will delete it and then recreate it from scratch, if the resource creation happens right away after the deletion an error might appear saying that the ``App Configuration`` still exists, that's the reason why we're running the sleep command after deleting the resource, to let Azure enough time to know that the resource has been deleted.
+
+```bash
+#!/bin/bash
+
+APP_CONFIG_NAME="$1"
+RES_GROUP_NAME="$2"
+SKU="$3"
+ENABLE_PUBLIC_NETWORK="$4"
+DISABLE_LOCAL_AUTH="$5"
+
+app_config_instance=$(az appconfig list | jq --arg name "$APP_CONFIG_NAME" -e '.[]|select(.name==$name).name')
+
+if [ -z "$app_config_instance" ]; then
+    echo "App Config doesn't exist. No need to delete anything."
+else
+    echo "App Config found. Trying to destroy the resource."
+    az appconfig delete --name $APP_CONFIG_NAME --resource-group $RES_GROUP_NAME --yes
+    sleep 30s
+fi
+```
+
+## **Using the azurerm_resource_group_template_deployment resource**
+
+- This example uses:
+  - An  ``azurerm_resource_group`` to create a resource group.
+  - An ``azurerm_resource_group_template_deployment``  to create the ``App Configuration``
+    - This resource uses an ARM Template that can be found on the ``template.json`` file.
+    - Parameters can be passed from the Terraform file to the ARM template using the ``parameters_content`` attribute.
+
+Here's how the Terraform file looks like:
+```yaml
+locals {
+    resource_group_name = "rg-provisioning-demo"
+    app_conf_name = "appconf-demo-dev"
+    app_conf_sku = "free"
+    app_conf_public_network_access = "Enabled"
+    app_conf_disable_local_auth = false
+    app_conf_location = "westeurope"
+}
+
+## Create Resource Group
+resource "azurerm_resource_group" "rg_demo" {
+    name      = local.resource_group_name
+    location  = "West Europe"
+}
+
+## Create App Configuration using the resource group arm template resource
+resource "azurerm_resource_group_template_deployment" "appconf" {
+    name                  = "app-conf-deploy"
     resource_group_name   = local.resource_group_name
     deployment_mode       = "Incremental"
     template_content      = file("template.json")
@@ -150,27 +458,519 @@ resource "azurerm_resource_group_template_deployment" "az_res_group" {
     ]
 }
 ```
+And here's how the ARM template file looks like:
+```javascript
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "name": {
+            "type": "String",
+            "metadata": {
+                "description": "Specifies the name of the App Configuration."
+            }
+        },
+        "location": {
+            "type": "String",
+            "metadata": {
+                "description": "Specifies the location of the App Configuration."
+            }
+        },
+        "sku": {
+            "type": "String",
+            "metadata": {
+                "description": "The SKU name of the App Configuration"
+            }
+        },
+        "public_network_access": {
+            "type": "String",
+            "metadata": {
+                "description": "The Public Network Access setting of the App Configuration"
+            }
+        },
+        "disable_local_auth": {
+            "type": "String",
+            "metadata": {
+                "description": "Whether local authentication methods is enabled."
+            }
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.AppConfiguration/configurationStores",
+            "apiVersion": "2022-05-01",
+            "name": "[parameters('name')]",
+            "location": "[parameters('location')]",
+            "sku": {
+                "name": "[parameters('sku')]"
+            },
+            "properties": {
+                "encryption": {},
+                "publicNetworkAccess": "[parameters('public_network_access')]",
+                "disableLocalAuth": "[parameters('disable_local_auth')]",
+                "softDeleteRetentionInDays": 0,
+                "enablePurgeProtection": false
+            }
+        }
+    ]
+}
+```
 
-## **Downsides**
+## **Using AzApi provider**
 
-- When an ARM template execution fails in Terraform, Terraform doesn't record the fact that the deployment was physically created in the state file. Which means that the next time you try to deploy the Terraform ARM template it will be error out, from this point forward the only solution is to manually delete the Azure deployment.
-- Terraform only understands changes made to the ARM template. If you modify a resource directly in Azure, Terraform is not capable to pick up those changes.
-- And you need to write ARM templates...
+- This example uses:
+  - An  ``azurerm_resource_group`` to create a resource group.
+  - An ``azapi_resource``  to create the ``App Configuration``.
 
-## **Benefits**
+Here's how the Terraform file looks like:
+```yaml
+locals {
+    resource_group_name = "rg-provisioning-demo"
+    app_conf_name = "appconf-demo-dev"
+    app_conf_sku = "free"
+    app_conf_public_network_access = "Enabled"
+    app_conf_disable_local_auth = false
+}
 
-- The ability to deploy any resource available via Azure ARM REST Api.
+## Create Resource Group
+resource "azurerm_resource_group" "rg_demo" {
+    name      = local.resource_group_name
+    location  = "West Europe"
+}
+
+## Create App Configuration using the AzApi provider
+resource "azapi_resource" "appconf" {
+    type      = "Microsoft.AppConfiguration/configurationStores@2022-05-01"
+    name      = local.app_conf_name
+    parent_id = azurerm_resource_group.rg_demo.id
+    location  = azurerm_resource_group.rg_demo.location
+    body =  jsonencode({      
+        sku = {
+            name = local.app_conf_sku
+        } 
+        properties = {
+            publicNetworkAccess = local.app_conf_public_network_access
+            disableLocalAuth = local.app_conf_disable_local_auth
+        }
+    })
+    response_export_values = ["*"]
+}
+```
+
+# **Example 2: Update an existing Azure Storage Account to enable SFTP support**
+
+## **Using the null_resource, local-exec provisioner an the AZ CLI**
+
+```yaml
+locals {
+    resource_group_name = "rg-provisioning-demo"
+    storage_account_name = "stsftprovdev"
+}
+
+## Create Resource Group
+resource "azurerm_resource_group" "rg_demo" {
+    name      = local.resource_group_name
+    location  = "West Europe"
+}
+
+## Create Storage Account
+resource "azurerm_storage_account" "sftp_storage_acct" {
+    name                        = local.storage_account_name
+    location                    = azurerm_resource_group.rg_demo.location
+    resource_group_name         = azurerm_resource_group.rg_demo.name
+    account_tier                = "Standard"
+    account_replication_type    = "LRS"
+    min_tls_version             = "TLS1_2"
+    is_hns_enabled           = true
+}
+
+# Create container
+resource "azurerm_storage_container" "azurerm_storage_container" {
+  name                  = "container"
+  storage_account_name  = azurerm_storage_account.sftp_storage_acct.name
+}
 
 
-# **Using the AzAPI provider**
+## Enable SFTP and create SFTP local users using an external script
+resource "null_resource" "sftp_enable" {
+    triggers = {
+        storage_account_name = local.storage_account_name
+        res_group_name = local.resource_group_name
+        sftp_user = "ftpuser"
+    }
+    provisioner "local-exec" {
+        command = "./enable_sftp_create_localuser.sh ${self.triggers.storage_account_name} ${self.triggers.res_group_name} ${self.triggers.sftp_user}"
+        interpreter = ["bash", "-c"]
+    }
 
-The ``AzAPI`` provider is a very thin layer on top of the Azure ARM REST APIs (This API is the same one that is used when we deploy an ARM Template).   
+    provisioner "local-exec" {
+        when = destroy
+        command = "./disable_sftp_and_localuser.sh ${self.triggers.storage_account_name} ${self.triggers.res_group_name} ${self.triggers.sftp_user}" 
+        interpreter = ["bash", "-c"]
+    }
 
+    depends_on = [
+        azurerm_storage_container.azurerm_storage_container
+    ]
+}
+```
+```shell
+#!/bin/bash
+STORAGE_ACCT_NAME="$1"
+RES_GROUP_NAME="$2"
+SFTP_USER="$3"
 
-# **Examples**
+state=$(az feature show --namespace Microsoft.Storage --name AllowSFTP |  jq '.properties.state')
 
-During this post we have seen some really simple examples of how to create or update an Azure resource using the ``local-exec`` provisioner, the ``azurerm_resource_group_template_deployment`` resource or the ``AzApi`` provider. 
+if [ $state != '"Registered"' ]; then
+    echo "Feature not registered. Registration is an asynchronous operation, it must be done manually."
+    exit 1
+fi
 
-Before ending this post, let me show you a more complex ones.
+extension=$(az extension list | jq -e '.[]|select(.name=="storage-preview").name')
+if [ -z "$extension" ]; then
+    echo "Storage-preview extension missing. Installing it."
+    az extension add -n storage-preview
+fi
 
+az storage account update -g $RES_GROUP_NAME -n $STORAGE_ACCT_NAME --enable-sftp true
+az storage account local-user create --account-name $STORAGE_ACCT_NAME -g  $RES_GROUP_NAME -n $SFTP_USER --home-directory "container" --has-ssh-password true --has-ssh-key true --permission-scope permissions=rw service=blob resource-name=container
+az storage account local-user regenerate-password --account-name $STORAGE_ACCT_NAME -g $RES_GROUP_NAME -n $SFTP_USER
+```
 
+```shell
+#!/bin/bash
+STORAGE_ACCT_NAME="$1"
+RES_GROUP_NAME="$2"
+SFTP_USER="$3"
+
+az storage account local-user delete --account-name $STORAGE_ACCT_NAME -g  $RES_GROUP_NAME -n $SFTP_USER
+```
+
+## **Using the azurerm_resource_group_template_deployment resource**
+
+```yaml
+locals {
+    resource_group_name         = "rg-provisioning-demo"
+    storage_account_name        = "stsftprovdev"
+    storage_account_tier        = "Standard"
+    storage_account_replication = "LRS"
+    storage_account_min_tls     = "TLS1_2"
+    storage_account_hns_enabled = true
+    sftp_user                   = "ftpuser2"
+}
+
+## Create Resource Group
+resource "azurerm_resource_group" "rg_demo" {
+    name      = local.resource_group_name
+    location  = "West Europe"
+}
+
+## Create Storage Account
+resource "azurerm_storage_account" "sftp_storage_acct" {
+    name                        = local.storage_account_name
+    location                    = azurerm_resource_group.rg_demo.location
+    resource_group_name         = azurerm_resource_group.rg_demo.name
+    account_tier                = local.storage_account_tier
+    account_replication_type    = local.storage_account_replication
+    min_tls_version             = local.storage_account_min_tls
+    is_hns_enabled              = local.storage_account_hns_enabled
+}
+
+# Create container
+resource "azurerm_storage_container" "azurerm_storage_container" {
+  name                  = "container"
+  storage_account_name  = azurerm_storage_account.sftp_storage_acct.name
+}
+
+## Enable SFTP and add local users using the resource group arm template resource
+resource "azurerm_resource_group_template_deployment" "sftp" {
+    name                  = "sftp-deploy"
+    resource_group_name   = local.resource_group_name
+    deployment_mode       = "Incremental"
+    template_content      = file("template.json")
+    parameters_content  = <<PARAMETERS
+    {
+        "storage_account_name": {
+            "value": "${local.storage_account_name}"
+        },
+        "storage_account_tier": {
+            "value": "${local.storage_account_tier}"
+        },
+        "storage_account_replication": {
+            "value": "${local.storage_account_replication}"
+        },
+        "storage_account_min_tls": {
+            "value": "${local.storage_account_min_tls}"
+        },
+        "storage_account_hns_enabled": {
+            "value": ${local.storage_account_hns_enabled}
+        },
+        "sftp_user": {
+            "value": "${local.sftp_user}"
+        }
+    }
+    PARAMETERS 
+    depends_on = [
+        azurerm_resource_group.rg_demo,
+        azurerm_storage_account.sftp_storage_acct,
+        azurerm_storage_container.azurerm_storage_container
+    ]
+}
+```
+
+```javascript
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storage_account_name": {
+            "type": "String",
+            "metadata": {
+                "description": "Specifies the name of the Storage Account."
+            }
+        },
+        "storage_account_tier": {
+            "type": "String",
+            "metadata": {
+                "description": "Defines the Tier to use for this storage account."
+            }
+        },
+        "storage_account_replication": {
+            "type": "String",
+            "metadata": {
+                "description": "Defines the type of replication to use for this storage account."
+            }
+        },
+        "storage_account_min_tls": {
+            "type": "String",
+            "metadata": {
+                "description": "The minimum supported TLS version for the storage account."
+            }
+        },
+        "storage_account_hns_enabled": {
+            "type": "Bool",
+            "metadata": {
+                "description": "Is Hierarchical Namespace enabled?."
+            }
+        },
+        "sftp_user": {
+            "type": "String",
+            "metadata": {
+                "description": "The SFTP local username."
+            }
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2022-05-01",
+            "name": "[parameters('storage_account_name')]",
+            "location": "westeurope",
+            "sku": {
+                "name": "[concat(parameters('storage_account_tier'), '_', parameters('storage_account_replication'))]",
+                "tier": "[parameters('storage_account_tier')]"
+            },
+            "kind": "StorageV2",
+            "identity": {
+                "type": "None"
+            },
+            "properties": {
+                "defaultToOAuthAuthentication": false,
+                "publicNetworkAccess": "Enabled",
+                "allowCrossTenantReplication": true,
+                "isNfsV3Enabled": false,
+                "isLocalUserEnabled": true,
+                "isSftpEnabled": true,
+                "minimumTlsVersion": "[parameters('storage_account_min_tls')]",
+                "allowBlobPublicAccess": true,
+                "allowSharedKeyAccess": true,
+                "isHnsEnabled": "[parameters('storage_account_hns_enabled')]",
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "accessTier": "Hot"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices",
+            "apiVersion": "2022-05-01",
+            "name": "[concat(parameters('storage_account_name'), '/default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storage_account_name'))]"
+            ],
+            "sku": {
+                "name": "[concat(parameters('storage_account_tier'), '_', parameters('storage_account_replication'))]",
+                "tier": "[parameters('storage_account_tier')]"
+            },
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                    "allowPermanentDelete": false,
+                    "enabled": false
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/localusers",
+            "apiVersion": "2022-05-01",
+            "name": "[concat(parameters('storage_account_name'), '/', parameters('sftp_user'))]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storage_account_name'))]"
+            ],
+            "properties": {
+                "hasSshPassword": true,
+                "permissionScopes": [
+                    {
+                        "permissions": "rw",
+                        "service": "blob",
+                        "resourceName": "container"
+                    }
+                ],
+                "homeDirectory": "container",
+                "hasSharedKey": false,
+                "hasSshKey": false
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2022-05-01",
+            "name": "[concat(parameters('storage_account_name'), '/default/container')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storage_account_name'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storage_account_name'))]"
+            ],
+            "properties": {
+                "defaultEncryptionScope": "$account-encryption-key",
+                "denyEncryptionScopeOverride": false,
+                "publicAccess": "None"
+            }
+        }
+    ]
+}
+```
+
+## **Using AzApi provider**
+
+```yaml
+locals {
+    resource_group_name = "rg-provisioning-demo"
+}
+
+## Create Resource Group
+resource "azurerm_resource_group" "rg_demo" {
+    name      = local.resource_group_name
+    location  = "West Europe"
+}
+
+## Create Storage Account
+resource "azurerm_storage_account" "sftp_storage_acct" {
+    name                        = "stsftprovdev"
+    location                    = azurerm_resource_group.rg_demo.location
+    resource_group_name         = azurerm_resource_group.rg_demo.name
+    account_tier                = "Standard"
+    account_replication_type    = "LRS"
+    min_tls_version             = "TLS1_2"
+    is_hns_enabled              = true
+}
+
+# Create container
+resource "azurerm_storage_container" "sftp_storage_acct_container" {
+  name                  = "container"
+  storage_account_name  = azurerm_storage_account.sftp_storage_acct.name
+}
+
+# Enable SFTP
+resource "azapi_update_resource" "sftp_azpi_sftp" {
+  type        = "Microsoft.Storage/storageAccounts@2021-09-01"
+  resource_id = azurerm_storage_account.sftp_storage_acct.id
+
+  body = jsonencode({
+    properties = {
+      isSftpEnabled = true
+    }
+  })
+
+  depends_on = [
+    azurerm_storage_account.sftp_storage_acct,
+    azurerm_storage_container.sftp_storage_acct_container
+  ]
+  response_export_values = ["*"]
+}
+
+# Create local user
+resource "azapi_resource" "sftp_local_user" {
+  type        = "Microsoft.Storage/storageAccounts/localUsers@2021-09-01"
+  parent_id = azurerm_storage_account.sftp_storage_acct.id
+  name = "ftpuser"
+
+  body = jsonencode({
+    properties = {
+      hasSshPassword = true,
+      homeDirectory = "container"
+      hasSharedKey = true,
+      hasSshKey = false,
+      permissionScopes = [{
+        permissions = "rl",
+        service = "blob",
+        resourceName = "container"
+      }]
+    }
+  })
+
+  response_export_values = ["*"]
+
+  depends_on = [
+    azurerm_storage_account.sftp_storage_acct,
+    azurerm_storage_container.sftp_storage_acct_container,
+    azapi_update_resource.sftp_azpi_sftp
+  ]
+}
+
+# Retrieve password
+resource "azapi_resource_action" "generate_sftp_user_password" {
+  type        = "Microsoft.Storage/storageAccounts/localUsers@2022-05-01"
+  resource_id = azapi_resource.sftp_local_user.id
+  action      = "regeneratePassword"
+  body = jsonencode({
+    username = azapi_resource.sftp_local_user.name
+  })
+
+  response_export_values = ["sshPassword"]
+
+  depends_on = [
+    azurerm_storage_account.sftp_storage_acct,
+    azurerm_storage_container.sftp_storage_acct_container,
+    azapi_update_resource.sftp_azpi_sftp,
+    azapi_resource.sftp_local_user
+  ]
+}
+```
+
+# **Useful links**
+
+- https://learn.microsoft.com/es-es/azure/templates/?view=azurermps-6.0.0
+- https://registry.terraform.io/providers/Azure/azapi/1.0.0
+- https://registry.terraform.io/providers/hashicorp/azurerm/3.30.0
+- https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group_template_deployment
