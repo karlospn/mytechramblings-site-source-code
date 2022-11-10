@@ -296,11 +296,11 @@ I'm aware that you can create an ``Azure App Configuration`` using the ``azurerm
 
 - This example uses:
   - An  ``azurerm_resource_group`` to create a resource group.
-  - A ``null_resource`` with a couple of ``local-exec`` provisioners to create an ``Azure App Configuration``. 
+  - A ``null_resource`` with a couple of ``local-exec`` provisioners to create the ``Azure App Configuration``. 
     - The first ``local-exec`` provisioner is triggered when the resource needs to be created and it invokes the ``create_app_config.sh`` script.
     - The second ``local-exec`` provisioner contains a ``when = destroy`` attribute, which mean that it will be triggered when the resource needs to be destroyed. This second provisioner will invoke the ``destroy_app_config.sh`` script.
   -  The ``Azure App Configuration`` creation/deletion is done inside the Shell scripts.
-     -  The scripts uses the ``AZ CLI`` to create or delete the ``App Configuration``.
+     -  It uses the ``AZ CLI`` to create or delete the ``App Configuration``.
 
 Here's how the Terraform file looks like:
 ```csharp
@@ -363,7 +363,7 @@ LOCATION="$6"
 app_config_instance=$(az appconfig list | jq --arg name "$APP_CONFIG_NAME" -e '.[]|select(.name==$name).name')
 
 if [ -z "$app_config_instance" ]; then
-    echo "App Config doesn't exists. Creating a new one."
+    echo "App Config does not exists. Creating a new one."
     az appconfig create --name $APP_CONFIG_NAME --resource-group $RES_GROUP_NAME --sku $SKU --enable-public-network $ENABLE_PUBLIC_NETWORK --disable-local-auth $DISABLE_LOCAL_AUTH --location $LOCATION
 fi
 ```
@@ -373,9 +373,7 @@ The ``destroy_app_config.sh`` script executes the following steps:
 - If it exists, it deletes the ``App Configuration`` using the ``az appconfig delete`` command.
 - Sleeps during 30 seconds. 
  
-With the ``local-exec`` provisioner we can't update a resource, the only option available is to delete it and afterwards recreate it with the new updated attributes.    
-
-To update an ``App Configuration`` using this method, Terraform will delete it and then recreate it from scratch, if the resource creation happens right away after the deletion an error might appear saying that the ``App Configuration`` still exists, that's the reason why we're running the sleep command after deleting the resource, to let Azure enough time to know that the resource has been deleted.
+The ``local-exec`` provisioner can’t run an in-place update on a resource in a subsequent ``terraform apply`` command, the only option available is to delete it and afterwards recreate it with the new updated attributes, which means that the ``App Configuration`` creation happens instantly after the deletion, so an error might appear saying that the ``App Configuration`` still exists, that's the reason why we're executing a ``sleep`` command after deleting the resource, to let Azure enough time to catch up.
 
 ```bash
 #!/bin/bash
@@ -389,7 +387,7 @@ DISABLE_LOCAL_AUTH="$5"
 app_config_instance=$(az appconfig list | jq --arg name "$APP_CONFIG_NAME" -e '.[]|select(.name==$name).name')
 
 if [ -z "$app_config_instance" ]; then
-    echo "App Config doesn't exist. No need to delete anything."
+    echo "App Config does not exist. No need to delete anything."
 else
     echo "App Config found. Trying to destroy the resource."
     az appconfig delete --name $APP_CONFIG_NAME --resource-group $RES_GROUP_NAME --yes
@@ -552,9 +550,9 @@ resource "azapi_resource" "appconf" {
 }
 ```
 
-# **Example 2: Update an existing Azure Storage Account to enable SFTP support**
+# **Example 2:  Enable SFTP support on an existing Azure Storage Account**
 
-This is an example that shows how you can update an existing resource without using the AzureRM Terraform provider.
+This is an example that shows how to update an existing resource without using the AzureRM Terraform provider.
 
 To be more precise we're going to enable the [SFTP support for Azure Blob Storage](https://learn.microsoft.com/en-us/azure/storage/blobs/secure-file-transfer-protocol-support) on an existing Azure Storage Account.
 
@@ -568,7 +566,7 @@ To be more precise we're going to enable the [SFTP support for Azure Blob Storag
   - An ``azurerm_storage_container`` resource to create a container within the storage account.
   - A ``null_resource`` with a couple of ``local-exec`` provisioners to enable the SFTP support and create a local user with permissions to access the SFTP. 
     - The first ``local-exec`` provisioner executes the ``enable_sftp_create_localuser.sh`` script that enables the SFTP support and creates an SFTP local user.
-    - The second ``local-exec`` provisioner contains the ``when = destroy`` attribute. This provisioner is triggered when the resource needs to be destroyed and it invokes the ``disable_sftp_and_localuser.sh`` script that delete the SFTP local user.
+    - The second ``local-exec`` provisioner contains the ``when = destroy`` attribute. This provisioner is triggered when the resource needs to be destroyed and it invokes the ``disable_sftp_and_localuser.sh`` script that deletes the SFTP local user.
   -  Enabling or disabling the SFTP support is done via Shell script.
      -  The Shell script uses the ``AZ CLI`` to enable or disable the SFTP support.
 
@@ -629,10 +627,10 @@ resource "null_resource" "sftp_enable" {
 ```
 
 The ``enable_sftp_create_localuser.sh`` script executes the following steps:
-- Checks if the ``AllowSFTP`` feature is enabled in your Azure subscription, and if it is not enabled it throws and error.
-- Checks if the ``storage-preview`` extension is installed on your machine. If it is not installed, it installs it.
+- Checks if the ``AllowSFTP`` feature is enabled in your Azure subscription, if it is not enabled it throws and error.
+- Checks if the ``az storage-preview`` extension is installed on your machine. If it is not installed, it installs it.
 - Enables SFTP support on the storage account.
-- Creates the SFTP local user.
+- Creates a SFTP local user.
 - Retrieves the user password.
 
 ```bash
@@ -678,9 +676,9 @@ az storage account local-user delete --account-name $STORAGE_ACCT_NAME -g  $RES_
   - An  ``azurerm_resource_group`` to create a resource group.
   - An ``azurerm_storage_account`` resource to create a storage account.
   - An ``azurerm_storage_container`` resource to create a container within the storage account.
-  - An ``azurerm_resource_group_template_deployment``  to enable the Storage Account SFTP support and to create an user for the SFTP.
+  - An ``azurerm_resource_group_template_deployment``  to enable the SFTP support and to create a SFTP local user.
     - The ``azurerm_resource_group_template_deployment``  resource uses an ARM Template that can be found on the ``template.json`` file.
-    - The ARM template Storage Account only needs to set the ``isSftpEnabled`` attribute to ``true``, but the entire object must be described.
+    - To enable SFTP support we only need to set the Storage Account ``isSftpEnabled`` attribute to ``true``, but the entire object must be described nonetheless.
     - Any change we make on the Terraform ``azurerm_storage_account`` resource must also be changed on the ARM template, or it will get overriden. 
     - Parameters can be passed from the Terraform file to the ARM template using the ``parameters_content`` attribute.
 
@@ -913,9 +911,8 @@ And here's how the ARM template file looks like:
   - An ``azurerm_storage_account`` resource to create a storage account.
   - An ``azurerm_storage_container`` resource to create a container within the storage account.
   - An ``azapi_update_resource``  to enable the SFTP support. 
-    - The resource updated is the storage account that we have created previously using the ``azurerm_storage_account`` resource.
-  - An ``azapi_resource`` to create the SFTP local user.
-  - An ``azapi_resource_action`` to retrieve the SFTP local user password.
+  - An ``azapi_resource`` to create a SFTP local user.
+  - An ``azapi_resource_action`` to retrieve the user password.
 
 Here's how the Terraform file looks like:
 ```csharp
