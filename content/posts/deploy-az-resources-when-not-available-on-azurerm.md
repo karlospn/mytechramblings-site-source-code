@@ -1,9 +1,9 @@
 ---
 title: "How to deploy an Azure resource using Terraform when it is not available in the AzureRM official provider"
-date: 2022-11-03T23:10:40+01:00
+date: 2022-11-10T10:30:40+01:00
 tags: ["azure", "devops", "iac", "terraform", "cloud"]
 description: "This post is going to walk you through the options available when we want to create or update a service on Azure using Terraform, but it is not available on the AzureRM Terraform provider."
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
@@ -11,7 +11,7 @@ draft: true
 
 Everyone who has worked long enough with Terraform in Azure has been in the position of wanting to deploy a resource that's not available on the official [Azure Terraform provider](https://registry.terraform.io/providers/hashicorp/azurerm).   
 
-The same situation also happens when trying to enable a feature of an existing resource and that feature is missing from the AzureRM Terraform provider.
+The same situation also happens when trying to enable a feature on an existing resource, and that feature is missing from the AzureRM Terraform provider.
 
 A solution to those problems might be to switch to Bicep or Azure ARM Templates, but if all my cloud infrastructure is written as code using Terraform, why should I switch to another tool? What can I do to keep using Terraform?
 
@@ -67,7 +67,7 @@ az group create -l $LOCATION -n MyResourceGroup
 
 ## **How to destroy a resource using the local-exec provisioner**
 
-By default, the ``local-exec`` provisioner will run only when the resource they are defined within is created. It only runs during resource creation, not during updating or any other lifecycle.
+By default, the ``local-exec`` provisioner will run only when the resources they are defined within is created. It only runs during resource creation, not during updating or any other lifecycle.
 
 If we want that our resource gets deleted using the ``local-exec`` provisioner we need to use the ``when`` argument. If  ``when = destroy`` argument is specified, the provisioner will run when the resource is destroyed.
 
@@ -75,7 +75,6 @@ The next code snippet shows an example of how you could use the ``null_resource`
 
 ```csharp
 resource "null_resource" "res_group" {
-    count = 0
     triggers = {
         location = "westeurope"
     }
@@ -138,7 +137,7 @@ resource "null_resource" "res_group" {
 - If an error is thrown during the script execution, your state file might end up in an inconsistent state. It depends on how you build the script.
 - Destroying a resource requires a multi-step process.
 - Everytime you want to provision a resource you have to write 2 scripts: one for provisioning the resource and another one for destroying it.
-- You can't run an in-place update on a resource in a subsequent ``apply`` command, you can only create or destroy the resource.
+- You can't run an in-place update on a resource in a subsequent ``apply`` command, you can only destroy and recreate the resource.
 
 # **Using the azurerm_resource_group_template_deployment resource + ARM Template**
 
@@ -214,13 +213,13 @@ And the ARM Template looks like this:
 
 # **Using the AzAPI provider**
 
-> **Important**: Using the ``AzApi`` provider is the best available solution when trying to create or update an Azure resource that is missing in the AzureRM provider.
+> **Important**: Right now, using the ``AzApi`` provider is the best available solution when trying to create or update an Azure resource that is missing in the AzureRM provider.
 
 The ``AzAPI`` provider is a very thin layer on top of the Azure ARM REST APIs (This API is the same one that is used when we deploy an ARM Template).   
 
 The ``AzAPI`` provider contains only 3 resources:
 - ``azapi_resource``:  Used for managing Azure resources.
-- ``azapi_update_resource``: Used to add or modify properties on an existing resource. If you delete an ``azapi_update_resource`` block, no operation will be performed and these properties will stay unchanged. If you want to restore the modified properties, you must reapply the restored properties before deleting.
+- ``azapi_update_resource``: Used to add or modify properties on an existing resource. If you delete an ``azapi_update_resource`` block from your Terraform file, no operation will be performed and these properties will stay unchanged. If you want to restore the modified properties, you must re-apply the restored properties before deleting.
 - ``azapi_resource_action``: Used to perform any resource action. It's recommended to use this resource to perform actions which change a resource state.
 
 The next code snippet shows an example of how you could use the ``AzApi`` provider to manage an ``Azure DNS Resolver``.
