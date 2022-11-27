@@ -2,7 +2,7 @@
 title: "Trying out the built-in container support for the .NET 7 SDK"
 date: 2022-11-22T13:01:13+01:00
 tags: ["dotnet", "containers", "aws", "devops", "azure"]
-description: "A few months ago the built-in container support in the .NET 7 SDK was announced. This feature allows us to containerize our application just using the dotnet publish command without no need of having to write a Dockerfile. In this post I'll try to migrate from an app that uses a complex Dockerfile to a "docker-less" app that uses the container support for .NET 7 SDK."
+description: "A few months ago the built-in container support in the .NET 7 SDK was announced. This feature allows us to containerize our application just using the dotnet publish command without no need of having to write a Dockerfile. In this post I'll try to migrate from an app that uses a complex Dockerfile to a 'docker-less' app that uses the container support for .NET 7 SDK."
 draft: true
 ---
 
