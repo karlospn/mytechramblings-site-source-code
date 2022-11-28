@@ -1,44 +1,44 @@
 ---
-title: "Trying out the built-in container support for the .NET 7 SDK"
+title: "Trying out the built-in container support for the .NET SDK"
 date: 2022-11-22T13:01:13+01:00
 tags: ["dotnet", "containers", "aws", "devops", "azure"]
-description: "A few months ago the built-in container support in the .NET 7 SDK was announced. This feature allows us to containerize our application just using the dotnet publish command without no need of having to write a Dockerfile. In this post I'll try to migrate from an app that uses a complex Dockerfile to a 'docker-less' app that uses the container support for .NET 7 SDK."
+description: "A few months ago the built-in container support for the .NET 7 SDK was announced. In this post I'll put this feature to test, I'll try to migrate an application that contains a rather "complex" Dockerfile to a new version that uses the container support feature."
 draft: true
 ---
 
 > **Just show me the code!**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/trying-out-the-built-in-container-support-for-the-dotnet-7-sdk).
 
-A few months ago the built-in container support in the .NET 7 SDK was announced. This feature allows us to containerize our application just using the ``dotnet publish`` command without no need of having to write a ``Dockerfile``.
+A few months ago the built-in container support for the .NET SDK was announced. This feature allows us to containerize our application using the ``dotnet publish`` command, with no need of having to write any kind of ``Dockerfile``.
 
-With this approach instead of using a ``Dockerfile`` we just have to add a series of properties in the application project file (.csproj), install the ``Microsoft.NET.Build.Containers`` NuGet package, run the ``dotnet publish`` command and the output artifact will be a containerized image of your application.
+To make this approach work we just have to add a series of properties in the application project file (.csproj), install the ``Microsoft.NET.Build.Containers`` NuGet package, run the ``dotnet publish`` command and the output artifact will be a container image of your app.
 
-I've been wanting to try this new feature for quite a while, but I don't want to use it with a simple "Hello World" .NET app, because I know that it will work well with it. 
+I've been wanting to try this new feature for quite a while, but I don't want to use it with a simple "Hello World" .NET app, because I know that it will work well with it.   
 
-Instead of that in this post **I'll try to migrate from an app that uses a complex ``Dockerfile``  to a "docker-less" app that uses the container support for .NET 7 SDK**, and see how it performs.
+Instead, **I'll try to migrate an application that contains a rather "complex" ``Dockerfile`` to a new version that uses the container support feature**.
 
 # **Application & Dockerfile**
 
-The application is a BookStore API built using .NET6. It allows us to do the following actions:
+The application is a BookStore API built using .NET 7. It allows us to do the following actions:
 
 - Get, add, update and delete book categories.
 - Get, add, update and delete books.
 - Get, add, update and delete inventory.
 - Get, add and delete orders.
 
-But the application per se doesn't matter at all, the important part of the application is the ``Dockerfile``. 
+But the application per se doesn't matter at all, the important part of the app is the ``Dockerfile``. 
 
-Remember that the purpose of this post is to evaluate if we can move from an app that uses a complex ``Dockerfile``  to a "docker-less" app that uses the container support for .NET 7 SDK.
+> Remember that the purpose of this post is to evaluate if we can move from an app that uses a complex ``Dockerfile``  to a _"dockerfile-less"_ app that uses the container support for the .NET SDK.
 
-The BookStore API ``Dockerfile`` uses a multi-stage build, and contains the following features:
-- It uses a pair of private platform images as base images. Those images are hosted on a private ``AWS ECR`` repository. Using a platform image instead of using directly the public Microsoft images is a good security practice and also quite common in the enterprise.
-- The app contains a few references to private packages hosted on a private ``Azure Artifacts NuGet feed``, which means that the ``Dockerfile`` uses the [Azure Artifacts Credential Provider](https://github.com/microsoft/artifacts-credprovider) to restore the NuGet packages. 
-  - The ``Azure Artifacts Credential Provider`` uses an ``Azure DevOps Personal Access Token`` to restore the NuGet packages.
-- To optimize the application size, the application must be published using the .NET trim feature. This feature removes unnecessary framework components from the resulting artifact.
-- The application must be published using the ``self-contained`` mode.
-- The application runs using a ``non-root user``. _(This is done in the platform base image)_
+The first step is to take a look at the ``Dockerfile`` to know what is doing, so we can replicate those same features using the container support for .NET.   
+- The BookStore API ``Dockerfile`` uses a multi-stage build.
+- The ``Dockerfile`` uses 2 private platform images as base images. Those images are hosted on a private ``AWS ECR`` repository. Using a platform image instead of using directly the public Microsoft images is a good security practice.
+- The API references a few private packages hosted on my private ``Azure Artifacts NuGet feed``, which means that the ``Dockerfile`` has to use the [Azure Artifacts Credential Provider](https://github.com/microsoft/artifacts-credprovider) to login into the private feed when trying to run the ``dotnet restore`` command.
+- The application is published using the .NET trim feature to optimize its size. This feature removes unnecessary framework components from the resulting artifact.
+- The app is published using the ``self-contained`` mode.
+- The container uses a ``non-root user`` to run the app. _(This is done in the base image, not in the application Dockerfile)_
   
-And here's how the ``Dockerfile`` looks like.
+The next code snippet shows how the ``Dockerfile`` looks like.
 ```yaml
 FROM 823934831816.dkr.ecr.eu-west-1.amazonaws.com/sdk:7.0-bullseye-slim-1.0.0 AS build-env
 WORKDIR /app
@@ -89,29 +89,29 @@ ENTRYPOINT ["./BookStore.WebApi"]
 
 # **Platform images**
 
-As I said before, the BookStore ``Dockerfile`` uses a multi-stage build with a pair of private platform images as base images.
+As I stated in the previous section, the BookStore API ``Dockerfile`` uses a multi-stage build with a pair of private platform images as base images.
 
 > But, what`s a platform image?
 
-When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images are the base for your company applications.
+When talking about containers security, one of the best practices is to use your own platform images, those platform images are the base for your company applications.
 
 <add-img>
 
 The point of having a platform image instead of directly using a base image is to ensure that the resulting containers are hardened according to any corporate policies before being deployed to production.
 
-The BookStore API  ``Dockerfile`` uses a multi-stage build to create the app image, but the ``built-in container support for .NET7 SDK`` works a little bit different, instead of using a multi-stage approach it creates the application artifact locally (on your machine, outside of Docker) and afterwards the container image gets created using the local artifact.
+The BookStore API  ``Dockerfile`` uses a multi-stage build to create the container image, but the ``container support for .NET SDK`` works a little bit different when you execute  the ``dotnet publish`` command, instead of using a multi-stage approach it creates the application artifact locally (on your machine, outside of Docker) and afterwards the artifact is copied inside the container image.
 
 The BookStore API ``Dockerfile`` uses a those 2 platform images:
 - ``sdk:7.0-bullseye-slim-1.0.0``
 - ``runtime-deps:7.0-bullseye-slim-1.0.0``
 
-But as I have stated in the previous paragraph, the container support for .NET7 SDK only needs a single image because the build step is done outside of Docker, which means that the only image we need is the one that contains the runtime: ``runtime-deps:7.0-bullseye-slim-1.0.0``
+But the container support for .NET SDK only needs a single base image because the build step is done outside of Docker, which means that the only image we need is the one that contains the runtime dependencies: ``runtime-deps:7.0-bullseye-slim-1.0.0``
 
-Let's take a look at how we are building the ``runtime-deps:7.0-bullseye-slim-1.0.0`` image:
+Let's take a look at what the ``runtime-deps:7.0-bullseye-slim-1.0.0`` image contains:
 
 - A user named ``devsecops`` is created with the ``adduser`` command (The ``gecos`` argument prevents the system from asking for additional details).
 - The ``chown`` command is used to set the ``devsecops`` user as owner of the ``/app`` directory.
-- Non-root users are not allowed to allocate ports below ``1024``, the ``ASPNETCORE_URLS``environment is setting the running port to be the ``8080``.
+- Non-root users are not allowed to allocate ports below ``1024``, with the ``ASPNETCORE_URLS`` environment we're settings the port ``8080`` as the running port.
 
 ```yaml
 FROM mcr.microsoft.com/dotnet/runtime-deps:7.0-bullseye-slim
@@ -133,20 +133,21 @@ ENV ASPNETCORE_URLS=http://+:8080
 
 # **Implementation**
 
-Now that we know how the ``Dockerfile`` on our app looks like, it's time to remove it from the solution and start using the built-in container support for .NET7 SDK.
+Now that we know how the ``Dockerfile`` on our app looks like, it's time to remove it from the solution and start using the container support for .NET SDK.
 
 ## **1. Install the ``Microsoft.NET.Build.Containers`` NuGet package.**
 
-Right now (11/28/2022) the latest version of this package is:
-- 0.3.0-alpha.16
+This NuGet is reponsible to enable the container support for .NET.
 
-This version is not available on nuget.org, you can get it from its [GitHub page](https://github.com/dotnet/sdk-container-builds)
+Right now (11/28/2022) the latest version of this package is: 
+- _0.3.0-alpha.16_    
 
-For this post I have uploaded it on my private Azure DevOps artifact feed.
+This version is not available on nuget.org, you can get it from the [GitHub page](https://github.com/dotnet/sdk-container-builds).
+
 
 ## **2.Configure the csproj**
 
-The way to configure the ``built-in container support for .NET7 SDK`` is through a set of MSBuild properties that can be set into the application project (.csproj) file.
+The way to configure the ``container support for .NET SDK`` is through a set of MSBuild properties that can be set into the application project (.csproj) file.
 
 The container support properties we're going to need are the following ones:
 - ``ContainerBaseImage``
@@ -227,9 +228,9 @@ So, before running the ``dotnet publish`` command,  I have to setup the ``AWS`` 
 - To allow the .NET CLI to restore the private package from my private ``Azure DevOps`` feed, I'm going to place a ``NuGet.Config`` with the proper credentials on [my computer](https://learn.microsoft.com/en-us/nuget/consume-packages/configuring-nuget-behavior).
 
 
-After settings the credentials, let's run the ``dotnet publish`` command, and it just works!
+After settings the credentials, let's run the ``dotnet publish`` command and a container image gets created successfully.
 
-<add-img>
+![container-tools-sdk-create-image](/img/container-tools-sdk-image-size.png)
 
 If you take a look at the picture above, you'll see that the image created with the ``dotnet publish`` command is exactly the same size as the one created using the ``Dockerfile``.
 
@@ -295,18 +296,18 @@ Let's run the ``docker run -d -p 5001:8080 bookstore-webapi`` command and it doe
 
 The first unusual thing is that the container is running properly and it works fine, but is listening on port ``80`` instead of the ``8080`` we defined on our base image.
 
-<add-img>
+![container-tools-sdk-starting-port](/img/container-tools-sdk-starting-port.png)
 
 Let's go inside the container using the ``docker exec -it <container-id> sh`` command, it seems that the ``root`` user is the one who owns the ``/app`` folder, but have created a non-root user called ``devsecops`` who should own this folder...
 
-<add-img>
+![container-tools-sdk-pernissions](/img/container-tools-sdk-pernissions.png)
 
 Maybe the "ContainerBaseImage" property is not working properly and we're not using our platform image?   
 
 In the ``runtime-deps:7.0-bullseye-slim-1.0.0`` platform image we have built previously, we have set this environment variable ``ENV INTERNAL_VERSION=11202022.1``.    
 Let's go inside the container using the ``docker exec -it <container-id> sh`` command and the ``printenv`` command let0s take a look at the container environment variables.
 
-<add-img>
+![container-tools-sdk-env-vars](/img/container-tools-sdk-env-vars.png)
 
 The ``INTERNAL_VERSION=11202022.1`` environment variable is properly set, which means that this container is using our platform image as base image, but the starting port and the user permissions seems to have been overriden.
 
