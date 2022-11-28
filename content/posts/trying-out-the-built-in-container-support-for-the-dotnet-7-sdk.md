@@ -2,7 +2,7 @@
 title: "Trying out the built-in container support for the .NET SDK"
 date: 2022-11-22T13:01:13+01:00
 tags: ["dotnet", "containers", "aws", "devops", "azure"]
-description: "A few months ago the built-in container support for the .NET 7 SDK was announced. In this post I'll put this feature to test, I'll try to migrate an application that contains a rather "complex" Dockerfile to a new version that uses the container support feature."
+description: "A few months ago the built-in container support for the .NET 7 SDK was announced. In this post I'll put this feature to test, I'll try to migrate an application that contains a rather complex Dockerfile to a new version that uses the container support feature."
 draft: true
 ---
 
