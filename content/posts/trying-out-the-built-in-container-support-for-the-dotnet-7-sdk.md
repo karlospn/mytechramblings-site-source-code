@@ -9,12 +9,12 @@ draft: true
 > **Just show me the code!**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/trying-out-the-built-in-container-support-for-the-dotnet-7-sdk).
 
-A few months ago the built-in container support for the .NET SDK was announced. This feature allows us to containerize our application using the ``dotnet publish`` command, with no need of having to write a  ``Dockerfile``.
+A few months ago, the built-in container support for the .NET SDK was announced. This feature allows us to containerize our application using the ``dotnet publish`` command, with no need of having to write a  ``Dockerfile``.
 
-To make the container support work we just have to add a series of properties in the application project file (.csproj), install the ``Microsoft.NET.Build.Containers`` package and run the ``dotnet publish`` command, the output artifact will be a container image of our app.
+To make it work we just have to add a series of properties in the application project file (.csproj), install the ``Microsoft.NET.Build.Containers`` package and run the ``dotnet publish`` command, the output artifact will be a container image of our app.
 
 I've been wanting to try this new feature for quite a while, but I don't want to use it with a simple "Hello World" .NET app, because I know that it will work well with it.    
-Instead, **I decided that I'll try to migrate an app that has a rather "complex" ``Dockerfile`` to a new version that has no ``Dockerfile`` and instead uses the container support feature**.
+Instead, **I decided that I'll try to migrate an app that has a rather "complex" ``Dockerfile`` to a new version that has no ``Dockerfile`` and instead uses the built-in container support feature**.
 
 # **Application & Dockerfile**
 
@@ -27,17 +27,18 @@ The application is a BookStore API built using .NET 7. It allows us to do the fo
 
 But the application per se doesn't matter at all, the important part of the app is the ``Dockerfile``. 
 
-> Remember that the purpose of this post is to evaluate if we can move from an app that uses a complex ``Dockerfile``  to a _"dockerfile-less"_ app that uses the container support for .NET.
+> Remember that the purpose of this post is to evaluate if we can move from an app that uses a complex ``Dockerfile``  to a _"dockerfile-less"_ app that uses the container support for .NET SDK.
 
 
-The first step is to know what the BookStore API ``Dockerfile`` is doing, so we can replicate those same features using the container support for .NET.   
-The app ``Dockerfile`` contains the following features:
+The first step is to know what the BookStore API ``Dockerfile`` is doing, so we can replicate those same features with the container support for .NET.   
+
+The BookStore API ``Dockerfile`` contains the following features:
 - It uses a multi-stage build.
 - It uses 2 private platform images as base images. Those images are hosted on a private ``AWS ECR`` repository.
-- The API references a few private packages hosted on my private ``Azure Artifacts NuGet feed``, which means that the ``Dockerfile`` has to make use of the [Azure Artifacts Credential Provider](https://github.com/microsoft/artifacts-credprovider) when trying to run the ``dotnet restore`` command.
-- The application is published using the "trim" feature. This feature removes unnecessary framework components from the resulting artifact.
+- The API references a few private NuGet packages hosted on my private ``Azure Artifacts NuGet feed``, which means that the ``Dockerfile`` has to make use of the [Azure Artifacts Credential Provider](https://github.com/microsoft/artifacts-credprovider) when trying to run the ``dotnet restore`` command.
+- The application is published using the ``PublishTrimmed`` feature. This feature removes unnecessary framework components from the resulting artifact.
 - The app is published using the ``self-contained`` mode.
-- The container uses a ``non-root user`` to run the app. _(This is done in the base image, not in the application Dockerfile. More info in the next section.)_
+- The container uses a ``non-root user`` to run the API _(This is done in the base image, not in the application Dockerfile. More info in the next section)_.
   
 The next code snippet shows how the ``Dockerfile`` looks like.
 ```yaml
@@ -148,7 +149,7 @@ This version is not available on nuget.org, you can get it from its [GitHub page
 
 ## **2.Configure the csproj file**
 
-The way to configure the ``container support for .NET`` is through a set of MSBuild properties that can be placed into the application project (.csproj) file.
+The way to configure the container support for .NET SDK is through a set of MSBuild properties that can be placed into the application project (.csproj) file.
 
 The container support properties we're going to need are the following ones:
 - ``ContainerBaseImage``
@@ -161,52 +162,51 @@ The container support properties we're going to need are the following ones:
 	- This property controls the tags that are generated for the image.
 	-  If a container tag is not specified, it will use the ``Version`` of the project. In our case we're going to use: ``latest``
 - ``ContainerPort``
-	- This attribute  adds TCP or UDP ports to the list of known ports for the container. It is the equivalent of the ``EXPOSE`` command on the ``Dockerfile``.
+	- This attribute  adds TCP or UDP ports to the list of known ports for the container, it is the equivalent of the ``EXPOSE`` command on the ``Dockerfile``.
 	- This attribute does absolutely nothing, it is an informative only attribute.
 	- The value is going to be:  ``<ContainerPort Include="8080" Type="tcp" />``
 - ``PublishProfile``
 	- For containerizing a webapp the property ``PublishProfile=DefaultContainer`` is required.
 
-The Bookstore API ``Dockerfile`` is also using the ``PublishTrimmed`` attribute, to reduce the size of the resulting artifact, and the ``self-contained`` attribute to publish the app as an executable, to mimick the same behaviour we're going to add a few more build properties on the project (csproj) file:
+The Bookstore API ``Dockerfile`` is also using the ``PublishTrimmed`` attribute, to reduce the size of the resulting artifact, and the ``self-contained`` attribute to publish the app as an executable, to mimick the same behaviour we're going to add them on the project (csproj) file:
 
 - ``SelfContained``
 - ``PublishTrimmed``
-- ``RuntimeIdentifier``
 
+Also the ``RuntimeIdentifier`` attribute is required. This attribute is used to identify the target platforms where the application needs to run, in this case the value will be ``linux-x64`` because we're building a Linux container.
 
-Instead of putting the ``SelfContained``, ``RuntimeIdentifier`` and ``PublishTrimmed`` properties on the project file, we can specify them when executing the ``dotnet publish`` command, like this: ``dotnet publish --self-contained true --runtime linux-x64 /p:PublishTrimmed=true``   
+Instead of putting the ``SelfContained``, ``RuntimeIdentifier`` and ``PublishTrimmed`` properties on the project file, we can aso specify them when executing the ``dotnet publish`` command, like this: ``dotnet publish --self-contained true --runtime linux-x64 /p:PublishTrimmed=true``   
 
-If you decide to place those properties on the project file (.csproj) you must know that you won't be able to build the app with Visual Studio on a Windows machine, mainly because you're targeting Linux.    
-Furthermore, the build and debug process it's going to take longer than usual because it needs to apply the trimming and self-contain processes. If any of this bothers you, remove those properties from the csproj and specify them when executing the ``dotnet publish`` command.
+If you decide to put those properties on the project file (.csproj) you must know that you won't be able to build the app with Visual Studio on a Windows machine, mainly because you're targeting Linux. Furthermore, the build and debug process on Visual Studio it's going to take longer than usual because it needs to trim and self-contain the application artifact. If any of this bothers you, remove those properties from the csproj and specify them when executing the ``dotnet publish`` command.
 
 Here's how the project file will end up looking like:
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-	<TargetFramework>net7.0</TargetFramework>
-	<ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 	
   <PropertyGroup>
-	<RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-	<PublishProfile>DefaultContainer</PublishProfile>
-	<SelfContained>true</SelfContained>
-	<PublishTrimmed>true</PublishTrimmed>
-	<ContainerImageName>bookstore-webapi</ContainerImageName>
-	<ContainerBaseImage>823934831816.dkr.ecr.eu-west-1.amazonaws.com/runtime-deps:7.0-bullseye-slim-1.0.0</ContainerBaseImage>
-	<ContainerImageTags>latest</ContainerImageTags>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+    <PublishProfile>DefaultContainer</PublishProfile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <ContainerImageName>bookstore-webapi</ContainerImageName>
+    <ContainerBaseImage>823934831816.dkr.ecr.eu-west-1.amazonaws.com/runtime-deps:7.0-bullseye-slim-1.0.0</ContainerBaseImage>
+    <ContainerImageTags>latest</ContainerImageTags>
   </PropertyGroup>
 
   <ItemGroup>
-	<ContainerPort Include="8080" Type="tcp" />
+	  <ContainerPort Include="8080" Type="tcp" />
   </ItemGroup>
 
   <ItemGroup>
   	<PackageReference Include="Microsoft.NET.Build.Containers" Version="0.3.0-alpha.16" />
-	<PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.0" />
-	<PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
-	<PackageReference Include="MyOwn.EmailService" Version="1.0.0" />
+    <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+    <PackageReference Include="MyOwn.EmailService" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -230,28 +230,28 @@ So, before running the ``dotnet publish`` command  I have to setup the ``AWS`` a
 - To allow the .NET CLI to restore the private packages from my private ``Azure DevOps`` feed, I'm going to place a ``NuGet.Config`` with the proper credentials on [my computer](https://learn.microsoft.com/en-us/nuget/consume-packages/configuring-nuget-behavior).
 
 
-After settings the credentials properly, let's run the ``dotnet publish`` command and a container image gets created successfully.
+After settings the credentials properly, let's run the ``dotnet publish`` command and the BookStore API container image is  created successfully.
 
 ![container-tools-sdk-create-image](/img/container-tools-sdk-image-size.png)
 
-If you take a look at the picture above, you'll see that the image created with the ``dotnet publish`` command is exactly the same size as the one created using the ``Dockerfile`` (bookstore.api).
+If you take a look at the picture above, you'll see that the image created with the ``dotnet publish`` command (bookstore-webapi) is exactly the same size as the one created using the ``Dockerfile`` (bookstore.api).
 
 # **Building a container image using Azure Pipelines**
 
-We know from the last section that moving from the BookStore API ``Dockerfile`` to a "dockerfile-less" app that uses the ``built-in container support for .NET`` is doable on my local machine, but is it feasible on a CI/CD environment?
+We know from the previous section that moving from the BookStore API ``Dockerfile`` to a "dockerfile-less" app that uses the built-in container support for .NET is doable on my local machine, but is it feasible on a CI/CD environment?
 
-For this test I'm going to use ``Azure Pipelines``, but if you want to use any other CI/CD runner (GitHub Actions, Bitbucket, etc) it should be relatively easy to switch off, because the idea behind it is the same for any runner.
+For this test I'm going to use ``Azure Pipelines``, if you want to use any other CI/CD runner (GitHub Actions, Bitbucket, etc.) it should be relatively easy to switch, because the idea behind it is the same for any runner.
 
 The pipeline needs to do the same steps we have done on our local machine:
 - Restore the application NuGet packages. 
-  - Remember that the app contains some private reference and those packages are hosted on a private ``Azure DevOps`` feed, which mean that on the pipeline we have to use the ``vstsFeed`` attribute to specify which feed will be used when restoring the packages.
+  - The app contains some private reference, and those packages are hosted on a private ``Azure DevOps`` feed, which means that the pipeline task has to use the ``vstsFeed`` attribute to specify which feed will be used when restoring the packages.
 - Login into the docker registry
 - Execute the ``dotnet publish`` command.
-- Push the image into an ``AWS ECR`` repository.
+- And finally, let's try to push the image into an ``AWS ECR`` repository, why not?
 
-The ``built-in container support for .NET`` has the ``ContainerRegistry`` attribute, which allow us to push the resulting image into a registry, if this value is not present on the .csproj then the image gets stored in the local Docker daemon.    
+The container support for .NET has the ``ContainerRegistry`` attribute, which allow us to push the resulting image into a registry, if this value is not present on the csproj then the image gets stored in the local Docker daemon.    
 
-Right now the ``ContainerRegistry`` attribute doesn't work with ``AWS ECR``. If you need to push the resulting image into an ``ECR`` repository you have to store it in you local Docker machine and then push it onto the ``ECR`` repository using the ``docker push`` command.
+Right now the ``ContainerRegistry`` attribute doesn't work with ``AWS ECR``. If you need to push the resulting image into an ``AWS ECR`` repository you have to store it in you local Docker machine and then push it onto the repository using the ``docker push`` command.
 
 Here's how the resulting ``Azure Pipeline`` looks like:
 ```yaml
@@ -294,23 +294,24 @@ steps:
 
 # **Testing the resulting container image**
 
-We have successfully created the BookStore API container image using the ``container support for .NET SDK``, but does it work? 
+We have successfully created the BookStore API container image using the container support for .NET SDK, but does it work? 
 
-First thing, let's run it using the  ``docker run -d -p 5001:8080 bookstore-webapi`` command, then let's send a request to ``https:\\localhost:8080\api\orders`` using cURL, and it doesn't work...
+Let's run it using the  ``docker run -d -p 5001:8080 bookstore-webapi`` command and then let's send a request to ``https:\\localhost:8080\api\orders`` using cURL, and it doesn't work...
 
-What seems strange is that the container is running properly, but is listening on port ``80`` instead of the ``8080`` we defined on our base image Dockerfile.
+The container appears to be running properly, but what it seems weird is that Kestrel is listening on port ``80`` instead of port ``8080`` that it was the one we defined on our base image using the ``ASPNETCORE_URLS`` environment variable.
 
 ![container-tools-sdk-starting-port](/img/container-tools-sdk-starting-port.png)
 
 
-If we open a shell session inside the container using the ``docker exec -it <container-id> sh`` command, it seems that the ``root`` user is the one who owns the ``/app`` folder, but have created a non-root user called ``devsecops`` who should own this directory.
+If we open a Shell session inside the container using the ``docker exec -it <container-id> sh`` command, it seems that the ``root`` user owns the ``/app`` folder, but have created a non-root user called ``devsecops`` who should own this directory.
 
 ![container-tools-sdk-pernissions](/img/container-tools-sdk-pernissions.png)
 
-It seems that the ``container support for .NET`` when creates an image overrides the values of the users, permissions and the running port, which represents a problem when running on a non-80 port or using a non-root user. 
-In fact, if we try to run the BookStore API on port 80 using the ``docker run -d -p 5001:80 bookstore-webapi`` command, it works perfectly.
+It seems that the container support for .NET takes a few concessions when creating an image, there are certain values that grt overriden like the running port or the users and permissions, which represents a problem if you're running an app that listens on a non-80 port or uses a non-root user. 
 
-- Taking a look at [GitHub](https://github.com/dotnet/sdk-container-builds/issues/165), it seems that there is an ongoing issue with users and permissions ``when using the container support for .NET``.
+In fact, if we try to run the BookStore API on port 80 using the ``docker run -d -p 5001:80 bookstore-webapi`` command, it app works perfectly.
+
+- Taking a look at [GitHub](https://github.com/dotnet/sdk-container-builds/issues/165), it seems that there is an ongoing issue with users and permissions.
 
 
 
