@@ -322,16 +322,16 @@ The purpose of this post was to evaluate if we could move from an app that was u
 
 My overall impressions is that the container support for .NET works pretty well.   
 
-Restoring packages from a private feed on a .NET app is always a pain in the ass in Docker, but the fact that the container support builds the artifact outside of docker makes the process more palatable.
+Restoring packages from a private feed on a .NET app is always a pain in the ass when building an image using a multi-stage approach, but the fact that the container support builds the artifact outside of docker makes the process more palatable.
 
-Concerning the ability to push and pull images to and from a private registry, it is very good news that container support is able to authenticate to a container registry, which allows us to use our own private base images and not have to rely on public images from Microsoft.   
+Concerning the ability to push and pull images to and from a private registry, it is very good news that the container support is able to authenticate to a container registry, which allows us to use our own private base images and not have to rely on public images from Microsoft.   
 The fact that the image cannot be pushed to ``AWS ECR`` is a shame, but is not a deal breaker at all, you can always store it on your local docker daemon and push it afterwards using the ``docker push`` command.
 
-Right now, the most well-known constraint when using the container support for .NET SDK is the fact that it can't execute ``RUN`` commands, in this test that was not important at all because the BookStore API ``Dockerfile`` didsn't need to use it, but that's something to keep in mind.   
-A possible solution if you're using a ``RUN`` command on your ``Dockerfile`` and you want to start using the container support is to move it into a custom base image.
+Right now, the most well-known constraint when using the container support for .NET SDK is the fact that it can't execute ``RUN`` commands, for this post this was not important because the BookStore API ``Dockerfile`` didn't need to use it, but that's something to keep in mind.   
+A possible solution if you're using a ``RUN`` command on your ``Dockerfile`` and you want to start using the container support is to move the command into a base image.
 
-Being able to use the container support on a CI/CD enviroment was also a very important feature, and in this post we demonstrate that it was possible to do it.
+Being able to use the container support for .NET SDK on a CI/CD enviroment is feasible and quite easy to do it, and in this post we have demonstrated that it is possible to do it.
 
-So far, everything related to the container support seems positive, but the fact that you cannot run a non-root container is a deal breaker from me, I cannot fathom any excuse for why you'd only allow to create root containers.    
+So far, everything related to the container support seems positive, but the fact that you cannot run a container with a non-root user is a deal breaker from me, I cannot fathom any excuse for why you'd only allow to create container that can be run by a root user.
 
 So, if you're in a big enterprise we're security is paramount and everything gets scanned and deeply reviewed, maybe it's not yet the time to move away from the ``Dockerfile``.
