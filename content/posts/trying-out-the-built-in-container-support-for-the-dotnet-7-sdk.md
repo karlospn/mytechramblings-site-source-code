@@ -14,7 +14,7 @@ A few months ago, the built-in container support for the .NET SDK was announced.
 To make it work we just have to add a series of properties in the application project file (.csproj), install the ``Microsoft.NET.Build.Containers`` package and run the ``dotnet publish`` command, the output artifact will be a container image of our app.
 
 I've been wanting to try this new feature for quite a while, but I don't want to use it with a simple "Hello World" .NET app, because I know that it will work well with it.    
-Instead, **I decided that I'll try to migrate an app that has a rather "complex" ``Dockerfile`` to a new version that has no ``Dockerfile`` and instead uses the built-in container support feature**.
+Instead, **I decided that I'll try to migrate an app that has a rather "complex" ``Dockerfile`` to a new version that has no ``Dockerfile`` and uses the built-in container support feature**.
 
 # **Application & Dockerfile**
 
