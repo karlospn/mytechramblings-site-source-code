@@ -1,5 +1,5 @@
 ---
-title: "Automatically purge container images hosted on ACR using ACR Tasks"
+title: "How to automatically purge container images from Azure Container Registry using ACR Tasks"
 date: 2022-12-18T22:55:19+01:00
 tags: ["azure", "containers", "docker", "terraform"]
 description: "Keeping your container registry free of stale or unwanted container images is a task often gets overlooked when a company starts working with containers. The best way to purge container images when using ACR (Azure Container Registry) is to use ACR Tasks, and that's what I want to show you in this post."
@@ -84,7 +84,7 @@ If we go into the Azure Portal, you can see that an ACR Task has been executed i
 The previous example ran an ACR Task on-demand, but you can also run it on a regular basic using the ``az acr task create`` command with the ``schedule`` attribute.
 
 Here's an example of how to create an ACR Task that runs every minute and lists all the available tags of "my-app" repository:   
-``az acr task create --name "scheduledAcrTask" --cmd "acr tag list -r acrtasksdemo --repository my-app" --schedule "* * * * *" --registry acrtasksdemo --context /dev/null``
+``az acr task create --name "scheduledAcrTask" --cmd "acr tag list --repository my-app" --schedule "* * * * *" --registry acrtasksdemo --context /dev/null``
 
 If we go into the Azure Portal, you can see that an scheduled ACR Task has been created:
 
@@ -257,18 +257,36 @@ Now that we know how the ``purge`` command works, it is time to create an schedu
 Obviously, every one will have different requirements when purging images from an ACR repository, mainly because there are quite a few common tag strategies you can follow when working with containers.
 
 For this post I'm going to create the following ACR Task:
-- It will be an scheduled ACR Task that runs once every week
+- It will be an scheduled ACR Task that runs once every week.
 - It will purge all the images that are older than 30 days from all the existing repositories, except the images with the "dev" or "prod" tag assigned.
 
-``az acr task create --name "scheduledAcrPurgeTask" --cmd "acr purge --registry acrtasksdemo --filter '.*:^((?!prod|dev).)*$' --untagged --ago 30d" --schedule "0 1 * * Mon" --registry acrtasksdemo --context /dev/null``
+Let's build the command we need:
+- To purge all tags from all the existing repositories except the "dev" and "prod" tag, we need to specify the following ``filter`` parameter ``.*:^((?!prod|dev).)*$``
+  - With the ``.*`` regular expression we're targeting all the repositories available in the ACR.
+  - With the ``^((?!prod|dev).)*$`` regular expression we're targeting all the tags excepts "prod" or "dev"
+- To purge all tags older than 30days, we need to set the ``ago`` parameter, like this: ``--ago 30d``
+- The ``filter`` and ``ago`` parameter doesn't delete the manifest, it only purges the tags. To remove the images we have to use also the ``untagged`` attribute.
+- To run the ACR Task once every week we're going to use the ``schedule`` attribute alongside a CRON value ,like this one: ``55 18 * * Tue``, which means that the ACR Task will run at 18:55UTC every Tuesday.
+
+Here's how the end result looks like:   
+``az acr task create --name "scheduledAcrPurgeTask" --cmd "acr purge --filter '.*:^((?!prod|dev).)*$' --untagged --ago 30d" --schedule "55 18 * * Tue" --registry acrtasksdemo --context /dev/null``
+
+If we take a look at the Azure portal after the ACR Task ran for the first time, will see how it deleted every image and tag older than 30days except the ones with the "prod" or "dev" tags.
+
+![acr-purge-scheduled-dev-prod-task](/img/acr-purge-scheduled-dev-prod-task.png)
+
+If we take a close look at the repository, the only images available are the ones with the "prod" and "dev" tag on them.
+
+![acr-purge-scheduled-dev-prod-task-repository](/img/acr-purge-scheduled-dev-prod-task-repository.png)
 
 
 # **Terraform implementation**
 
+As a bonus section, let me show you how you can create the same scheduled ACR Task using Terraform insted of the AZ CLI.
+
 ```yaml
-## ACR Task purge
 resource "azurerm_container_registry_task" "acr_purge_task" {
-  name                  = "acrPurgeTask"
+  name                  = "scheduledAcrPurgeTask"
   container_registry_id = azurerm_container_registry.acr.id
   platform {
     os           = "Linux"
@@ -278,7 +296,7 @@ resource "azurerm_container_registry_task" "acr_purge_task" {
     task_content = <<EOF
 version: v1.1.0
 steps: 
-  - cmd: acr purge  --filter '.*:.*' --ago 0d --keep 5 --untagged
+  - cmd: acr purge --filter '.*:^((?!prod|dev).)*$' --untagged --ago 30d
     disableWorkingDirectoryOverride: true
     timeout: 3600
 EOF
@@ -288,7 +306,7 @@ EOF
   }
   timer_trigger {
     name     = "t1"
-    schedule = "0 1 * * Mon"
+    schedule = "55 18 * * Tue"
     enabled  = true
   }
 }
