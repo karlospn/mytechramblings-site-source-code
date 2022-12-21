@@ -1,9 +1,9 @@
 ---
 title: "How to automatically purge stale images from Azure Container Registry using ACR Tasks"
-date: 2022-12-18T22:55:19+01:00
+date: 2022-12-21T13:03:19+01:00
 tags: ["azure", "containers", "docker", "terraform"]
 description: "Keeping your container registry free of stale or unwanted images is a task that often gets overlooked when beginning working with containers in the enterprise. In this post, I want to show you how you can use ACR Tasks to automate this process when working with Azure Container Registry."
-draft: true
+draft: false
 ---
 
 Keeping your container registry free of stale or unwanted images is a task that often gets overlooked when beginning working with containers in the enterprise.    
