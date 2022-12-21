@@ -1,27 +1,30 @@
 ---
-title: "How to automatically purge stale container images from Azure Container Registry using ACR Tasks"
+title: "How to automatically purge stale images from Azure Container Registry using ACR Tasks"
 date: 2022-12-18T22:55:19+01:00
 tags: ["azure", "containers", "docker", "terraform"]
-description: "Keeping your container registry free of stale or unwanted container images is a task that often gets overlooked when beginning working with containers in the enterprise. In this post I want to show you how you can use an ACR Task to automate this process when working with Azure."
+description: "Keeping your container registry free of stale or unwanted images is a task that often gets overlooked when beginning working with containers in the enterprise. In this post, I want to show you how you can use ACR Tasks to automate this process when working with Azure Container Registry."
 draft: true
 ---
 
 Keeping your container registry free of stale or unwanted images is a task that often gets overlooked when beginning working with containers in the enterprise.    
 
-If you use a container registry in any cloud provider, like ACR (Azure Container Registry) or ECR (AWS Elastic Container Registry), and you keep pushing and pushing new images and new versions of existing ones without removing the dated ones, the first thing that you're going to notice is that your cloud bill keeps increasing because storing images is not free, also managing the container registry will become more and more cumbersome as more and more images start to pile up. 
+If you have a container registry in any cloud provider, like ACR (Azure Container Registry) or ECR (AWS Elastic Container Registry), and you keep pushing and pushing new images and new versions of existing images without removing the stale ones, the first thing that you're going to notice is that your cloud bill keeps increasing because storing images is not free, but also managing the container registry will become more and more cumbersome as more and more images start to pile up. 
 
-An universal solution when you want to remove old images of your container registry is to write some kind of script, which connects to the registry and removes the dated image versions. This script can be executed on demand, but in most cases you'll end up building a scheduled execution using a third party tool like: Azure Pipelines, Github Actions, Azure Function, etc.
+An universal solution when you want to remove old images of your container registry is to write some kind of script, which connects to the registry and removes the dated image versions. This script can be executed on demand, but in most cases you'll end up having a scheduled execution using a third party tool like: Azure Pipelines, Github Actions, Azure Functions, etc.
 
 If you're using Azure Container Registry, a better alternative to purge container images is to use an **ACR Task**, and that's what I want to show you in this post.
 
 # **What is ACR Tasks?**
 
-ACR Tasks comprises a compute execution workflow withing Azure Container Registry that can perform all kinds of actions, like building your application image when the source code gets updated, keep your images up-to-date on a regular schedule and a few others functionalities.   
+ACR Tasks comprises a compute execution workflow within Azure Container Registry.    
+It can perform some container related actions, like building your application image when the source code gets updated, keep your images up-to-date and a few others functionalities.   
+
+A Task runs within ACR and uses an ephemeral virtual machine.
 
 If you want to know more about ACR Tasks you can read it here:
 - https://learn.microsoft.com/en-us/azure/container-registry/container-registry-tasks-overview
 
-In this post we're going to create an ACR Task that uses the ACR CLI to purge old container images.
+In this post we're going to create an ACR Task that uses the **ACR CLI** to purge old images.
 
 # **Azure Container Registry CLI**
 
@@ -47,9 +50,9 @@ acrtasksdemo.azurecr.io/my-app:dev
 acrtasksdemo.azurecr.io/my-app:prod
 ```
 
-To execute an ACR Task, you can use the AZ CLI using the ``az acr run`` command. An ACR Task won't run on your local machine, **it will run on an ephemeral virtual machine in Azure**.
+To execute an ACR Task, you can use the AZ CLI and the ``az acr run`` command. An ACR Task won't run on your local machine, **it will run on an ephemeral virtual machine in Azure**.
 
-Here's the previous example I ran, but this time using an ACR Task to execute the ``acr tag list`` command. 
+Here's the previous example I ran, but this time using an ACR Task to execute the ``acr tag list`` command on Azure. 
 ```shell
 $ az acr run --cmd "acr tag list --repository my-app" --registry acrtasksdemo /dev/null
 Queued a run with ID: cb2
@@ -74,7 +77,7 @@ acrtasksdemo.azurecr.io/my-app:prod
 2022/12/20 15:49:14 Step ID: acb_step_0 marked as successful (elapsed time in seconds: 0.810056)
 ```
 
-If we take a look in the Azure Portal, you can see that an ACR Task has been executed inside our ACR.
+If we take a look in the Azure Portal, you'll see that an ACR Task has been executed inside our ACR.
 
 ![acr-task-execution](/img/acr-task-execution.png)
 
@@ -82,8 +85,15 @@ If we take a look in the Azure Portal, you can see that an ACR Task has been exe
 
 The previous example ran an ACR Task on-demand, but you can also run it on a regular basis using the ``az acr task create`` command and the ``schedule`` parameter.
 
-Here's an example of how to create an ACR Task that runs every minute and lists all the available tags of "my-app" repository:   
-``az acr task create --name "scheduledAcrTask" --cmd "acr tag list --repository my-app" --schedule "* * * * *" --registry acrtasksdemo --context /dev/null``
+The next code snippet shows the previous example I ran, but this time using an scheduled ACR Task to execute the ``acr tag list`` command every minute:
+
+```shell
+az acr task create --name "scheduledAcrTask" \
+        --cmd "acr tag list --repository my-app" \
+        --schedule "* * * * *" \
+        --registry acrtasksdemo \
+        --context /dev/null
+```
 
 If we go into the Azure Portal, you'll see that an scheduled ACR Task has been created.
 
@@ -95,17 +105,16 @@ And if we take a look at the recent ACR Tasks run, we'll see how every minute th
 
 # **Using the purge command**
 
-The ``purge`` command is one of the commands available on the ACR CLI and it allows us to delete images in one or multiple repositories based on:
+The ``purge`` command is one of the available commands on the ACR CLI and it allows us to delete tags and images in a single or in multiple repositories based on:
 - The name of the repository.
-- The name of the tags associated to the images.
-- The date when the image was pushed into the registry.
-
+- The name of the tags.
+- The date when the image was pushed into the repository.
 
 ## **filter parameter**
 
 This parameter allows us to specify which tags are going to be purged based on a regular expression. 
 
->**Important**: The ``filter`` parameter only purges the tags, it doesn't delete the images per se. To delete the image completely you need to use it alongside the ``untagged`` parameter.
+>**Important**: The ``filter`` parameter only purges tags, **it doesn't delete the images** per se. To delete the tags and the images in a single command you need to use the ``untagged`` parameter.
 
 Let's see a few examples. 
 
@@ -127,7 +136,7 @@ acrtasksdemo.azurecr.io/another-app:2.0.0
 acrtasksdemo.azurecr.io/another-app:dev
 ```
 
-- Purge all images and tags from the "my-app" repository, except the ones that has associated the "dev" or "prod" tags.
+- Purge all images and tags from the "my-app" repository, except the ones that has the "dev" or "prod" tags.
 ```bash
 $ acr purge --registry acrtasksdemo --filter 'my-app:^((?!prod|dev).)*$' --untagged --ago 0d --dry-run
 DRY RUN: The following output shows what WOULD be deleted if the purge command was executed. Nothing is deleted.
@@ -145,7 +154,7 @@ Number of tags to be deleted: 4
 Number of manifests to be deleted: 3
 ```
 
-- Purge all images and tags from all repositories, except those that has associated the "dev" or "prod" tags.
+- Purge all images and tags from all repositories, except those that has the "dev" or "prod" tags.
 ```bash
 $ acr purge --registry acrtasksdemo --filter '.*:^((?!prod|dev).)*$' --untagged --ago 0d --dry-run
 DRY RUN: The following output shows what WOULD be deleted if the purge command was executed. Nothing is deleted.
@@ -201,7 +210,7 @@ Number of manifests to be deleted: 7
 
 This parameter allow us to purge all tags that are older than the specified value.
 
->**Important**: The ``ago`` parameter only purges the tags, it doesn't delete the images per se. To delete the image completely you need to use it alongside the ``untagged`` parameter.
+>**Important**: The ``ago`` parameter only purges tags, **it doesn't delete the images** per se. To delete the tags and the images in a single command you need to use the ``untagged`` parameter.
 
 Here's an example:
 
@@ -209,16 +218,16 @@ Here's an example:
 
 ``acr purge --registry acrtasksdemo --filter '.*:.*' --untagged --ago 3d --dry-run``
 
-The ``ago`` parameter is always required when using the ``purge`` command, but if you don't care about it you can set it to ``0d``.    
-For example, the ``acr purge --registry acrtasksdemo --filter 'my-app:.*' --untagged --ago 0d`` command purges all images from the "my-app" repository without taking into account the date they were pushed into the registry.
+The ``ago`` parameter is always required when using the ``purge`` command, but if you don't care about the date you can set it to ``0d``.    
+For example, the ``acr purge --registry acrtasksdemo --filter 'my-app:.*' --untagged --ago 0d`` command, purges all images and tags from the "my-app" repository without taking into account the date they were pushed into the registry.
 
 ## **keep parameter**
 
 This parameter allow us to keep the latest number of tags.
 
->**Important**: The ``keep`` parameter only purges the tags, it doesn't delete the images per se. To delete the image completely you need to use it alongside the ``untagged`` parameter.
+>**Important**: The ``keep`` parameter only purges tags, **it doesn't delete the images** per se. To delete the tags and the images in a single command you need to use the ``untagged`` parameter.
 
-The following example will keep the latest 3 tags and images of "my-app" repository, and purge the remaining ones.
+The following example will keep the latest 3 tags and images of "my-app" repository, and remove the remaining ones.
 ```bash
 acr purge --registry acrtasksdemo --filter 'my-app:.*' --keep 3 --untagged --ago 0d --dry-run
 DRY RUN: The following output shows what WOULD be deleted if the purge command was executed. Nothing is deleted.
@@ -244,16 +253,16 @@ To know which tags and images would be deleted the ``dry-run`` flag can be set, 
 
 Now that we know how the ``purge`` command works, it is time to create an scheduled ACR Task that purges the stale images once every week.
 
-Obviously, every one will have different requirements when purging images from an ACR repository, mainly because there are quite a few common tag strategies you can follow when working with containers.   
+Obviously, every one will have different requirements when purging images from an ACR repository, mainly because there are dozens of viable tag strategies you can follow when working with containers.   
 But, for this post I'm going to create the following ACR Task:
 - It will be an scheduled ACR Task that runs once every week.
 - It will purge all the images that are older than 30 days from all the existing repositories, except the images with the "dev" or "prod" tag assigned.
 
 Let's build the command we need:
-- To purge all tags from all the existing repositories except the "dev" and "prod" tag, we need to specify the following ``filter`` parameter ``.*:^((?!prod|dev).)*$``
+- To purge all tags from all the existing repositories and keep only the "dev" and "prod" tag, we need to specify the following value for the ``filter`` parameter ``.*:^((?!prod|dev).)*$``
   - With the ``.*`` regular expression we're targeting all the repositories available in the ACR.
   - With the ``^((?!prod|dev).)*$`` regular expression we're targeting all the tags except "prod" or "dev".
-- To purge all tags older than 30days, we need to set the ``ago`` parameter, like this: ``--ago 30d``
+- To purge all tags older than 30days, we need to set the ``ago`` parameter to: ``--ago 30d``
 - The ``filter`` and ``ago`` parameter doesn't delete the manifest per se, it only purges the tags. To remove the images we have to use the ``untagged`` attribute.
 - To run the ACR Task once every week we're going to use the ``schedule`` attribute alongside a CRON value. For example, this one: ``55 18 * * Tue``, which means that the ACR Task will run every Tuesday at 18:55 UTC Time.
 
@@ -267,11 +276,11 @@ Here's how the end result looks like:
       --context /dev/null
 ```      
 
-If we take a look at the Azure portal after the ACR Task ran for the first time, we will see how it deleted every image and tag older than 30days except the ones with the "prod" or "dev" tags.
+If we take a look at the Azure portal after the ACR Task ran for the first time, we will see how it has deleted every image and tag older than 30 days except the ones with the "prod" or "dev" tags associated.
 
 ![acr-purge-scheduled-dev-prod-task](/img/acr-purge-scheduled-dev-prod-task.png)
 
-If we take a closer look at the repository, the only images available are the ones with the "prod" or "dev" tags on them.
+If we take a closer look at one of the repositories, the only remaining images are the ones with the "prod" or "dev" tags on them.
 
 ![acr-purge-scheduled-dev-prod-task-repository](/img/acr-purge-scheduled-dev-prod-task-repository.png)
 
