@@ -77,11 +77,11 @@ Let's begin defining the end goal for this app. The desired output is the follow
 
 In the next sections we're going to tackle the tasks listed above.
 
-# **1. Migrating the BookingMgmt.WCF.WebService project**
+# **1. Migrating the BookingMgmt.WCF.WebService project to CoreWCF**
 
 The first step is to move away from the WCF framework and begin using CoreWCF.
 
-## **Trying to use the .NET Upgrade Assistant tool with the WCF project**
+## **1.1. Trying to use the .NET Upgrade Assistant tool with the WCF project**
 
 If you read a little bit on the internet about how to do this migration process, you'll see that most of the online posts tells you to use the **[.NET Upgrade Assistant tool](https://dotnet.microsoft.com/en-us/platform/upgrade-assistant)**.   
 
@@ -113,22 +113,133 @@ We are interested in your feedback! Please use the following link to open a surv
 [17:25:38 ERR] Unable to upgrade project E:\Coding\Dotnet\modernize-wcf-app-using-corewcf\before\BookingMgmt.WCF.WebService\BookingMgmt.WCF.WebService.csproj
 ```
 
-As you can see, the Upgrade Assistant doesn't work from the get-go. The reason why it doesn't work is because the BookingMgmt WCF uses a .svc file and that is not supported.    
+As you can see, the Upgrade Assistant doesn't work from the get-go, the reason why it doesn't work is because the app uses a .svc file and that kind of WCF is not supported.    
 The .NET Upgrade Assistant does not support the following scenarios:
 
-❌ WCF server that are Web-hosted and use .svc file.    
+❌ WCF server that are Web-hosted and use a .svc file.    
 ❌ Behavior configuration via xml config files except serviceDebug, serviceMetadata, serviceCredentials (clientCertificate, serviceCertificate, userNameAuthentication, and windowsAuthentication).   
 ❌ Endpoints using bindings other than NetTcpBinding and HTTP-based bindings.   
 
 
+## **1.2. Create a new CoreWCF project from scratch**
+
+Our approach of using the .NET Upgrade tool didn't work out, so instead of that I'm going to **create a new CoreWCF project from scratch and move the source code from the WCF project to this new one.**
+
+The best way to create a new CoreWCF project is using the CoreWCF project template, which can be installed using the dotnet tool.
+
+```bash
+ dotnet new --install CoreWCF.Templates
+```
+
+After installing the template we can create a new CoreWCF project like this:
+
+```bash
+dotnet new corewcf -n BookingMgmt.CoreWCF.WebService
+```
+
+The new CoreWCF project has been created, here's how it looks:
+
+<add-img>
+
+The first thing we have to do is to delete the ``IService.cs`` _(do not delete the ``Program.cs``)_ and now we're ready to move the source code from the old WCF project to the newly created CoreWCF one.   
+We don't want to move everything:
+- The ``.svc`` file is not needed, we only need the file that contains the generated ``svc.cs`` file.
+- The ``global.asax`` is useless, with CoreWCF the application setup is done the ``Program.cs`` instead of the ``global.asax``
+- The ``packages.config`` is also useless, because we are moving away from the old csproj SDK style to the new one.
+
+Here's how the project looks like after moving everything into the new CoreWCF project:
+
+<add-img>
 
 
+## **1.3. Setting up the Program.cs**
+
+Our WCF app uses a ``global.asax``, which allows us to write code that runs in response to "system level" events, such as the application starting, a session ending, an application error occuring, without having to try and shoe-horn that code into each and every page of your site.
+
+CoreWCF does not uses a ``global.asax``, instead of that uses a ``Program.cs`` to set up the host and expose the services bindings.    
+In fact, if you're familiar with .NET Core or .NET 7, this will look somewhat familiar because CoreWCF uses the same host and builder model, but with extra middleware that implements WCF services and provides WSDL generation through metadata.
+
+The next code snippet shows how the ``Program.cs`` looks like after configuring it properly.
+
+```csharp
+var builder = WebApplication.CreateBuilder();
+
+builder.Services.AddServiceModelServices();
+builder.Services.AddServiceModelMetadata();
+builder.Services.AddSingleton<IServiceBehavior, UseRequestHeadersForMetadataAddressBehavior>();
+
+builder.Services.AddSingleton<BookingCreatorService>();
+builder.Services.AddTransient<IBookingCreatorApplicationServices, BookingCreatorApplicationServices>();
+builder.Services.AddTransient<IBookingCreatorDomainServices, BookingCreatorDomainServices>();
+builder.Services.AddTransient<IBookingCreatorService, BookingCreatorService> ();
+builder.Services.AddTransient<IUnitOfWorkBookingCreator, UnitOfWorkBookingCreator>();
+builder.Services.AddTransient<IBookingCreatorValidations, BookingCreatorValidations>();
+builder.Services.AddTransient<IBookingFeaturesDomainServices, BookingFeaturesDomainServices>();
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+
+var app = builder.Build();
+
+app.UseServiceModel(serviceBuilder =>
+{
+    serviceBuilder.AddService<BookingCreatorService>();
+    serviceBuilder.AddServiceEndpoint<BookingCreatorService, IBookingCreatorService>(new BasicHttpBinding(BasicHttpSecurityMode.None), "/BookingCreatorService.svc");
+    var serviceMetadataBehavior = app.Services.GetRequiredService<ServiceMetadataBehavior>();
+    serviceMetadataBehavior.HttpsGetEnabled = false;
+    serviceMetadataBehavior.HttpGetEnabled = true;
+});
+
+app.Run();
+```
+Let me explain a little bit what we're doing in here.
+
+- The ``AddServiceModelServices``, ``AddServiceModelMetadata`` method are used to setup the WCF support.
+
+```csharp
+builder.Services.AddServiceModelServices();
+builder.Services.AddServiceModelMetadata();
+```
+
+- The ``UseRequestHeadersForMetadataAddressBehavior`` is used  modify the generated help page and WSDL document to reflect the hostname and port number that the request came from.   
+This is useful when the machine hostname is different than the hostname that a client uses to connect to the service. For example, if the service is running in a docker container or behind a load balancer.
+
+```csharp
+builder.Services.AddSingleton<IServiceBehavior, UseRequestHeadersForMetadataAddressBehavior>();
+```
+
+- The original WCF app uses ``Autofac`` as an IoC container for dependendy injection, with CoreWCF and using .NET 7 there is no need for an external IoC container and we can use the native one.
+
+```csharp
+builder.Services.AddSingleton<BookingCreatorService>();
+builder.Services.AddTransient<IBookingCreatorApplicationServices, BookingCreatorApplicationServices>();
+builder.Services.AddTransient<IBookingCreatorDomainServices, BookingCreatorDomainServices>();
+builder.Services.AddTransient<IBookingCreatorService, BookingCreatorService> ();
+builder.Services.AddTransient<IUnitOfWorkBookingCreator, UnitOfWorkBookingCreator>();
+builder.Services.AddTransient<IBookingCreatorValidations, BookingCreatorValidations>();
+builder.Services.AddTransient<IBookingFeaturesDomainServices, BookingFeaturesDomainServices>();
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+```
+- The ``UseServieModel`` method is used to configure which endpoint we want to expose in the host. 
+- With the ``serviceBuilder.AddServiceEndpoint<BookingCreatorService, IBookingCreatorService>(new BasicHttpBinding(BasicHttpSecurityMode.None), "/BookingCreatorService.svc")`` method we're exposing an endpoint named ``BookingCreatorService.svc``, which has a Basic Http Binding and the message is not secured during transfer. 
+- The ``HttpGetEnabled`` and ``HttpsGetEnabled`` are used to set how we're going to fetch the metadata/wsdl file. In this case it will be using Http.
+
+```csharp
+app.UseServiceModel(serviceBuilder =>
+{
+    serviceBuilder.AddService<BookingCreatorService>();
+    serviceBuilder.AddServiceEndpoint<BookingCreatorService, IBookingCreatorService>(new BasicHttpBinding(BasicHttpSecurityMode.None), "/BookingCreatorService.svc");
+    var serviceMetadataBehavior = app.Services.GetRequiredService<ServiceMetadataBehavior>();
+    serviceMetadataBehavior.HttpsGetEnabled = false;
+    serviceMetadataBehavior.HttpGetEnabled = true;
+});
+
+app.Run();
+```
 
 # **2. Using the .NET Upgrade Assistant tool to migrate the rest of projects**
 
-# **3.Mending incompatible dependencies**
+# **3. Migrate configuration settings from AppSettings to IConfiguration**
 
-# **4. Move configuration settings from using AppSettings to IConfiguration**
+# **3.Mending incompatible dependencies**
 
 # **5. Manually migrating test projects**
 
