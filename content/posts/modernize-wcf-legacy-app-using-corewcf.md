@@ -16,7 +16,7 @@ Nowadays no one is going to create a WCF from zero, it makes no sense, it's a de
 
 The WCF framework is not compatible with .NET Core or .NET 7, it only works with .NET Full Framework. 
 
-The Microsoft recommendation if you want to modernize a WCF app is to migrate to gRPC, but that's not always a viable option. Maybe using SOAP is an inamovible constraint for you ( e.g.  a government services), maybe gRPC doesn't support some obscure feature that WCF does (e.g. Windows integrated authentication), mabye your WCF app is a public service and you can't force your costumers to make the change to another technology like REST or gRPC.   
+The Microsoft recommendation if you want to modernize a WCF app is to migrate to gRPC, but that's not always a viable option. Maybe using SOAP is an inamovible constraint for you ( e.g.  a government services), maybe gRPC doesn't support some obscure feature that WCF does (e.g. Windows integrated authentication), maybe your WCF app is a public service and you can't force your costumers to make the change to another technology like REST or gRPC.   
 
 So, what are our options to modernize a WCF app if for some reason you can't move away from the WCF framework? The response to this question is: **CoreWCF**.   
 
@@ -43,7 +43,7 @@ The application we're going to try to modernize has the following features:
 - It uses an N-Layer and a Domain-Driven Design architecture.
 - It is built entirely using .NET 4.7.2
 - It is made by the following projects: 
-    - BookingMgmt.CoreWCF.WebService
+    - BookingMgmt.WCF.WebService
     - BookingMgmt.Contracts
     - BookingMgmt.Application
     - BookingMgmt.Domain
@@ -54,26 +54,84 @@ The application we're going to try to modernize has the following features:
     - BookingMgmt.Domain.UnitTest
     - BookingMgmt.CoreWCF.WebService.IntegrationTest
 
-> If you want to take a look at the source code of the app, click [here](https://github.com/karlospn/modernize-wcf-app-using-corewcf/tree/main/before).
+Here's a look at how it looks in Visual Studio.
 
-The app allow us to manage flight bookings. It allows us to do the following actions:
+<Add-img>
+
+> If you want to take a look at the source code, click [here](https://github.com/karlospn/modernize-wcf-app-using-corewcf/tree/main/before).
+
+But, what this app do? It manages flight bookings. It allows us to do the following actions:
 - Create a new booking.
 - Cancel a booking.
 - List all active bookings.
 - List all canceled bookings.
 
-Now that we know how the app is structured let's start with the modernize process.
+# **Start modernizing the app**
 
-# **Migrating the WCF project**
+Let's begin defining the end goal for this app. The desired output is the following one:
+- Migrate the app from the WCF framework to the CoreWCF framework.
+- Upgrade the WCF project from .NET 4.7.2 to .NET 7.
+- Upgrade the rest of the app projects (BookingMgmt.Contracts, BookingMgmt.Application, BookingMgmt.Domain and BookingMgmt.SharedKernel) from .NET 4.7.2 to .NET 7 or .NET Standard 2.1.
+- Upgrade the test projects from .NET 4.7.2 to .NET 7.
+- Run the application on a Linux container.
 
-# **Using the .NET Upgrade Assistant tool to migrate the rest of projects**
+In the next sections we're going to tackle the tasks listed above.
 
-# **Mending incompatible dependencies**
+# **1. Migrating the BookingMgmt.WCF.WebService project**
 
-# **Move configuration settings from using AppSettings to IConfiguration**
+The first step is to move away from the WCF framework and begin using CoreWCF.
 
-# **Manually migrating test projects**
+## **Trying to use the .NET Upgrade Assistant tool with the WCF project**
 
-# **Running the app on a Linux container**
+If you read a little bit on the internet about how to do this migration process, you'll see that most of the online posts tells you to use the **[.NET Upgrade Assistant tool](https://dotnet.microsoft.com/en-us/platform/upgrade-assistant)**.   
+
+The .NET Upgrade Assistant tool is a command-line (CLI) tool that helps users interactively upgrade projects from .NET Framework to .NET Standard and .NET 6. 
+This tool also is able to assists you in the upgrade of a series of projects types. Currently, the tool supports the following project types:
+- ASP.NET MVC
+- Windows Forms
+- Windows Presentation Foundation (WPF)
+- Console
+- Libraries
+- UWP to Windows App SDK (WinUI)
+- Xamarin.Forms to .NET MAUI
+
+The Upgrade Assistant can help you to upgrade WCF projects on .NET Framework to CoreWCF on .NET 6 and later versions of .NET. You can read more about how to do it in the next link:
+- https://devblogs.microsoft.com/dotnet/migration-wcf-to-corewcf-upgrade-assistant/
+
+Let's give it a shot.
+
+```bash
+$ upgrade-assistant upgrade BookingMgmt.WCF.WebService.csproj
+-----------------------------------------------------------------------------------------------------------------
+Microsoft .NET Upgrade Assistant v0.4.355802+b2aeae2c0e41fbfed35df6ab2e88b82a0c11be2b
+
+We are interested in your feedback! Please use the following link to open a survey: https://aka.ms/DotNetUASurvey
+-----------------------------------------------------------------------------------------------------------------
+
+[17:25:38 ERR] Support for WCF Server-side Services is limited to .NET Full Framework. Consider updating to use CoreWCF (https://aka.ms/CoreWCF/migration) in later provided steps or rewriting to use gRPC (https://aka.ms/migrate-wcf-to-grpc).
+[17:25:38 ERR] Project E:\Coding\Dotnet\modernize-wcf-app-using-corewcf\before\BookingMgmt.WCF.WebService\BookingMgmt.WCF.WebService.csproj uses feature(s) that are not supported. If you would like upgrade-assistant to continue anyways please use the "--ignore-unsupported-features" option.
+[17:25:38 ERR] Unable to upgrade project E:\Coding\Dotnet\modernize-wcf-app-using-corewcf\before\BookingMgmt.WCF.WebService\BookingMgmt.WCF.WebService.csproj
+```
+
+As you can see, the Upgrade Assistant doesn't work from the get-go. The reason why it doesn't work is because the BookingMgmt WCF uses a .svc file and that is not supported.    
+The .NET Upgrade Assistant does not support the following scenarios:
+
+❌ WCF server that are Web-hosted and use .svc file.    
+❌ Behavior configuration via xml config files except serviceDebug, serviceMetadata, serviceCredentials (clientCertificate, serviceCertificate, userNameAuthentication, and windowsAuthentication).   
+❌ Endpoints using bindings other than NetTcpBinding and HTTP-based bindings.   
+
+
+
+
+
+# **2. Using the .NET Upgrade Assistant tool to migrate the rest of projects**
+
+# **3.Mending incompatible dependencies**
+
+# **4. Move configuration settings from using AppSettings to IConfiguration**
+
+# **5. Manually migrating test projects**
+
+# **6. Running the app on a Linux container**
 
 # **Wrap-up**
