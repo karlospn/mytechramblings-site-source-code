@@ -330,7 +330,7 @@ After running the ``.NET Upgrade Assistant tool``, here's how the ``BookingMgmt.
 As you can see, the project has been converted to the new SDK-format and also the TFM has been upgraded from .NET 4.7.2 to .NET Standard 2.0. 
 
 Every project attribute present has been ported as well, but if you take a look at them, it's pretty clear that most of them are useless right now.    
-A good tip after doing a project this kind of migration is to take a good look at the resulting ``.csproj`` file because usually it can be cleaned up of most of the old attributes.
+A good tip after doing a migration using the ``.NET Upgrade Assistant tool`` is to take a good look at the resulting ``.csproj`` file because usually it can be cleaned up of most of the old attributes.
 
 # **3.Mending incompatible dependencies**
 
@@ -376,9 +376,9 @@ The next code snippet shows how the WCF app uses the ``DatabaseConnectionString`
     }
 ```
 
-Our new CoreWCF app doesn't require a ``web.config``, so we must move those application settings somewhere else, with .NET 7 we can use the ``IConfiguration`` native implementation.     
+Our new CoreWCF app doesn't have a ``web.config``, so we must move those application settings somewhere else, with .NET 7 we can use the ``IConfiguration`` native implementation.     
 
-We can simply move the ``DatabaseConnectionString`` setting to the ``appsettings.json`` and replace the ``ConfigurationManager.AppSettings`` method for ``IConfiguration``.
+We can simply move the ``DatabaseConnectionString`` setting to the ``appsettings.json`` file and replace the ``ConfigurationManager.AppSettings`` method for the ``IConfiguration`` one.
 
 # **5. Running the app locally**
 
@@ -400,6 +400,7 @@ But there are still a few things left to do.
 The unit and integration tests are still on .NET 4.7.2 and need to be moved to .NET 7. 
 
 The ``.NET Upgrade Assistant tool`` is unable to migrate MSTest project types, which means that the only possible way to migrate those projects is manually.    
+
 For every test project I'm going to create a new MSTest project that targets .NET 7 and move over the original source code.
 
 ![corewcf-mstest-project-type](/img/corewcf-mstest-project-type.png)
@@ -408,9 +409,9 @@ For every test project I'm going to create a new MSTest project that targets .NE
 
 The test projects are using the ``NMock3`` package to mock dependencies, this package is not compatible with .NET 7, which means that we need to use an alternate package.    
 
-I decided to switch over to ``Moq``, but that means that a code refactor needs to be put in place to adjust the mocking code.
+I decided to switch over to ``Moq``, but that means that a code refactor needs to be put in place in order to adjust the mocking code.
 
-The next code snippet shows a pair of Unit Tests where the mock dependencies have been switched from ``NMock3`` to ``Moq``.
+The next code snippet shows some of the project unit tests where the ``NMock3`` package has been uninstalled and the source code refactored to work with ``Moq``.
 
 ```csharp
 namespace BookingMgmt.Domain.UnitTest.GivenBooking
@@ -501,7 +502,8 @@ namespace BookingMgmt.Domain.UnitTest.GivenBooking
 
 The last step is to run this new version of the app on a Linux container.     
 
-What's the purpose of this step? To test that no dependency with the WCF framework remains in the app. The WCF framework only supports Windows, which means that if we try to run it on a Linux container it will throw an error.
+What's the purpose of this step? To test that no dependency with the WCF framework remains in the app.    
+The WCF framework only supports Windows, which means that if we try to run it on a Linux container and a reference still remains, the container won't run at all.
 
 The next code snippet shows how the application ``Dockerfile`` looks like.
 ```yaml
@@ -579,10 +581,10 @@ If your app has some incompatible dependencies, you'll have a few options availa
 
 Excluding the first option where you can simply upgrade to a newer version of the same package, the rest of the options are going to be a time-sink.
 
-There is another possible scenario that could affect the migration process, and that's the fact that the WCF Framework only runs in Windows platforms, which means that exists a possibility that your application is using some sort of native Windows API, then the modernization process becomes even harder because there are no alternatives.
+There is another possible scenario that could affect the migration process, and that's the fact that the WCF Framework only runs in Windows platforms, which means that exists a possibility that your application is using some sort of native Windows API, then the modernization process becomes more cumbersome because there is a good chance that no alternatives is available.
 
-In this post we have been trying to modernize a WCF app called BookingMgmt, this process has been relatively quick and painless. I have spent between 4 and 5 hours to successfully migrate to a .NET 7 CoreWCF app that is hosted on a linux container.   
-This app had very few incompatible dependencies, only ``EntityFramework 6``, ``log4net``, ``fasterflect`` and ``NMock3`` and the solution was quite quick to implement in all cases.
+In this post we have been trying to modernize a WCF app called BookingMgmt, this process has been relatively quick and painless. I have spent 4 - 5 hours to successfully migrate to a .NET 7 CoreWCF app that is hosted on a linux container.   
+This app had very few incompatible dependencies, only ``EntityFramework 6``, ``log4net``, ``fasterflect`` and ``NMock3`` and the remediation was easy and quick to implement in all cases.
 
-You should also bear in mind that in this post I did the minimum work required to make the app run with .NET 7 and CoreWCF.   
+You should also bear in mind that I did the minimum work required to make the app run with .NET 7 and CoreWCF.   
 Once the app has been successfully moved to .NET 7 and CoreWCF there are a ton of improvements it could have been made (e.g. move from EF 6 to EFCore 7, which probably will give us a significant performance boost).   
