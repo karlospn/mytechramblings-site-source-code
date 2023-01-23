@@ -1,9 +1,9 @@
 ---
 title: "How to modernize a legacy .NET Framework WCF app using CoreWCF and .NET 7"
-date: 2023-01-17T18:43:16+01:00
-draft: true
+date: 2023-01-23T10:01:16+01:00
+draft: false
 description: "CoreWCF is a port of the Windows Communication Foundation (WCF) framework to the latest .NET version. The main goal of the CoreWCF project is to enable existing WCF services to be moved to .NET 7. In this post I'll show you step by step how easy (or hard) is the process of migrating an existing .NET 4.7 WCF app to .NET 7 using the CoreWCF project."
-tags: ["dotnet", "wcf", "soap"]
+tags: ["dotnet", "wcf", "netframework", "corewcf"]
 ---
 
 > **Just show me the code**   
