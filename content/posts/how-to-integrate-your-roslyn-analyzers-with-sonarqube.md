@@ -40,12 +40,36 @@ To generate a SonarQube plugin from a Roslyn Analyzer you need to do the followi
 - Use the ``RoslynSonarQubePluginGenerator`` tool to convert the NuGet package into a SonarQube plugin. 
     - The generator tool can be found [here](https://github.com/SonarSource/sonarqube-roslyn-sdk).
 
-Then the SonarQube plugin must be installed into your SonarQube instance (you just need to put it in the SonarQube server ``extensions\plugins`` folder and restart the server).   
+Then the SonarQube plugin must be installed into your SonarQube instance (you just need to put it in the SonarQube server ``/extensions/plugins`` folder and restart the server).   
 After installing the plugin will see a new repository containing all of the rules defined on your Roslyn Analyzer. The rules can be added to Quality Profiles just like any other SonarQube rule.
+
+Let me show you an end-to-end example.
 
 ## **Example**
 
+### **Step 1: Create the SonarQube plugin**
 
+I have built and packed a Roslyn Analyzer library in advance. The library contains a simple (and stupid) rule that reports a diagnostic if a class name contains a lowercase letters.
+- You can find the Roslyn Analyzer library source code on my [Github repository](https://github.com/karlospn/how-to-integrate-roslyn-analyzers-with-sonarqube/tree/main/MyRoslynAnalyzer).
+- You can get the NuGet package from [nuget.org](https://www.nuget.org/packages/MyRoslynAnalyzer).
+
+The first step is to convert the NuGet package that contains the roslyn rules into a SonarQube plugin, to do that you need to download the ``RoslynSonarQubePluginGenerator`` tool from [here](https://github.com/SonarSource/sonarqube-roslyn-sdk) and run the following command:
+
+``./RoslynSonarQubePluginGenerator.exe /a:MyRoslynAnalyzer /acceptLicenses``
+
+The tool will create a .jar file named after the package name and version in the current directory e.g. myroslynanalyzer-plugin-1.0.0.jar
+
+
+### **Step 2: Install the plugin in your SonarQube instance**
+
+To install the plugin:
+- If you're running SonarQube on a virtual machine, you need to put the .jar file in the ``/extensions/plugins`` folder and restart the server.
+- If you're running SonarQube on a container, the easiest way is to create a new sonarqube image that contains the plugin, something like this: 
+
+```yaml
+FROM sonarqube:9.9.0-community
+COPY * /opt/sonarqube/extensions/plugins/
+```
 
 
 ## **Pros and cons**
