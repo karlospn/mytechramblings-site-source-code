@@ -38,13 +38,14 @@ Nowadays there are 2 ways to add your Roslyn Analyzer rules to SonarQube:
 
 One way to integrate a Roslyn Analyzer with SonarQube is to create a plugin from it and then install the plugin into SonarQube.
 
-To generate a SonarQube plugin from a Roslyn Analyzer you need to do the following steps:
-- Package your Roslyn Analyzer into a NuGet package.
+To generate a SonarQube plugin from a Roslyn Analyzer library you need to do the following steps:
+- Package your Roslyn Analyzer library into a NuGet package.
 - Use the ``RoslynSonarQubePluginGenerator`` tool to convert the NuGet package into a SonarQube plugin. 
     - The generator tool can be found [here](https://github.com/SonarSource/sonarqube-roslyn-sdk).
 
 Then the SonarQube plugin must be installed into your SonarQube instance (you just need to put it in the SonarQube server ``/extensions/plugins`` folder and restart the server).   
-After installing the plugin will see a new repository containing all of the rules defined on your Roslyn Analyzer. The rules can be added to Quality Profiles just like any other SonarQube rule.
+
+After installing the plugin, a new repository containing all the rules defined on your Roslyn Analyzer library will appear on SonarQube. From now on, those custom rules can be associated with a Quality Profile, just like any other SonarQube rule.
 
 Let me show you an end-to-end example.
 
@@ -52,7 +53,7 @@ Let me show you an end-to-end example.
 
 ### **Step 1: Create the SonarQube plugin**
 
-I have built and packed a Roslyn Analyzer library in advance. The library contains a simple (and stupid) rule that reports a diagnostic if a class name contains a lowercase letters.
+I have built, packed and published to nuget.org a Roslyn Analyzer library in advance. The library contains a simple (and stupid) rule that reports a diagnostic if a class name contains lowercase letters.
 - You can find the Roslyn Analyzer library source code on my [Github repository](https://github.com/karlospn/how-to-integrate-roslyn-analyzers-with-sonarqube/tree/main/MyRoslynAnalyzer).
 - You can get the NuGet package from [nuget.org](https://www.nuget.org/packages/MyRoslynAnalyzer).
 
@@ -80,15 +81,15 @@ You can take a look at the plugins installed going to the "Administration" secti
 
 ![sonarqube-with-plugin-installed](/img/sonarqube-with-plugin-installed.png)
 
-### **Step 3: Configure your Quality Gates to use the roslyn rules 
+### **Step 3: Configure your Quality Gates to use the roslyn rules**
 
-Now that you have installed the rules plugin on your SonarQube server, it is time to configure it as you wish.
+Now that you have installed the plugin on your SonarQube server, it is time to configure the custom rules on Sonarqube.
 
 In the "Rules" section, if you search by repository name, you'll find your custom rules.
 
 ![sonarqube-enable-roslyn-rule-on-quality-gate](/img/sonarqube-enable-roslyn-rule-on-quality-gate.png)
 
-Now you can customize your Quality Gates whatever you see fit, and add those custom rules in whichever Quality Gate you want.
+Now you can associate any of those custom rules with a Quality Profile, just like any other SonarQube rule.
 
 ### **Step 4: Run a Sonar scan**
 
