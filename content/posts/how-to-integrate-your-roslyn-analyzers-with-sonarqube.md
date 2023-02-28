@@ -1,9 +1,9 @@
 ---
 title: "How to integrate your Roslyn Analyzer project with SonarQube"
-date: 2023-02-20T13:30:55+01:00
+date: 2023-02-28T10:55:55+01:00
 tags: ["dotnet", "roslyn", "devops", "sonarqube"]
 description: "Right now there are 2 ways to add rules from a Roslyn Analyzer project into SonarQube. In this post I want to show you how both options work and also what're the pros and cons of one over the other."
-draft: true
+draft: false
 ---
 
 What are Roslyn Analyzers used for? To sum up, Roslyn Analyzers are used to analyze your app source code to find issues and suggest corrections.   
