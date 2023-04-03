@@ -24,7 +24,7 @@ In the end, I've come to the conclusion that I'm going to build an API that take
 **In this post, I'm going to focus on setting up this API, so if you're interested, keep reading.**
 
 
-# **Application**
+# **Application to build**
 
 This API is only going to be used when a new post is published, so it doesn't make sense to continuously host it on services like App Services. For this use case, the best option is to go serverless and use a service like **Azure Functions**.
 
@@ -70,9 +70,9 @@ The parameter ``uri`` indicates the website from where to obtain the content tha
 
 
 2. The API fetches the content from the ``uri`` website.
-3. The text content is split into multiple chunks, the reason to split it into multiple parts is that the text might be too long to be summarized by a single request to Azure OpenAI.
+3. The text content is split into multiple chunks. The reason to split it into multiple parts is that the text might be too long to be summarized by a single request to Azure OpenAI.
 4. Every chunk gets summarized independently using Azure OpenAI.
-5. All the summarized chunks are put together in a single piece of text and summarized again with Azure OpenAI. The result is the tweet.
+5. All the summarized chunks are put together in a single piece of text and summarized again with Azure OpenAI. The resulting text is the tweet.
 6. The tweet gets posted to Twitter.
 
 
@@ -179,7 +179,7 @@ def test_function(req: func.HttpRequest) -> func.HttpResponse:
             return func.HttpResponse(f"Something went wrong: {ex}", status_code=500)
 ```
 
-As you can see, the implementation is no more than 70 lines of Python, which is largely thanks to the LangChain library, as it implements some of the most well-known patterns for interacting with an LLM model, this allows us to implement the ``map-reduce`` strategy with just a couples lines of code.
+As you can see, the implementation is no more than 50 lines of Python, which is largely thanks to the LangChain library, as it implements some of the most well-known patterns for interacting with an LLM model, this allows us to implement the ``map-reduce`` strategy with just a couples lines of code.
 
 But before we start talking about the ``map-reduce`` strategy, **let's review each line of the API and explain what I'm doing.**
 
@@ -216,16 +216,16 @@ A series of credentials are required to communicate with Azure OpenAI and the Tw
 
 ## **2. Get the 'uri' property from the HTTP body request**
 
-The API must be called with a parameter called ``uri`` in the Http request body, here's an example:
+The API will be called with a parameter called ``uri`` in the Http request body, here's an example:
 
 ```bash
 curl -X POST https://func-openai-azfunc-dev.azurewebsites.net/api/tweet?code=hoZ6u8lIMlhu7-Zs8gvDb04R2fXvYeapijR3YYRlgiwmAzFulsiRMA== \
      -H "Content-Type: application/json" \
      -d '{"uri": "https://www.mytechramblings.com/posts/deploy-az-resources-when-not-available-on-azurerm/"}'
 ```
-The parameter ``uri`` indicates the website from where to obtain the content that will get summarized.
+This ``uri`` parameter will indicate the website URL from where to obtain the content that will get summarized.
 
-In the following code block, we are obtaining the ``uri`` property from the Http request body. If it doesn't exist the API responds with a 400 status code.
+In the following code block, we are obtaining the ``uri`` property from the Http request body. If it doesn't exist, the API responds with a 400 status code.
 
 ```python
     try:
@@ -270,7 +270,7 @@ LLMs have a limited token length, which means we cannot pass it an entire wall o
 The ``map-reduce`` strategy is one of the multiple strategies available today for interacting with LLM models. It consists in:
 - Splitting a text into multiples chunks of data. 
     - To split the text into multiple chunks, we will use the Langchain ``RecursiveCharacterTextSplitter`` functionality.
-- Pass every chunk of data through the language model to generate multiple response.
+- Pass every chunk of data through the language model to generate multiple responses.
 - Combine the multiple responses into a single one and then pass it again through the language model to obtain a definitive response.
 
 As you can imagine, this technique requires more than one call to the LLM/Azure OpenAI.
@@ -288,7 +288,7 @@ The ``map-reduce`` strategy might seem quite complex to implement, but LangChain
     load_summarize_chain(llm, chain_type="map_reduce")
 ```
 
-In the following code block, we're spliting the text into multiple chunks using the Langchain ``RecursiveCharacterTextSplitter`` functionality, and then we apply the ``map-reduce`` strategy to obtain the tweet that is going to be posted into Twitter.
+In the following code block, we're spliting the text into multiple chunks using the Langchain ``RecursiveCharacterTextSplitter`` functionality, and then we apply the ``map-reduce`` strategy using the ``load_summarize_chain`` function. The end result is the tweet that is going to be posted to Twitter.
 
 ```python
     # Split content into chunks
@@ -303,13 +303,13 @@ In the following code block, we're spliting the text into multiple chunks using 
 
 Langchain applies a default prompt every time it sends text to the LLM model. In our case, we want to modify the combine prompt that is sent to the LLM model to fit Twitter's constraints.
 
-We can use the ``combine_prompt`` parameter from the ``load_summarize_chain`` function to customize the prompt that is going to be sent when trying to summarize the compacted chunks.
+We can use the ``combine_prompt`` parameter from the ``load_summarize_chain`` function to set the prompt that is going to be sent when trying to summarize the compacted chunks.
 
 We can also customize the prompts used to generate the summary of every single chunk using the ``map_prompt`` parameter, but I don't need it, the default summarization prompt is good enough.
 
 ![tweetapi-map-reduce-with-prompts-diagram](/img/tweetapi-map-reduce-with-prompts-diagram.png)
 
-After some prompt engineering and some trial and error, here's how the combine prompt looks like:
+After some prompt engineering and some trial and error, here's how the combine prompt ended up looking like:
 
 ```python
     prompt_template = """
@@ -325,9 +325,12 @@ After some prompt engineering and some trial and error, here's how the combine p
 
     TWEET IN ENGLISH:"""
 ```
+
+LangChain will combine the multiple summarized chunks into a single text and replace the _{text}_ placeholder with it, and afterwards it will sent the resulting prompt to Azure OpenAI to generate the tweet.
+
 ## **5. Post the new tweet using the Twitter Api**
 
-Once we have the tweet we are going to create, we can use the Python library [tweepy](https://www.tweepy.org/) to create it via the Twitter API. 
+Once we have the tweet we are going to create, we can use the Python library [tweepy](https://www.tweepy.org/) to create it.
 
 In the following code block, we are posting the new tweet to Twitter using tweepy and returning the tweet URI to the client. As you can see, the code is descriptive enough.
 
@@ -370,12 +373,18 @@ curl -X POST http://localhost:7071/api/tweet \
      -d '{"uri": "https://www.mytechramblings.com/posts/how-to-integrate-your-roslyn-analyzers-with-sonarqube"}'
 ```
 
-It takes around 40 to 50 seconds to create the tweet and post it to Twitter. And here's how the end result looks like in Twitter.
+It takes around 40 to 50 seconds to create the tweet and post it to Twitter. Here's how the end result looks like in Twitter.
+
+![tweetapi-tweet-results-2](/img/tweetapi-tweet-results-2.png)
+
+And a few more tweets:
 
 ![tweetapi-tweet-results](/img/tweetapi-tweet-results.png)
 
 
 Do you remember when in the previous section we talked about the ``map-reduce`` strategy making multiple calls to the LLM model?    
 If we look at the metrics of the total calls made to Azure OpenAI to generate a single tweet, we can clearly see it.
+
+The following image shows a total of 12 calls made to Azure OpenAI to generate a single tweet
 
 ![tweetapi-openai-total-calls-metric](/img/tweetapi-openai-total-calls-metric.png)
