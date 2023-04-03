@@ -351,9 +351,7 @@ In the following code block, we are posting the new tweet to Twitter using tweep
 
 # **Testing the API**
 
-The next step after building the API is to test that it works correctly. For this purpose, I have created a new Twitter account specifically for this. 
-If you want to take a look, the account is the following one:
-- https://twitter.com/CarlosPons34994
+The next step after building the API is to test that it works correctly. For this purpose, I have created a new temporary Twitter account specifically for this. 
 
 To invoke the API, you can use any tool capable of making an HTTP request (``cURL``, ``Postman``, ``Insomnia``, etc.), you just have to make an HTTP call to the ``/tweet`` endpoint of the API.
 
@@ -380,7 +378,6 @@ It takes around 40 to 50 seconds to create the tweet and post it to Twitter. Her
 And a few more tweets:
 
 ![tweetapi-tweet-results](/img/tweetapi-tweet-results.png)
-
 
 Do you remember when in the previous section we talked about the ``map-reduce`` strategy making multiple calls to the LLM model?    
 If we look at the metrics of the total calls made to Azure OpenAI to generate a single tweet, we can clearly see it.
