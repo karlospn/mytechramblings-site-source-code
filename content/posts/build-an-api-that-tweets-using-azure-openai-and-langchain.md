@@ -1,7 +1,7 @@
 ---
 title: "Building a serverless API that tweets about my blog posts using Azure OpenAI and LangChain"
-date: 2023-04-02T22:40:11+02:00
-draft: true
+date: 2023-04-04T10:01:11+02:00
+draft: false
 tags: ["azure", "openai", "python", "langchain", "ai", "serverless"]
 description: "This post is going to show you a simple way of building a serverless Python API that uses LangChain and Azure OpenAI to create tweets summarizing the content of my blog posts."
 ---
