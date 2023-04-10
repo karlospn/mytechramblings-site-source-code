@@ -1,8 +1,8 @@
 ---
 title: "Getting started with OpenTelemetry Metrics in .NET. Part 1: Key concepts"
-date: 2022-09-27T10:01:32+02:00
+date: 2023-04-10T16:20:55+02:00
 tags: ["opentelemetry", "dotnet", "csharp", "metrics", "prometheus", "grafana"]
-description: "In this 2 part series-post I’m going to show you how to use OpenTelemetry to generate custom metrics and how to visualize those metrics using Prometheus and Grafana. In part 1 I’ll be talking about some key concepts that you should know when using OpenTelemetry Metrics with .NET."
+description: "In this two-part series I’m going to show you how to use OpenTelemetry to generate custom metrics and how to visualize those metrics using Prometheus and Grafana. In part 1 I’ll be talking about some key concepts that you should know when using OpenTelemetry Metrics with dotnet."
 draft: false
 ---
 
@@ -11,12 +11,11 @@ draft: false
 > - **Part 2**: A practical example about how to add OpenTelemetry Metrics on a real life .NET app and how to visualize those metrics using Prometheus and Grafana. If you want to read it, click [here](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-metrics-and-dotnet-part-2/)
 
 
-
 OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as **traces**, **metrics**, and **logs**. 
 
 In one of my [previous posts](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-and-dotnet-core/) I talked about how to get started with OpenTelemetry and distributed tracing, today I want to **focus on metrics**.   
 
-At the end of this 2 part-series post we will have a .NET6 app that emits a series of metrics, those metrics will be send to the OpenTelemetry Collector, a Prometheus Server will receive the metrics from the OTEL Collector and we will have a Grafana dashboard to visualize them.
+At the end of this 2 part-series post we will have a .NET 7 app that emits a series of metrics, those metrics will be send to the OpenTelemetry Collector, a Prometheus Server will receive the metrics from the OTEL Collector and we will have a Grafana dashboard to visualize them.
 
 ![otel-metrics-app-diagram](/img/otel-metrics-app-diagram.png)
 
@@ -39,16 +38,24 @@ Metrics in OpenTelemetry .NET are a somewhat unique implementation of the OpenTe
 
 OpenTelemetry Metrics works by using the ``MeterProvider`` to create a ``Meter`` and associating it with one or more ``Instruments``, each of which is used to create a series of ``Measurements``.
 
-The ``MeterProvider`` must be configured to collect metrics using the OpenTelemetry .NET SDK, to set it up properly you need to use the ``AddOpenTelemetryMetrics()`` extension method from the ``OpenTelemetry.Extensions.Hosting`` NuGet package.  
+The ``MeterProvider`` must be configured to collect metrics using the OpenTelemetry .NET SDK, to set it up properly you need to use the ``.WithMetrics()`` extension method from the ``OpenTelemetry.Extensions.Hosting`` NuGet package.  
 The ``MeterProvider`` will hold all the configuration for metrics like Meter names, readers, etc.  
 
-Here's a simple example of how to setup the ``MeterProvider`` on .NET:
+Here's an example of how to setup the ``MeterProvider`` on .NET:
 
 ```csharp
-builder.Services.AddOpenTelemetryMetrics(opts => opts
+builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
     .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("BookStore.WebApi"))
     .AddPrometheusExporter());
 ```
+
+Calling the ``AddOpenTelemetry()`` method before the ``WithMetrics()`` is required when working with OpenTelemetry. This method is responsible for registering an ``IHostedService`` that starts the tracing and metric services.
+
+All the ``OpenTelemetry.Extensions.Hosting`` versions prior to **1.4.0** contained a signal-specific method for configuring metrics:
+
+- ``AddOpenTelemetryTracing()``
+
+This method is obsolete and you should migrate to the new ``AddOpenTelemetry().WithMetrics()`` method.
 
 # **Meter, Instruments and Measurements**
 
@@ -82,11 +89,11 @@ public class Program
 
 # **Types of Instruments**
 
-The OpenTelemetry specification provides 6 types of instruments that we can capture measurements with. 
+The OpenTelemetry specification provides **6 types of instruments** that we can capture measurements with. 
 
-This 6 types of instruments can be grouped into two categories: synchronous and asynchronous.
+These 6 types of instruments can be grouped into two categories: synchronous and asynchronous.
 
-- ## **Counter**
+## **Counter**
 
 A ``Counter`` is a synchronous instrument that is always increasing, and only accepts non–negative values.
 
@@ -102,7 +109,7 @@ BooksAddedCounter.Add(1);
 - ``Book`` represents the unit of measure. The unit of measure is an optional string provided by the author of the instrument.
 - ``Amount of books`` represents the instrument description. The description is an optional free-form text provided by the author of the instrument.
 
-- ## **Asynchronous Counter**
+## **Asynchronous Counter**
 
 An ``Asynchronous Counter`` is an asynchronous instrument which reports monotonically increasing value(s) when the instrument is being observed.
 
@@ -120,7 +127,7 @@ ObservableCounter<int> OrdersCanceledCounter = meter.CreateObservableCounter<int
 - ``Order`` represents the unit of measure. The unit of measure is an optional string provided by the author of the instrument.
 - ``Amount of orders cancelled`` represents the instrument description. The description is an optional free-form text provided by the author of the instrument.
 
-- ## **Histogram**
+## **Histogram**
 
 A ``Histogram`` is a synchronous instrument which allows the recording of multiple values that are statistically relevant to each other. 
 
@@ -139,7 +146,7 @@ Here's a quick example of how to create and use an ``Histogram`` instrument:
 - ``Number of books per order`` represents the instrument description. The description is an optional free-form text provided by the author of the instrument.
 
 
-- ## **Asynchronous Gauge**
+## **Asynchronous Gauge**
 
 An ``Asynchronous Gauge`` is designed to represent values that do not make sense to sum, even if they share attribute data.
 
@@ -158,39 +165,46 @@ ObservableGauge<int> TotalCategoriesGauge = meter.CreateObservableGauge<int>("to
 - ``Get total amount of categories`` represents the instrument description. The description is an optional free-form text provided by the author of the instrument.
 
 
-- ## **Up Down Counter**
+## **Up Down Counter**
 
-An ``UpDown Counter`` is a similar synchronous instrument to a ``Counter``, but it allows negative delta values to be passed. 
+An ``UpDownCounter`` is a similar synchronous instrument to a ``Counter``, but it allows negative delta values to be passed. 
 
-Where a ``Counter`` would be suited to represent the number of jobs that had been submitted, a ``UpDown Counter`` would be perfect to represent the current number of active jobs being processed (it can move up and down). 
+Where a ``Counter`` would be suited to represent the number of jobs that had been submitted, a ``UpDownCounter`` would be perfect to represent the current number of active jobs being processed (the current value can move up and down). 
 
-An ``UpDown Counter`` presents an ``Add`` operation that is identical to the ``Counter`` operation—with the exception that it accepts negative data values.
+An ``UpDownCounter`` presents an ``Add`` operation that is identical to the ``Counter`` operation—with the exception that it accepts negative data values.
 
-_Not available on .NET right now. More info about it in the next section._
+Here's a quick example of how to create and use a ``UpDownCounter`` instrument:
 
-- ## **Asynchronous Up Down Counter**
+```csharp
+UpDownCounter<int> TotalBooksUpDownCounter = meter.CreateUpDownCounter<int>("total-books", "Book", "Total books available in the shop");
+TotalBooksUpDownCounter.Add(1);
+TotalBooksUpDownCounter.Add(-1);
+```
+- ``total-books`` is the name of the ``UpDownCounter``.
+- ``Book`` represents the unit of measure. The unit of measure is an optional string provided by the author of the instrument.
+- ``Total books available in the shop`` represents the instrument description. The description is an optional free-form text provided by the author of the instrument.
 
-``Asynchronous UpDown Counter`` is an asynchronous instrument which reports additive value when the instrument is being observed.
+## **Asynchronous Up Down Counter**
+
+``Asynchronous UpDownCounter`` is an asynchronous instrument which reports additive value when the instrument is being observed.
 
 It provides a callback interface that returns one or more measurements, expressing each measurement as an absolute value which will be changed to a delta value internally.
 
-_Not available on .NET right now. More info about it in the next section._
+Here's a quick example of how to create and use an ``Asynchronous UpDownCounter`` instrument (aka ``ObservableUpDownCounter`` on .NET):
+
+```csharp
+ObservableUpDownCounter<int> TotalCategoriesUpDownCounter = meter.CreateObservableUpDownCounter<int>("total-categories", () => GetTotalCategories(), "Category", "Get total amount of categories");
+```
+- ``total-categories`` is the name of the ``UpDownCounter``.
+- ``() => GetTotalCategories()`` is the callback function responsible for reporting ``Measurements``.
+- ``Category`` represents the unit of measure. The unit of measure is an optional string provided by the author of the instrument.
+- ``Get total amount of categories`` represents the instrument description. The description is an optional free-form text provided by the author of the instrument.
 
 # **Types of Instruments available on .NET**
 
-In the above section we have seen the differents types of instruments available in the OpenTelemetry specification, but **.NET only supports 4 of the 6 instruments**
+In the above section we have seen the different types of instruments available in the OpenTelemetry specification,  **.NET has support for all of them**.   
 
-The supported instruments on .NET6 are the following ones:
-- ``Counter``.
-- ``ObservableCounter`` (aka ``Asynchronous Counter`` on the OpenTelemetry specification).
-- ``ObservableGauge`` (aka ``Asynchronous Gauge`` on the OpenTelemetry specification).
-- ``Histogram``.
- 
-The ``UpDown Counter`` and ``Asynchronous UpDown Counter`` instruments are **NOT** available right now on .NET. The ``Metrics API`` is incorporated directly into the .NET runtime itself, as part of the ``System.Diagnostics.DiagnosticSource`` package and that package does **NOT** support ``UpDown Counters`` nowadays.
-
-**The support for the ``UpDown Counter`` is expected with the release of the stable version of .NET7**.   
-More info about it here:
-- https://github.com/open-telemetry/opentelemetry-dotnet/issues/2362
+Keep in mind that the ``UpDownCounter`` and the ``Asynchronous UpDownCounter`` instruments are only available starting from .NET 7.
 
 # **Choosing the correct instrument**
 
@@ -198,7 +212,7 @@ Choosing the correct instrument to report measurements is critical to achieving 
 
 **I want to count something**
 - If the value is monotonically increasing (the delta value is always non-negative), use a ``Counter``
-- If the value is NOT monotonically increasing (the delta value can be positive, negative or zero), use an ``Asynchronous Gauge*``. 
+- If the value is NOT monotonically increasing (the delta value can be positive, negative or zero), use an ``UpDownCounter``. 
 
 **I want to record or time something**
 - If you expect that the collected statistics are meaningful, use a ``Histogram``
@@ -206,8 +220,8 @@ Choosing the correct instrument to report measurements is critical to achieving 
 **I want to measure something**
 - If it makes NO sense to add up the values across different sets of attributes, use an ``Asynchronous Gauge``.
 - If it makes sense to add up the values across different sets of attributes and the value is monotonically increasing, use an ``Asynchronous Counter``.
+- If it makes sense to add up the values across different sets of attributes and the value is NOT monotonically increasing, use an ``Asynchronous UpDownCounter``.
 
-_*The correct instrument to use here is an ``UpDown Counter`` but .NET does not support this kind of instrument, so you'll have to use an ``Asynchronous Gauge`` as a workaround._
 
 # **Exporters**
 
@@ -231,7 +245,7 @@ It eases the integration with your apps because you only need to export your dat
 To send metrics to the OpenTelemetry Collector in .NET, you'll need to install the ``OpenTelemetry.Exporter.OpenTelemetryProtocol`` NuGet package on your application and configure the ``MeterProvider`` using the ``AddOtlpExporter`` extension method, like this:
 
 ```csharp
-builder.Services.AddOpenTelemetryMetrics(opts => opts
+builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
     .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("BookStore.WebApi"))
     .AddMeter(meters.MetricName)
     .AddOtlpExporter(opts =>
@@ -242,15 +256,14 @@ builder.Services.AddOpenTelemetryMetrics(opts => opts
 
 ## **Exporting the data directly into a backend**
 
-You can export the metrics directly to a backend using the ``OpenTelemetry.Exporter.*
-`` NuGet packages
+You can export the metrics directly to a backend using the ``OpenTelemetry.Exporter.*`` NuGet packages
 
 ![otel-metrics-exporter-backend](/img/otel-metrics-exporter-backend.png)
 
 Here's an example of how to send the metrics data directly to Prometheus using the ``OpenTelemetry.Exporter.Prometheus.AspNetCore`` NuGet package:
 
 ```csharp
-builder.Services.AddOpenTelemetryMetrics(opts => opts
+builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
     .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("BookStore.WebApi"))
     .AddMeter(meters.MetricName)
     .AddPrometheusExporter());
