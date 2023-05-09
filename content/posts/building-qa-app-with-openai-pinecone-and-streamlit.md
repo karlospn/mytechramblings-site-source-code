@@ -238,8 +238,8 @@ Go to Azure OpenAI > Navigate to "Model Deployments" and deploy a ``gpt-4`` or `
 
 ## **2. Build the querying app using Streamlit**
 
-We are going to set up a simple form with a text input field where the user can type the question they want and a submit button.    
-Once the user types the question in the text input and presses the submit button, the following steps will be executed:
+We are going to set up a simple form with a text input field where the users can type the question they want to ask and a submit button.    
+Once a user types a question in the text input and presses the submit button, the following steps will be executed:
 - Transform the user's query into a vector embedding using Azure OpenAI ``text-embedding-ada-002`` model.
 - Retrieve the relevant information to the user query from PineCone.
 - Assemble a prompt.
@@ -355,15 +355,15 @@ if st.button("Search"):
             st.error(f"Error with OpenAI Chat Completion: {e}")
 ```
 
-As you may have seen in the code block above, the entirety of the query app is no more than 100 lines of code and is quite simple to understand. 
+If you have taken a look at the code block above, you may have seen that the entirety of the query app is no more than 100 lines of code and also it is quite simple to understand. 
 
 But nonetheless, I'll try to explain the most relevant parts.
 
 ## **2.1. Transform the user's query into a vector embedding**
 
-To transform the user question into a vector embedding, we'll be using the ``text-embedding-ada-002`` model from Azure OpenAI alongside with the ``openai`` Python package.
+To transform the user question into a vector embedding, we'll be using the ``text-embedding-ada-002`` model from Azure OpenAI.
 
-To create the embedding we just have to invoke the ``Embedding.create`` method specifying the model that will be used to generate the vector and the user query we want to convert.
+To create the embedding we just have to invoke the ``Embedding.create`` method from the ``openai`` Python package. This method needs two parameters: the LLM model that will be used to generate the vector embedding and the text we want to transform.
 
 ```python
 # Convert your query into a vector using Azure OpenAI
@@ -380,13 +380,13 @@ except Exception as e:
 ## **2.2. Retrieve the relevant information from Pinecone and assemble the prompt**
 
 The ``index.query`` method from the Pinecone client allow us to retrieve the relevant information from the knowledge database.    
-The ``top_k`` parameter is used to specify how many vectors we want to retrieve, in this case we're returning the 3 vectors that are most similar to our question.
+The ``top_k`` parameter is used to specify how many vectors we want to retrieve, for this example we're retrieving the top 3 vectors that are most similar to our question.
 
-- Why did we retrieve 3 vectors from our knowledge base instead of just one? 
+- Why did we retrieve 3 vectors from our knowledge database instead of just one? 
 
-When we saved the document, we partitioned the data into multiple chunks, so it's possible that the complete answer to our question is not located in just one vector but in more than one. That's why in this case we retrieve 3 vectors.
+When we saved the document, we partitioned the data into multiple chunks, so it's possible that the complete answer to our question is not located in just one vector but in more than one. That's why we're retrieving 3 vectors.
 
-Once we have retrieved the vectors from Pinecone, we group them into a single 'string'. This 'string' represents the context that we will add to the prompt and in which we will specify to GPT-4 that it can only respond using the information given in this context, and in no case can it make up any data.
+Once we have retrieved the vectors from Pinecone, we merge them into a single 'string'. This 'string' represents the context that we will add to the prompt and in which we will specify to GPT-4 that it can only respond using the information given in this context, and in no case can use any data from outside this context to generate the answer to our question.
 
 ```python
 search_response = index.query(
@@ -411,7 +411,7 @@ CONTEXT:
 """
 ```
 
-## **2.2. Send the prompt through to GPT-4 and get the answer that comes back**
+## **2.2. Send the prompt to GPT-4 and get the answer that comes back**
 
 The last step is sending the prompt to GPT-4 using the ``ChatCompletion.create`` method from the ``openai`` Python package and get the answer that comes back.
 
@@ -444,13 +444,13 @@ And finally, all we have to do is to obtain the response returned by GPT-4 and d
 
 Let's test if the query app works correctly. 
 
-> Remember that the document we used to fill the knowledge base is the Microsoft .NET Microservices book, so all questions we ask must have to be about that spefici topic.
+> Remember that the document we used to fill the knowledge base is the Microsoft .NET Microservices book, so all questions we ask should be about that specific topic.
 
 - Question 1:
 
 ![app-result-1](/img/qa-gpt-app-streamlit-result-1.png)
 
-For every question we can also inspect whichs chunks of text are being retrieved from Pinecone and feed to GPT-4 to build the response.
+For every question we can also inspect which chunks of text are being retrieved from Pinecone and feed to GPT-4 to build the response.
 
 ![app-result-chunk](/img/qa-gpt-app-streamlit-result-chunks.png)
 
