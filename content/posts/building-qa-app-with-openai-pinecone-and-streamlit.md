@@ -1,9 +1,9 @@
 ---
 title: "Building a Q&A app capable of answering questions related to your enterprise documents using Azure OpenAI's GPT-4, Pinecone and Streamlit."
-date: 2023-05-08T16:53:31+02:00
+date: 2023-05-10T10:03:31+02:00
 tags: ["python", "openai", "ai", "azure", "embeddings", "llm"]
 description: "The purpose of this post is to show you how to build a basic GPT-4 Q&A app in just a couple of hours that is capable of answering questions about your company's internal documents. We will use Azure OpenAI, Pinecone and Streamlit to build it."
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
