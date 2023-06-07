@@ -2,7 +2,7 @@
 title: "Chiseled Ubuntu container images and .NET"
 date: 2023-06-05T16:43:07+02:00
 tags: ["docker", "containers", "dotnet", "security", "ubuntu", "debian"]
-description: "TBD"
+description: "In this blog post, we will explore what're the Chiseled Ubuntu Containers and how can be used with .NET to create a more secure environment for running your containerized applications."
 draft: true
 ---
 
@@ -27,7 +27,7 @@ This kind of images are built using Ubuntu 22.04 OS, but are heavily stripped do
 
 # **.NET in Chiseled Ubuntu Containers**
 
-A huge benefit of using chiselled Ubuntu images for your containerised .NET apps is their reduced size, they are significantly smaller than traditional container images.   
+A benefit of using chiselled Ubuntu images for your containerised .NET apps is their reduced size, they are significantly smaller than traditional container images.   
 
 In addition to not including any operating system-level packages or libraries that are not required at runtime, chiselled Ubuntu images do not include any package manager nor shell.
 
@@ -37,19 +37,57 @@ Comparing the size of the Ubuntu-based .NET containers using both types of image
 
 Right now (06/06/2023), Chiseled Ubuntu container images are available for .NET 6, .NET 7 and .NET 8, but are **still in preview**.
 
-The .NET 6 and .NET 7 images can be found only in the nightly repositories while still in preview.
+The .NET 6 and .NET 7 images for AMD64 and ARM architectures can be found only in the nightly repositories while still in preview.
 
-- ``runtime`` images
-- ``runtime-deps`` images
-- ``aspnet
+**.NET 6 Ubuntu Chiseled images for Amd64 architecture**
+- ``mcr.microsoft.com/dotnet/nightly/runtime:6.0-jammy-chiseled``
+- ``mcr.microsoft.com/dotnet/nightly/runtime-deps:6.0-jammy-chiseled``
+- ``mcr.microsoft.com/dotnet/nightly/aspnet:6.0-jammy-chiseled``
 
-<add-links>
+**.NET 7 Ubuntu Chiseled images for Amd64 architecture**
+- ``mcr.microsoft.com/dotnet/nightly/runtime:7.0-jammy-chiseled``
+- ``mcr.microsoft.com/dotnet/nightly/runtime-deps:7.0-jammy-chiseled``
+- ``mcr.microsoft.com/dotnet/nightly/aspnet:7.0-jammy-chiseled``
+
+**.NET 6 Ubuntu Chiseled images for Arm64 architecture**
+- ``mcr.microsoft.com/dotnet/nightly/runtime:6.0-jammy-chiseled-arm64v8``
+- ``mcr.microsoft.com/dotnet/nightly/runtime-deps:6.0-jammy-chiseled-arm64v8``
+- ``mcr.microsoft.com/dotnet/nightly/aspnet:6.0-jammy-chiseled-arm64v8``
+
+**.NET 7 Ubuntu Chiseled images for Arm64 architecture**
+- ``mcr.microsoft.com/dotnet/nightly/runtime:7.0-jammy-chiseled-arm64v8``
+- ``mcr.microsoft.com/dotnet/nightly/runtime-deps:7.0-jammy-chiseled-arm64v8``
+- ``mcr.microsoft.com/dotnet/nightly/aspnet:7.0-jammy-chiseled-arm64v8``
+
+**.NET 6 Ubuntu Chiseled images for Arm32 architecture**
+- ``mcr.microsoft.com/dotnet/nightly/runtime:6.0-jammy-chiseled-arm32v7``
+- ``mcr.microsoft.com/dotnet/nightly/runtime-deps:6.0-jammy-chiseled-arm32v7``
+- ``mcr.microsoft.com/dotnet/nightly/aspnet:6.0-jammy-chiseled-arm32v7``
+
+**.NET 7 Ubuntu Chiseled images for Arm64 architecture**
+- ``mcr.microsoft.com/dotnet/nightly/runtime:7.0-jammy-chiseled-arm32v7``
+- ``mcr.microsoft.com/dotnet/nightly/runtime-deps:7.0-jammy-chiseled-arm32v7``
+- ``mcr.microsoft.com/dotnet/nightly/aspnet:7.0-jammy-chiseled-arm32v7``
 
 The .NET 8 images are also still in preview (.NET 8 has not been released yet), but can be found in the official repositories.
 
-<add-links>
+**.NET 8 Ubuntu Chiseled images for Amd64 architecture**
+- ``mcr.microsoft.com/dotnet/runtime:8.0-preview-jammy-chiseled``
+- ``mcr.microsoft.com/dotnet/runtime-deps:8.0-preview-jammy-chiseled``
+- ``mcr.microsoft.com/dotnet/aspnet:8.0-preview-jammy-chiseled``
 
-As you can see the Chiseled Ubuntu images are only available for the runtime and aspnet image, there isn't a Chiseled image with the .NET SDK because there isn't a specific need for it. Chiseled images are intended for running .NET applications, not for compiling them. For compiling the app, you can use any of the other available base images.
+**.NET 8 Ubuntu Chiseled images for Arm64 architecture**
+- ``mcr.microsoft.com/dotnet/runtime:8.0-preview-jammy-chiseled-arm64v8``
+- ``mcr.microsoft.com/dotnet/runtime-deps:8.0-preview-jammy-chiseled-arm64v8``
+- ``mcr.microsoft.com/dotnet/aspnet:8.0-preview-jammy-chiseled-arm64v8``
+
+**.NET 8 Ubuntu Chiseled images for Arm32 architecture**
+- ``mcr.microsoft.com/dotnet/runtime:8.0-preview-jammy-chiseled-arm32v7``
+- ``mcr.microsoft.com/dotnet/runtime-deps:8.0-preview-jammy-chiseled-arm32v7``
+- ``mcr.microsoft.com/dotnet/aspnet:8.0-preview-jammy-chiseled-arm32v7``
+
+
+As you can see the Chiseled Ubuntu images are only available for the ``runtime``, ``runtime-deps`` and ``aspnet`` image, there isn't a Chiseled image with the .NET SDK because there isn't a specific need for it. Chiseled images are intended for running .NET applications, not for compiling them. For compiling the app, you can use any of the other available base images.
 
 ![chiseled-vs-standard-size-comparison](/img/chiseled-vs-standard-size-comparison.png)
 
@@ -72,7 +110,8 @@ docker run -p 5055:8080 aspnetapp
 ```
 
 The next code snippet shows how the non-user root user is setup into Ubuntu Chiseled image.
-```yaml
+
+```yml
 RUN groupadd \
         --system \
         --gid=64198 \
@@ -109,17 +148,14 @@ Therefore, I believe that making a comparison between a "Hello World" app built 
 | Base Image                        | Operating System      | Image size |
 |-----------------------------------|-----------------------|------------|
 | runtime-deps:7.0-bullseye-slim    | Debian 11             | XXXMB      |
-| runtime-deps:7.0.5-jammy          | Ubuntu 22.04          | YYYMB      |
 | runtime-deps:7.0.5-jammy-chiseled | Chiseled Ubuntu 22.04 | ZZZMB      |
 | runtime:7.0-bullseye-slim         | Debian 11             | XXXMB      |
-| runtime:7.0.5-jammy               | Ubuntu 22.04          | YYYMB      |
 | runtime:7.0.5-jammy-chiseled      | Chiseled Ubuntu 22.04 | ZZZMB      |
 | aspnet:7.0-bullseye-slim          | Debian 11             | XXXMB      |
-| aspnet:7.0.5-jammy                | Ubuntu 22.04          | YYYMB      |
 | aspnet:7.0.5-jammy-chiseled       | Chiseled Ubuntu 22.04 | ZZZMB      |
 
 
-## **Resource comparison**
+## **Resource usage comparison**
 
 - The app is a simple "Hello World" API built with .NET 7.
 - The measurements are taken using [Microsoft Crank](https://github.com/dotnet/crank)
