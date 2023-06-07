@@ -141,27 +141,50 @@ The default operating system for working with containers in .NET has always been
 
 Therefore, I believe that making a comparison between a "Hello World" app built with .NET 7 using Debian 11 (Bullseye) as the base image and another one using Ubuntu Chiseled (Jammy) as the base image could be interesting.
 
-## **Size comparison**
+## **Image size comparison**
 
-- The app is a simple "Hello World" API built with .NET 7.
+### **.NET 7 base image size comparison**
+
+First of all, let's do a comparison between the size of the base images between a Debian 11 base image and a Ubuntu Chiseled one.
+
+| Base Image                        | Operating System      | Image size |
+|-----------------------------------|-----------------------|------------|
+| runtime-deps:7.0-bullseye-slim    | Debian 11             | 118MB      |
+| runtime-deps:7.0-jammy-chiseled   | Chiseled Ubuntu 22.04 | 13MB       |
+| runtime:7.0-bullseye-slim         | Debian 11             | 191MB      |
+| runtime:7.0-jammy-chiseled        | Chiseled Ubuntu 22.04 | 86.2MB     |
+| aspnet:7.0-bullseye-slim          | Debian 11             | 213MB      |
+| aspnet:7.0-jammy-chiseled         | Chiseled Ubuntu 22.04 | 108MB      |
+
+
+The difference in size for the base images are quite considerable. When building an app, I personally tend to favour the use of the ``runtime-deps`` image over the other two, and as we can see in the comparison, the space savings achieved by using chiseled containers are significant.
+
+For applications that are deployed at scale and much more so in distributed and edge computing environments, this can result in significant storage and deployment cost savings.
+
+Now, let's make another comparison adding a .NET app on top of the base image.
+
+### **.NET 7 API image size comparison**
+
+The app is a simple "Hello World" API built with .NET 7, we have built the app image using different base images and now we're going to compare the image size.
 
 | Base Image                        | Operating System      | Image size |
 |-----------------------------------|-----------------------|------------|
 | runtime-deps:7.0-bullseye-slim    | Debian 11             | XXXMB      |
-| runtime-deps:7.0.5-jammy-chiseled | Chiseled Ubuntu 22.04 | ZZZMB      |
+| runtime-deps:7.0-jammy-chiseled   | Chiseled Ubuntu 22.04 | ZZZMB      |
 | runtime:7.0-bullseye-slim         | Debian 11             | XXXMB      |
-| runtime:7.0.5-jammy-chiseled      | Chiseled Ubuntu 22.04 | ZZZMB      |
+| runtime:7.0-jammy-chiseled        | Chiseled Ubuntu 22.04 | ZZZMB      |
 | aspnet:7.0-bullseye-slim          | Debian 11             | XXXMB      |
-| aspnet:7.0.5-jammy-chiseled       | Chiseled Ubuntu 22.04 | ZZZMB      |
+| aspnet:7.0-jammy-chiseled         | Chiseled Ubuntu 22.04 | ZZZMB      |
 
 
 ## **Resource usage comparison**
 
-- The app is a simple "Hello World" API built with .NET 7.
-- The measurements are taken using [Microsoft Crank](https://github.com/dotnet/crank)
+- The app used for this comparison has the following features:
+    - It is a simple "Hello World" API built with .NET 7.
+    - Uses the ``runtime-deps`` base image.
 
-Crank is the benchmarking infrastructure used by the .NET team to run benchmarks including scenarios from the TechEmpower Web Framework Benchmarks.
-
+- The measurements are taken with [Microsoft Crank](https://github.com/dotnet/crank)
+    - Crank is the benchmarking infrastructure used by the .NET team to run benchmarks including scenarios from the TechEmpower Web Framework Benchmarks.
 
 
 # **Security issues**
