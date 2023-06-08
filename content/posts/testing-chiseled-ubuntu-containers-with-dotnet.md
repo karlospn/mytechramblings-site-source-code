@@ -1,5 +1,5 @@
 ---
-title: "Chiseled Ubuntu container images and .NET"
+title: "Testing Chiseled Ubuntu container images with .NET"
 date: 2023-06-05T16:43:07+02:00
 tags: ["docker", "containers", "dotnet", "security", "ubuntu", "debian"]
 description: "In this blog post, we will explore what're the Chiseled Ubuntu Containers and how can be used with .NET to create a more secure environment for running your containerized applications."
@@ -314,3 +314,4 @@ ENTRYPOINT ["./BookStore.WebApi"]
 And we're done! Really easy.
 
 # **Conclusion**
+
