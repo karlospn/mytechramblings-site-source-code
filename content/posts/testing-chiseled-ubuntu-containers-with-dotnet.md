@@ -6,7 +6,7 @@ description: "In this blog post, we will explore what're the Chiseled Ubuntu Con
 draft: true
 ---
 
-# **What are chiseled Ubuntu containers?**
+# **What are chiseled Ubuntu images?**
 
 Chiselled Ubuntu images are inspired by the "distroless" concept, meaning they contain only your application and its runtime dependencies, without any additional operating system-level packages or libraries. This makes them lightweight, secure, and efficient.
 
@@ -230,7 +230,7 @@ Also keep in mind that they do not include a package manager or shell, which com
 
 Running scripts or commands in a running container is not considered a good security practice. However, if you are currently doing it, please be aware that by default, you won't be able to do so with this type of image.
 
-## **Vulnerability scanning comparison**
+## **Vulnerability scanning benchmark**
 
 In this section we'll compare the security vulnerabilities between an app using Debian 11 (Bookworm) as the base image and another one using Chiseled Ubuntu 22.04 (Jammy) as the base image. 
 
@@ -348,3 +348,17 @@ And we're done! Really easy.
 
 # **Conclusion**
 
+In this post, we have seen what the Chiseled Ubuntu images are, what characteristics they have, and how to use them with .NET.
+
+The most important point of this post was to assess the viability of Chiseled Ubuntu images and whether we can use them as the base image in our .NET applications. For that purpose, we conducted a series of benchmarks and comparisons between a .NET 7 API using a Debian 11 base image and the same .NET 7 API using the Chiseled Ubuntu base image.
+
+Why did we specifically compare it to Debian 11?    
+Because Debian is the recommended distribution by Microsoft since .NET Core 2.1. In fact, if we add a Dockerfile from Visual Studio to a .NET app right now, the generated Dockerfile will use Debian as the base image.
+
+And what has been the result of this comparison?    
+Well, the truth is that the result is quite surprising. Using a Chiseled Ubuntu image as the base image instead of Debian results in:
+- Smaller image sizes for our .NET applications
+- Better memory usage
+- Fewer security vulnerabilities.
+
+As of today (06/09/2023), Chiseled Ubuntu images are still in preview. However, once they become generally available (GA), there is no reason not to use them over other distributions.
