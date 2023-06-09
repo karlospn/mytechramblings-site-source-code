@@ -141,9 +141,9 @@ The default operating system for working with containers in .NET has always been
 
 Therefore, I believe that making a comparison between a "Hello World" app built with .NET 7 using Debian 11 (Bullseye) as the base image and another one using Ubuntu Chiseled (Jammy) as the base image could be interesting.
 
-## **Image size comparison**
+## **Image size comparison benchmark**
 
-### **Base image size comparison**
+### **Base image size comparison benchmark**
 
 First, a comparison between the size of the .NET 7 base images with Debian 11 as a base image or with a Chiseled Ubuntu 22.04 base image.
 
@@ -161,7 +161,7 @@ The difference in size for the base images are quite considerable. When building
 
 Now, let's make another comparison adding a .NET app on top of the base image.
 
-### **API image size comparison**
+### **API image size comparison benchmark**
 
 The API is nothing fancy, it is the default "WeatherForecast" minimal Api. 
 
@@ -178,16 +178,49 @@ It makes no sense to use the ``runtime`` base image for an API, so we're going t
 The difference in size after adding a .NET 7 API keeps being quite considerable between using Debian 11 or a Chiseled Ubuntu image.   
 For applications that are deployed at scale and much more so in distributed and edge computing environments, using the Chiseled Ubuntu as a base image over Debian 11 can result in significant storage and deployment cost savings.
 
-## **Resource usage comparison**
+## **Resource usage comparison benchmark**
 
-- The app used for this comparison has the following features:
-    - It is a simple "Hello World" API built with .NET 7.
+- The app used for this comparison benchmark has the following features:
+    - It is the default .NET 7 "WeatherForecast" minimal Api
     - Uses the ``runtime-deps`` base image.
 
-- The measurements are taken with [Microsoft Crank](https://github.com/dotnet/crank)
-    - Crank is the benchmarking infrastructure used by the .NET team to run benchmarks including scenarios from the TechEmpower Web Framework Benchmarks.
+- To generate load, we'll be using [Bombardier](https://github.com/codesenberg/bombardier) with the following parameters. 
 
-TODO
+**Scenario 1**
+  - 1200 total requests
+  - 60 seconds duration
+  - 20 requests/sec
+  - bombardier command: ``bombardier --connections=20 --requests=1200 --duration=60s --rate=20 --fasthttp http://localhost:5051/weatherforecast``
+
+**Scenario 2**
+  - 3000 total requests
+  - 60 seconds duration
+  - 50 requests/sec
+  - bombardier command: ``bombardier --connections=50 --requests=3000 --duration=60s --rate=50 --fasthttp http://localhost:5051/weatherforecast``   
+
+
+Each scenario will be executed 20 times using the .NET API with the base image ``runtime-deps:7.0-jammy-chiseled``, and another 20 times using the same API with the base image ``runtime-deps:7.0-bullseye-slim``
+
+Once we have all the executions, we will calculate the average of the **MAX CPU USAGE** and **MAX MEMORY USAGE** for each base image.
+
+- **Scenario 1 results**
+
+| Base Image                      | Operation System      | Max. CPU percentage | Max. memory usage |
+|---------------------------------|-----------------------|---------------------|-------------------|
+| runtime-deps:7.0-bullseye-slim  | Debian 11             | 0.04%               | 30.14MB           |
+| runtime-deps:7.0-jammy-chiseled | Chiseled Ubuntu 22.04 | 0.03%               | 27.56MB           |
+
+- **Scenario 2 results**
+
+| Base Image                      | Operation System      | Max. CPU percentage | Max. memory usage |
+|---------------------------------|-----------------------|---------------------|-------------------|
+| runtime-deps:7.0-bullseye-slim  | Debian 11             | 0.06%               | 32.21MB           |
+| runtime-deps:7.0-jammy-chiseled | Chiseled Ubuntu 22.04 | 0.06%               | 34.48MB           |
+
+
+As we can see, CPU usage is practically identical whether we use one base image or the other.    
+However, there is a slight difference in memory usage, where the version of the API that uses the Chiseled Ubuntu image as base image has consumed less memory in each and every test conducted.
+
 
 # **Security issues**
 
