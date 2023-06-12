@@ -1,9 +1,9 @@
 ---
 title: "Testing Chiseled Ubuntu container images with .NET"
-date: 2023-06-05T16:43:07+02:00
-tags: ["docker", "containers", "dotnet", "security", "ubuntu", "debian"]
+date: 2023-06-12T10:03:07+02:00
+tags: ["docker", "containers", "dotnet", "ubuntu", "debian"]
 description: "The objective of this post is to test Ubuntu Chiseled images in combination with .NET, evaluating whether it is truly worthwhile to migrate our .NET apps to utilize these base images or not."
-draft: true
+draft: false
 ---
 
 # **What are Chiseled Ubuntu images?**
