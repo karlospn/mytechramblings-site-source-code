@@ -218,8 +218,8 @@ Once we have all the execution times, we will calculate the average of the **MAX
 
 | Image                                                          | Operation System      | Max. CPU percentage | Max. memory usage |
 |----------------------------------------------------------------|-----------------------|---------------------|-------------------|
-| .NET 7 API using ``runtime-deps:7.0-bullseye-slim`` as base image  | Debian 11             | 0.06%               | 32.21MB           |
-| .NET 7 API using ``runtime-deps:7.0-jammy-chiseled`` as base image | Chiseled Ubuntu 22.04 | 0.06%               | 34.48MB           |
+| .NET 7 API using ``runtime-deps:7.0-bullseye-slim`` as base image  | Debian 11             | 0.06%               | 34.48MB           |
+| .NET 7 API using ``runtime-deps:7.0-jammy-chiseled`` as base image | Chiseled Ubuntu 22.04 | 0.06%               | 32.21MB           |
 
 
 As we can see, CPU usage is practically identical whether we use one base image or the other.    
