@@ -56,7 +56,7 @@ The GPT-4 model will be used to generate the responses to the user interactions.
 
 To deploy it: Go to the ``Azure Portal`` > Go to the ``Azure OpenAI`` service > Navigate to ``Model Deployments`` > Click ``Manage Deployments`` > Click ``Create new deployment`` and deploy a ``gpt-4`` or ``gpt-4-32k`` model.
 
-<add-img>
+![deploy-gpt4-model](/img/enhancing-csharp-app-deploy-gpt4-model.png)
 
 The ``deployment name`` can be whatever you want.
 
@@ -254,7 +254,7 @@ To build the user interface I'm using [Streamlit](https://streamlit.io/). I deci
 
 Here's a screenshot of how the end result will look like:
 
-![app-homescreen](https://raw.githubusercontent.com/karlospn/building-a-csharp-enhancing-app-with-openai-and-streamlit/main/imgs/enhancing-csharp-app-homescreen.png)
+![app-homescreen](/img/enhancing-csharp-app-homescreen.png)
 
 Now, let's take a look at the source code and then I’ll try to explain the most relevant parts.
 
@@ -406,20 +406,24 @@ Now, let’s test if the app works correctly.
 
 - When you upload a csharp file, the file source code can be viewed in a code block.
 
-![app-upload](https://raw.githubusercontent.com/karlospn/building-a-csharp-enhancing-app-with-openai-and-streamlit/main/imgs/enhancing-csharp-app-upload-source-code.png)
+![app-upload](/img/enhancing-csharp-app-upload-source-code.png)
 
 - When you run the _"Add XML comments"_ functionality, the result is displayed in another code block.
 
-![app-xml-comments-result](https://raw.githubusercontent.com/karlospn/building-a-csharp-enhancing-app-with-openai-and-streamlit/main/imgs/enhancing-csharp-app-xml-comments-source-code.png)
+![app-xml-comments-result](/img/enhancing-csharp-app-xml-comments-source-code.png)
 
 - Here's the explanation given by GPT-4 when you run the _"Explain code"_ functionality.
 
-![app-explain-code](https://raw.githubusercontent.com/karlospn/building-a-csharp-enhancing-app-with-openai-and-streamlit/main/imgs/enhancing-csharp-app-explain-code.png)
+![app-explain-code](/img/enhancing-csharp-app-explain-code.png)
 
 - Here's an example of the suggestions given by GPT-4 when you run the _"Suggest code improvements"_ functionality.
 
-![app-suggestions](https://raw.githubusercontent.com/karlospn/building-a-csharp-enhancing-app-with-openai-and-streamlit/main/imgs/enhancing-csharp-app-code-suggestions.png)
+![app-suggestions](/img/enhancing-csharp-app-code-suggestions.png)
 
 - When you run the _"Generate unit tests"_ functionality, the result is displayed in a code block.
 
-![app-unit-test](https://raw.githubusercontent.com/karlospn/building-a-csharp-enhancing-app-with-openai-and-streamlit/main/imgs/enhancing-csharp-app-unit-test-generation.png)
+![app-unit-test](/img/enhancing-csharp-app-unit-test-generation.png)
+
+- If you try to generate unit tests from a file which makes no sense (e.g. ``Program.cs``), the response will be that no tests are available.
+
+![app-no-unit-test](/img/enhancing-csharp-app-no-unit-test-generation.png)
