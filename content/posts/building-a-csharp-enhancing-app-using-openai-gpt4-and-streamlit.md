@@ -3,7 +3,7 @@ title: "Building a C# enhancing app using Azure OpenAI GPT-4 and Streamlit"
 date: 2023-07-10T10:00:01+02:00
 tags: ["dotnet", "csharp", "python", "openai", "ai", "azure", "llm"]
 description: "This post demonstrates the simplicity of developing an app that can enhances a C# file using only GenAI's basic skills. By utilizing Azure OpenAI GPT-4 model, the app can effortlessly add or improve XML comments, provide code explanations, suggest enhancements, and generate unit tests for any given C# file."
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
