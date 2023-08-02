@@ -14,15 +14,16 @@ description: "In this post, we will explore several real-world scenarios where H
 I'm well aware that there are a ton of great articles (and probably better than this one) on the Internet, explaining exactly how you should properly use ``HttpClient`` with .NET.    
 However, the truth is, even with so many resources available, I still come across many cases where its usage is incorrect.
 
-Therefore, I have decided to write a quick post about the most common scenarios to use ``HttpClient`` nowadays.
+Therefore, I have decided to write a brief post about the most common use scenarios of ``HttpClient``.
 
-I don't intend to provide a theoretical explanation of how ``HttpClient`` works internally. Instead, my goal is to make **a post that highlights various common scenarios where HttpClient is utilized and discuss the reasons behind its appropriate or inappropriate usage.**
+As I said, I have no intention of writing a theoretical post explaining the ins and outs of how ``HttpClient`` works.   
+My goal here is to create **a concise post that highlights various common scenarios where ``HttpClient`` is utilized and discuss the reasons behind its appropriate or inappropriate usage.**
 
 # **netstat command**
 
 The ``netstat`` command is a networking tool that allows us to investigate active network connections on a system, and in this post I will make extensive use of it to monitor ``HttpClient`` TCP connections.
 
-``HttpClient`` is used to make HTTP requests to web servers and APIs, and it relies on underlying network connections to perform these tasks. By leveraging the ``netstat`` command, we can gain insights into the active connections created by ``HttpClient``, helping us identify potential issues.
+``HttpClient`` is used to make HTTP requests to web servers and APIs, and it relies on underlying network connections to perform these tasks. By leveraging the ``netstat`` command, we can gain insights into the active TCP connections created by ``HttpClient``, helping us identify potential issues.
 
 To investigate the active TCP connections that ``HttpClient`` creates using ``netstat``, you can open a command prompt or terminal and enter ``netstat -ano`` (the '-a' flag shows all connections, the '-n' flag displays IP addresses and port numbers, and the '-o' flag displays the associated process ID (PID) ).   
 The output will provide a list of all active connections, along with their status, local and remote IP addresses, and associated PID process.
@@ -80,18 +81,20 @@ public class ScenarioOneController : ControllerBase
 ## netstat output
 
 - Every time a new request comes in, a new TCP connection is created.
-- TCP connections are not being neither re-used nor closed after being used, which means that they will hang for some time waiting for incoming data.
 
 > _The next video shows how for every request made at the ``ScenarioOneController`` a new TCP connection is created_
 
 {{< video src="/videos/httpclient-scenario1-established.mp4" type="video/mp4" preload="auto" >}}
 
+- TCP connections are not closed after being used, which means that they will hang for some time waiting for incoming data.
 - After 2 minutes (default idle timeout) of hanging around doing nothing, the TCP connections will be closed by the operating system and moved to a ``TIME_WAIT`` state. 
 
 {{< video src="/videos/httpclient-scenario1-timewait.mp4" type="video/mp4" preload="auto" >}}
 
-- The ``TIME_WAIT`` state is a normal part of the TCP connection termination process, and it occurs after a connection is closed. During this state, the socket remains in the system for a specific period to ensure that any delayed or out-of-order packets related to the closed connection do not interfere with new connections using the same port. The duration of the ``TIME_WAIT`` state can vary depending on the operating system and TCP implementation. 
-- In most modern systems, the ``TIME_WAIT`` state typically lasts for 30 seconds to 2 minutes. 
+- The ``TIME_WAIT`` state is a normal part of the TCP connection termination process, and it occurs after a connection is closed.    
+During this state, the socket remains in the system for a specific period to ensure that any delayed or out-of-order packets related to the closed connection do not interfere with new connections using the same port.    
+The duration of the ``TIME_WAIT`` state can vary depending on the operating system and TCP implementation. 
+- In most modern systems, the ``TIME_WAIT`` state typically lasts for 30 seconds to 2 minutes.
 
 {{< video src="/videos/httpclient-scenario1-timewait2.mp4" type="video/mp4" preload="auto" >}}
 
@@ -102,7 +105,7 @@ public class ScenarioOneController : ControllerBase
 - None
 
 ### Cons
-- A new ``HttpClient`` is being created every time a new request comes in, which means that the application has a unnecessary overhead from establishing a new TCP connection for every single request.
+- A new ``HttpClient`` is being created every time a new request comes in, which means that the application has an unnecessary overhead from establishing a new TCP connection for every single request.
 - If the app is under heavy load this approach can lead to an accumulation of TCP connections on a ``ESTABLISHED`` state or in a ``TIME_WAIT`` state, which can cause a port exhaustion problem.
 
 
@@ -143,8 +146,8 @@ public class ScenarioTwoController : ControllerBase
 ## netstat output
 
 - Every time a new request comes in, a new TCP connection is created.
-- Like scenario 1, TCP connections are not being re-used either, but this time the TCP connections are being closed right after being used.
-- The fact that the ``HttpClient`` gets disposed right away (because of the ``using`` parameter) causes the TCP connections to move directly to a ``TIME_WAIT`` state.
+- Like scenario 1, TCP connections are not being reused for subsequent requests, but this time the TCP connections are being closed right after being used.
+- The fact that the ``HttpClient`` gets disposed right away (because of the ``using`` block) causes the TCP connections to move directly to a ``TIME_WAIT`` state.
 
 {{< video src="/videos/httpclient-scenario2.mp4" type="video/mp4" preload="auto" >}}
 
@@ -152,13 +155,14 @@ public class ScenarioTwoController : ControllerBase
 
 ## Pros & cons of this scenario
 ### Pros
-- In this scenario, it is less likely for the application to suffer from port exhaustion issues. In scenario 1, for each request, the TCP connection would remain in a ``ESTABLISHED`` state for a few minutes until the operating system forced it to close.    
-Contrastingly, in scenario 2, as we are disposing of the HTTP client after its use, the connection is promptly closed, eliminating the period of time during which the connection was hanging around in a ``ESTABLISHED`` state doing nothing.
+- In this scenario, it is less likely for the application to experience port exhaustion issues.   
+In scenario 1, for each request, the TCP connection would remain in an ``ESTABLISHED`` state for a few minutes until the operating system forced it to close.    
+In contrast, in scenario 2, since we are disposing of the HTTP client after its use, the connection is promptly closed, eliminating the period of time during which the connection was lingering in an ``ESTABLISHED`` state.
 
 ### Cons
-- A new ``HttpClient`` is being created every time a new request comes in, which means that the application has a unnecessary overhead from establishing a new TCP connection every single time.
+- A new ``HttpClient`` is being created every time a new request comes in, which means that the application has an unnecessary overhead from establishing a new TCP connection every single time.
 
-- In this scenario, while we have managed to eliminate the fact that TCP connections remain in a  ``ESTABLISHED`` state for a few minutes being idle, we are still creating a new TCP connection for every request the controller receives, which can still lead to issues of port exhaustion if the application experiences a high volume of traffic.
+- In this scenario, although we have managed to eliminate the fact that TCP connections remain in an  ``ESTABLISHED`` state for a couple of minutes, we are still creating a new TCP connection for each incoming request the controller receives. This situation could still potentially result in issues related to port exhaustion, particularly if the application experiences a high volume of traffic.
 
 
 # **Scenario 3: Create a static HttpClient and use it for any incoming requests**
@@ -194,12 +198,12 @@ public class ScenarioThreeController : ControllerBase
 ```
 ## netstat output
 
-- Now, the TCP connections are being re-used.
+- Now, the TCP connections are being reused.
 
 {{< video src="/videos/httpclient-scenario3.mp4" type="video/mp4" preload="auto" >}}
 
-- If the application is being idle for 2 minutes, then the TCP connection will get closed by the operating systen. The next request will force a new TCP connection to be created.
-- By default in .NET, an idle TCP connection is closed after 2 minutes. If a connection is not currently being used to send a request, it's considered idle.
+- If the application remains idle for 2 minutes, then the TCP connection will get closed by the operating systen. The next request will force the creation of a new TCP connection.
+- If a connection is not presently being used to send a request, it's considered idle. By default in .NET, an idle TCP connection is closed after 2 minutes.
 
 {{< video src="/videos/httpclient-scenario3-idle.mp4" type="video/mp4" preload="auto" >}}
 
@@ -218,7 +222,7 @@ If the rate of requests is very high, the operating system limit of available po
 
 ### Cons
 
-> You'll see a lot of guidelines mentioning this DNS resolution issue when talking about ``HttpClient``, the truth is that if your app is calling a service where the DNS doesn't change at all, using this approach is perfectly fine.
+> You'll see a lot of guidelines mentioning this DNS resolution issue when talking about ``HttpClient``. The truth is, if your app is making calls to a service where you're aware that the DNS address won't change at all, using this approach is perfectly fine.
 
 - ``HttpClient`` only resolves DNS entries when a TCP connection is created. If DNS entries changes regularly, then the client won't notice those updates.    
 
@@ -262,22 +266,23 @@ public class ScenarioFourController : ControllerBase
 ## netstat output
 
 - TCP connections are being reused.
-- If the application is being idle for some time, then the TCP connections will get closed by the operating system. The next request will create a new TCP connection.
-- The ``PooledConnectionLifetime`` attribute is set to 10 seconds, which means that after 10 seconds the TCP connection will be closed and won't be re-used anymore. The next request will create a new TCP connection.
+- If the application remains idle for 2 minutes, then the TCP connection will get closed by the operating systen. The next request will force the creation of a new TCP connection.
+- The ``PooledConnectionLifetime`` attribute is set to 10 seconds, which means that after 10 seconds the TCP connection will be closed and won't be reused anymore.  The next request will force the creation of a new TCP connection.
 
 {{< video src="/videos/httpclient-scenario4.mp4" type="video/mp4" preload="auto" >}}
 
-Do you remember that in scenario 3, I mentioned an issue with DNS resolution?    
+- Do you remember that in scenario 3, I mentioned an issue with DNS resolution?    
 
 DNS resolution only occurs when a TCP connection is created, which means that if the DNS changes after the TCP connection has been created, then the TCP connection is unaware of it.   
 
 The solution to avoid this issue is to create **short-lived** TCP connections that can be reused. Thus, when the time specified by the ``PooledConnectionLifetime`` property is reached, the TCP connection is closed, and a new one is created, forcing DNS resolution to occur again.
 
-In the next video, I modify the ``hosts`` file on my computer to redirect the DNS address for ``jsonplaceholder.typicode.com`` to ``127.0.0.1``.    
+You can observe this behavior in the upcoming video.    
+In the video, I modify the ``hosts`` file on my computer to redirect the DNS address for ``jsonplaceholder.typicode.com`` to ``127.0.0.1``.    
 
-Since there is nothing listening on the ``127.0.0.1`` address capable of responding to those requests, after 15 seconds, the HTTP requests start faling with a 500 error. This occurs because the TCP connection has been closed, and a new one has been created, forcing DNS resolution to occur again.   
+Since there is nothing listening on the ``127.0.0.1`` address capable of responding to those requests, after 10 seconds (``PooledConnectionLifetime`` current value), the HTTP requests start failing with a 500 error. This occurs because the TCP connection has been closed, and a new one has been created, forcing DNS resolution to occur again.   
 
-That's a huge difference from scenario 3, where the requests keep responding always 200 OK because the DNS resolution never occurred.   
+That's a huge difference from scenario 3, where the requests keep responding with a 200 OK because the DNS resolution never occurred.   
 
 {{< video src="/videos/httpclient-scenario4-dns-change.mp4" type="video/mp4" preload="auto" >}}
 
@@ -332,14 +337,14 @@ public class ScenarioFourController : ControllerBase
 }
 ```
 
-Why is the ``PooledConnectionIdleTimeout`` attribute something worth mentioning? Let's take a look at the code above.
+Why is the ``PooledConnectionIdleTimeout`` attribute worth mentioning? Let's take a look at the code above.
 
-- ``PooledConnectionLifetime`` is set to 30 minutes, which means that TCP connections will be re-used during 30 minutes.
-- ``PooledConnectionIdleTimeout``is set to 10 seconds, which means that idle TCP connections will be closed after a maximum of 5 seconds, **it doesn't matter if the ``PooledConnectionLifetime`` has expired or not.** 
+- ``PooledConnectionLifetime`` is set to 30 minutes, which means that TCP connections will be reused during 30 minutes.
+- ``PooledConnectionIdleTimeout``is set to 10 seconds, which means that idle TCP connections will be closed after a maximum of 10 seconds, **it doesn't matter if the ``PooledConnectionLifetime`` time has been reached or not.** 
 
-What will happen here?
-- If the app keeps receiving a constant flow of requests, then the same TCP connection will be reused during **30 minutes**.
-- If for some reason the app doesn't receive any requests and the TCP connection gets considered as idle, then the TCP connection will be closed after **10 seconds**, it doesn’t matter if the ``PooledConnectionLifetime`` time has expired or not.
+What will happen in a real application?
+- If the app keeps receiving a constant flow of requests, then the existing TCP connection will be reused. After **30 minutes**, the TCP connection will be closed, and a new TCP connection will be established for the next request.
+- If for some reason the app doesn't receive any requests and the TCP connection gets considered as idle, then the TCP connection will be closed after **10 seconds**, it doesn't matter whether the ``PooledConnectionLifetime`` time has been reached or not.
 
 Let's take a look at this behaviour using the ``netstat`` command:
 {{< video src="/videos/httpclient-scenario4-1.mp4" type="video/mp4" preload="auto" >}}
@@ -433,15 +438,14 @@ builder.Services.AddHttpClient("typicode", c =>
 ---
 
 Up to this point, we have only explored scenarios that affected .NET 5/6/7, but what if we want to use an ``HttpClient`` in an application built with .NET Framework 4.8?    
- - The recommended way is using **IHttpClientFactory**.*
+ - The recommended way is using **IHttpClientFactory**.**
 
-_*You can use Scenario 3 if you are certain that you will not encounter DNS changes in the service you are calling._
+_**You can use a static or singleton ``HttpClient``, if you are certain that you will not encounter DNS changes in the service you are calling._
 
-- Can we use Scenario 4?   
+- Can we use a static or singleton ``HttpClient`` with the ``PooledConnectionLifetime`` attribute (like Scenario 4)?   
 
-No, we cannot. Scenario 4 doesn't work with .NET Framework, the ``SocketsHttpHandler`` doesn't exist in .NET Framework.   
+No, we cannot. it doesn't work with .NET Framework, the ``SocketsHttpHandler`` doesn't exist in .NET Framework.   
 HttpClient is built on top of the pre-existing HttpWebRequest implementation, you could use the ``ServicePoint`` API to control and manage HTTP connections, including setting a connection lifetime by configuring the ``ConnectionLeaseTimeout`` for an endpoint.   
-
 
 # **Scenario 6: Using IHttpClientFactory with .NET Framework and Autofac** 
 
@@ -452,11 +456,11 @@ HttpClient is built on top of the pre-existing HttpWebRequest implementation, yo
 - A few steps are required to setup ``IHttpClientFactory`` with Autofac:
     - Add required packages:
         - ``Microsoft.Extensions.Http``
-    - Configure Autofac:
+    - Register ``IHttpClientFactory`` using Autofac:
         - Create a new ``ServiceCollection`` instance.
-        - Register the ``HttpClient``.
+        - Add the ``IHttpClientFactory`` named client.
         - Build the ``ServiceProvider`` and resolve ``IHttpClientFactory``.
-    - **The ``IHttpClientFactory`` must be setup as ``SingleInstance`` on Autofac**, or it won't work properly.
+        - **The ``IHttpClientFactory`` must be setup as ``SingleInstance`` on Autofac**, or it won't work properly.
 
 On ``Global.asax``:
 ```csharp
@@ -545,12 +549,6 @@ public class AutofacWebapiConfig
 
 }
 ```
-
-## netstat output
-
-- TCP connections are being reused.
-- The ``SetHandlerLifetime`` method is set to 15 seconds, which means that after 15 seconds the TCP connection will be marked for expiration. The next request will create a new TCP connection.
-- Expiry of a handler will not immediately dispose the TCP connection. An expired handler is placed in a separate pool which is processed at intervals to dispose handlers only when they become unreachable.
 
 ## Pros & cons
 ### Pros 
