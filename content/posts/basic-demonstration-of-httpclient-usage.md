@@ -2,7 +2,7 @@
 title: "Back to .NET basics: How you should be using HttpClient"
 date: 2023-07-02T16:07:52+02:00
 draft: true
-tags: ["dotnet", "networking", "http", "basic"]
+tags: ["dotnet", "networking", "http", "basics"]
 description: "In this post, we will explore several real-world scenarios where HttpClient is employed. For each scenario, we will discuss the reasons behind its proper or improper usage, using the help of the netstat command."
 ---
 
@@ -43,7 +43,7 @@ The next list shows the ``netstat`` states and their meanings:
 - ``LISTENING``: When a server application is in the ``LISTENING`` state, it is waiting and ready to accept incoming connection requests from clients.
 - ``CLOSING``: This state occurs when the local system has initiated the closure of the connection, but the remote system is also trying to close the connection simultaneously.
 
-# **Scenario 1: Create a new HttpClient for every request**
+# **Scenario 1: Create a new HttpClient for every incoming request**
 
 ## Source code
 
@@ -106,7 +106,7 @@ public class ScenarioOneController : ControllerBase
 - If the app is under heavy load this approach can lead to an accumulation of established TCP connections or TCP connections in a ``TIME_WAIT`` state, which can cause a port exhaustion problem.
 
 
-# **Scenario 2: Create a new HttpClient for every request and dispose of it immediately after finishing using it**
+# **Scenario 2: Create a new HttpClient for every incoming request and dispose of it after use**
 
 - A new ``HttpClient`` is instantiated everytime a new request comes in.
 - The ``HttpClient`` is disposed right after being used.
@@ -149,16 +149,16 @@ public class ScenarioTwoController : ControllerBase
 - During the ``TIME_WAIT`` state, the socket remains in the system for a specific period to ensure that any delayed or out-of-order packets related to the closed connection do not interfere with new connections using the same port. The ``TIME_WAIT`` state lasts for 30 seconds to 2 minutes depending on the operating system.
 
 ## Pros & cons of this scenario
-### Pros: 
+### Pros
 - In this scenario, it is less likely for the application to suffer from port exhaustion issues. In scenario 1, for each request, the TCP connection would remain in the ``ESTABLISHED`` state for a few minutes until the operating system forced it to close.    
-In scenario 2, as we are disposing of the HTTP client right after using it, the connection is closed directly, bypassing the time the connection was hanging around in the ``ESTABLISHED`` state doing nothing.
+In scenario 2, as we are disposing of the HTTP client right after using it, the connection is closed directly, bypassing the time the connection was hanging around in a ``ESTABLISHED`` state doing nothing.
 
 ### Cons
 - A new ``HttpClient`` is being created everytime a new request comes in, which means that the application has a unnecessary overhead from establishing a new TCP connection every single time.
 - If the rate of requests is high, the app might suffer from port exhaustion issues.
 
 
-# **Scenario 3: Create a static or singleton HttpClient instance and re-use it**
+# **Scenario 3: Create a static HttpClient and use it for any incoming requests**
 
 ## Source code
 - A ``static`` HttpClient instance is created once and utilized for all received requests.
@@ -207,7 +207,7 @@ public class ScenarioThreeController : ControllerBase
 {{< video src="/videos/httpclient-scenario3-change-dns.mp4" type="video/mp4" preload="auto" >}}
 
 ## Pros & cons of this scenario
-### Pros: 
+### Pros 
 - TCP connections are being reused, which further reduces the likelihood of experiencing a port exhaustion issue.    
 If the rate of requests is very high, the operating system limit of available ports might still be exhausted, but the best way to minimize this issue is exactly what we're doing in this scenario, reusing ``HttpClient`` instances for as many HTTP requests as possible.
 
@@ -215,10 +215,9 @@ If the rate of requests is very high, the operating system limit of available po
 
 > You'll see a lot of guidelines mentioning this DNS resolution issue when talking about ``HttpClient``, the truth is that if your app is calling a service that the DNS doesn't change at all, using this approach is perfectly fine.
 
-
 - HttpClient only resolves DNS entries when a TCP connection is created. If DNS entries changes regularly, then the client won't notice those updates.    
 
-# **Scenario 4: Create a static or singleton HttpClient instance with PooledConnectionLifetime and re-use it**
+# **Scenario 4: Create a static or singleton HttpClient with PooledConnectionLifetime and use it for any incoming requests**
 
 ## Source code
 - A ``static`` HttpClient instance is created once and utilized for all received requests.
@@ -257,7 +256,7 @@ public class ScenarioFourController : ControllerBase
 ```
 ## netstat usage
 
-- TCP connection are being reused.
+- TCP connections are being reused.
 - If the application is being idle for some time, then TCP connection will get closed by the OS. The next request will create a new TCP connection.
 - The ``PooledConnectionLifetime`` attribute is set to 10 seconds, which means that after 10 seconds the TCP connection won't be re-used anymore and a new one will be created.
 
@@ -278,15 +277,14 @@ That's a huge difference from scenario 3, where the requests keep responding alw
 {{< video src="/videos/httpclient-scenario4-dns-change.mp4" type="video/mp4" preload="auto" >}}
 
 ## Pros & cons of this scenario
-### Pros: 
+### Pros 
 - TCP connections are being reused, which further reduces the likelihood of experiencing a port exhaustion issue. 
 - It solves the DNS change issue mentioned on scenario 3.
 
 ### Cons
-- There are no disadvantages in this scenario.   
-It is true that we have to know more and more details to work correctly with ``HttpClient``, but scenario 5 precisely simplifies this entire process.
+- There are no disadvantages in this scenario.
 
-# **Scenario 4.1: Create a static or singleton HttpClient instance with PooledConnectionLifetime and re-use it**
+# **Scenario 4.1: Create a static or singleton HttpClient with PooledConnectionLifetime and PooledConnectionIdleTimeout and use it for any incoming requests**
 
 > This is scenario 4.1, not scenario 5.   
 > What's the point of having a scenario 4.1? This scenario is the same as scenario 4 but with a slight modification that I think it is worth mentioning.
@@ -347,7 +345,7 @@ The point I'm trying to make in scenario 4.1 is that sometimes setting the ``Poo
 
 ## Source code
 
-- An ``IHttpClientFactory`` Named client is setup in the ``Program.cs`` (this scenario uses an IHttpClientFactory named clients, you could use typed client or basic clients and the result will be exactly the same).
+- An ``IHttpClientFactory`` named client is setup in the ``Program.cs`` (this scenario uses an IHttpClientFactory named clients, you could use typed client or basic clients and the result will be exactly the same).
 - The ``SetHandlerLifetime`` extension method defines the length of time that a ``HttpMessageHandler`` instance can be reused before being discarded. It works almost identical as the ``PooledConnectionLifetime`` attribute from the previous scenario.
 - The ``SetHandlerLifetime`` method is set to 15 seconds, which means that TCP connections will cease to be re-issued and be closed after a maximum of 15 seconds. This is highly inefficient and it is only done for demo purposes.
 - We use the ``CreateClient`` method from the ``IHttpClientFactory`` to obtain a ``httpClient`` to call our API.
@@ -397,7 +395,7 @@ public class ScenarioFiveController : ControllerBase
 
 ## netstat usage
 
-- TCP connection are being reused.
+- TCP connections are being reused.
 - The ``SetHandlerLifetime`` method is set to 15 seconds, which means that after 15 seconds the TCP connection will be marked for expiration. The next request will create a new TCP connection.
 
 {{< video src="/videos/httpclient-scenario5.mp4" type="video/mp4" preload="auto" >}}
@@ -405,13 +403,13 @@ public class ScenarioFiveController : ControllerBase
 - Expiry of a handler will not immediately dispose the TCP connection. An expired handler is placed in a separate pool which is processed at intervals to dispose handlers only when they become unreachable.
 
 ## Pros & cons
-### Pros: 
+### Pros 
 - TCP connections are being reused, which further reduces the likelihood of experiencing a port exhaustion issue. 
 - It solves the DNS change issue mentioned on scenario 3.
 - It simplifies the declaration and usage of ``HttpClient`` instances.
 
 ### Cons
-- The IHttpClientFactory keeps everything nice and simple, but it is harder if you need to tweak some additional parameters.   
+- The ``IHttpClientFactory`` keeps everything nice and simple as long as you only want to modify the basic ``HttpClient`` parameter, it might be a bit harder if you need to tweak some of the less used parameters.     
 The next code snippet is an example of how to set the ``PooledConnectionIdleTimeout`` attribute discussed on scenario 4.1, as you can see you'll need to use the ``ConfigurePrimaryHttpMessageHandler`` extension method and create a new ``SocketsHttpHandler`` instance, just to set the value of the ``PooledConnectionIdleTimeout`` attribute.
 
 ```csharp
@@ -446,8 +444,7 @@ HttpClient is built on top of the pre-existing HttpWebRequest implementation, yo
 
 ## Source code
 
-> This example is built using Autofac as IoC container.
-
+- This scenario uses Autofac as IoC container.
 - An ``IHttpClientFactory`` named client is setup in the ``AutofacWebapiConfig.cs``.
 - A few steps are required to setup ``IHttpClientFactory`` with Autofac:
     - Add required packages:
@@ -553,7 +550,7 @@ public class AutofacWebapiConfig
 - Expiry of a handler will not immediately dispose the TCP connection. An expired handler is placed in a separate pool which is processed at intervals to dispose handlers only when they become unreachable.
 
 ## Pros & cons
-### Pros: 
+### Pros 
 - TCP connections are being reused, which further reduces the likelihood of experiencing a port exhaustion issue. 
 - It solves the DNS change issues mentioned on scenario 3.
 
