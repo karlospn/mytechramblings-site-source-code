@@ -1,9 +1,9 @@
 ---
-title: "Back to .NET basics: How you should be using HttpClient"
+title: "Back to .NET basics: How to properly use HttpClient"
 date: 2023-08-02T10:07:52+02:00
 draft: true
-tags: ["dotnet", "networking", "http", "basics"]
-description: "In this post, we will explore several real-world scenarios where HttpClient is employed. For each scenario, we will discuss the reasons behind its proper or improper usage, using the help of the netstat command."
+tags: ["dotnet", "networking", "http", "netstat", "basics"]
+description: "In this post, we will explore a few common scenarios where HttpClient is employed. For each scenario, we will discuss the reasons behind its proper or improper usage, using the help of the netstat command."
 ---
 
 > **Just show me the code!**   
@@ -16,8 +16,7 @@ However, the truth is, even with so many resources available, I still come acros
 
 Therefore, I have decided to write a brief post about the most common use scenarios of ``HttpClient``.
 
-As I said, I have no intention of writing a theoretical post explaining the ins and outs of how ``HttpClient`` works.   
-My goal here is to create **a concise post that highlights various common scenarios where ``HttpClient`` is utilized and discuss the reasons behind its appropriate or inappropriate usage.**
+As I said, I have no intention of writing a theoretical post explaining the ins and outs of how ``HttpClient`` works. My goal here is to create **a concise post that highlights various common scenarios where ``HttpClient`` is utilized and discuss the reasons behind its appropriate or inappropriate usage.**
 
 # **netstat command**
 
@@ -86,7 +85,7 @@ public class ScenarioOneController : ControllerBase
 
 {{< video src="/videos/httpclient-scenario1-established.mp4" type="video/mp4" preload="auto" >}}
 
-- TCP connections are not closed after being used, which means that they will hang for some time waiting for incoming data.
+- TCP connections are not closed after being used, which means that they will linger for some time, awaiting incoming data that will never arrive.
 - After 2 minutes (default idle timeout) of hanging around doing nothing, the TCP connections will be closed by the operating system and moved to a ``TIME_WAIT`` state. 
 
 {{< video src="/videos/httpclient-scenario1-timewait.mp4" type="video/mp4" preload="auto" >}}
@@ -95,6 +94,7 @@ public class ScenarioOneController : ControllerBase
 During this state, the socket remains in the system for a specific period to ensure that any delayed or out-of-order packets related to the closed connection do not interfere with new connections using the same port.    
 The duration of the ``TIME_WAIT`` state can vary depending on the operating system and TCP implementation. 
 - In most modern systems, the ``TIME_WAIT`` state typically lasts for 30 seconds to 2 minutes.
+- After some time in the ``TIME_WAIT`` state, the TCP connection will be terminated, and the socket will be released.
 
 {{< video src="/videos/httpclient-scenario1-timewait2.mp4" type="video/mp4" preload="auto" >}}
 
@@ -146,7 +146,7 @@ public class ScenarioTwoController : ControllerBase
 ## netstat output
 
 - Every time a new request comes in, a new TCP connection is created.
-- Like scenario 1, TCP connections are not being reused for subsequent requests, but this time the TCP connections are being closed right after being used.
+- Similar to scenario 1, TCP connections are not being reused for subsequent requests, but this time, at least the connections are being closed immediately after use.
 - The fact that the ``HttpClient`` gets disposed right away (because of the ``using`` block) causes the TCP connections to move directly to a ``TIME_WAIT`` state.
 
 {{< video src="/videos/httpclient-scenario2.mp4" type="video/mp4" preload="auto" >}}
@@ -203,7 +203,7 @@ public class ScenarioThreeController : ControllerBase
 {{< video src="/videos/httpclient-scenario3.mp4" type="video/mp4" preload="auto" >}}
 
 - If the application remains idle for 2 minutes, then the TCP connection will get closed by the operating systen. The next request will force the creation of a new TCP connection.
-- If a connection is not presently being used to send a request, it's considered idle. By default in .NET, an idle TCP connection is closed after 2 minutes.
+- If a TCP connection is not being used to send a request, it's considered idle. By default in .NET, an idle TCP connection is closed after 2 minutes.
 
 {{< video src="/videos/httpclient-scenario3-idle.mp4" type="video/mp4" preload="auto" >}}
 
@@ -232,7 +232,7 @@ If the rate of requests is very high, the operating system limit of available po
 - A ``static`` ``HttpClient`` instance is created once and reused for incoming requests.
 - The ``HttpClient`` is created using the ``PooledConnectionLifetime`` attribute. This attribute defines how long connections remain active when pooled. Once this lifetime expires, the connection will no longer be pooled or issued for future requests.  
 
-> In the next code snippet, the ``PooledConnectionLifetime`` is set to 15 seconds, which means that TCP connections will cease to be re-issued and be closed after a maximum of 15 seconds. This is highly inefficient and it is only done for demo purposes.
+> In the next code snippet, the ``PooledConnectionLifetime`` is set to 10 seconds, which means that TCP connections will cease to be re-issued and be closed after a maximum of 10 seconds. This is highly inefficient and it is only done for demo purposes.
 
 ```csharp
 [ApiController]
@@ -266,7 +266,6 @@ public class ScenarioFourController : ControllerBase
 ## netstat output
 
 - TCP connections are being reused.
-- If the application remains idle for 2 minutes, then the TCP connection will get closed by the operating systen. The next request will force the creation of a new TCP connection.
 - The ``PooledConnectionLifetime`` attribute is set to 10 seconds, which means that after 10 seconds the TCP connection will be closed and won't be reused anymore.  The next request will force the creation of a new TCP connection.
 
 {{< video src="/videos/httpclient-scenario4.mp4" type="video/mp4" preload="auto" >}}
@@ -277,7 +276,8 @@ DNS resolution only occurs when a TCP connection is created, which means that if
 
 The solution to avoid this issue is to create **short-lived** TCP connections that can be reused. Thus, when the time specified by the ``PooledConnectionLifetime`` property is reached, the TCP connection is closed, and a new one is created, forcing DNS resolution to occur again.
 
-You can observe this behavior in the upcoming video.    
+You can observe this behavior in the upcoming video. 
+
 In the video, I modify the ``hosts`` file on my computer to redirect the DNS address for ``jsonplaceholder.typicode.com`` to ``127.0.0.1``.    
 
 Since there is nothing listening on the ``127.0.0.1`` address capable of responding to those requests, after 10 seconds (``PooledConnectionLifetime`` current value), the HTTP requests start failing with a 500 error. This occurs because the TCP connection has been closed, and a new one has been created, forcing DNS resolution to occur again.   
@@ -349,12 +349,13 @@ What will happen in a real application?
 Let's take a look at this behaviour using the ``netstat`` command:
 {{< video src="/videos/httpclient-scenario4-1.mp4" type="video/mp4" preload="auto" >}}
 
+So, it's good to know about the ``PooledConnectionIdleTimeout`` attribute and how it works, as it can disrupt the lifespan of your TCP connections.
 
 # **Scenario 5: Use IHttpClientFactory**
 
 ## Source code
 
-- An ``IHttpClientFactory`` named client is setup in the ``Program.cs`` _(this Scenario uses an ``IHttpClientFactory`` named client, you could use a typed client or a basic client and the behaviour will be exactly the same)_.
+- An ``IHttpClientFactory`` named client is setup in the ``Program.cs`` _(this Scenario uses an ``IHttpClientFactory`` named client, you could use a typed client and the behaviour will be exactly the same)_.
 - The ``SetHandlerLifetime`` extension method defines the length of time that a ``HttpMessageHandler`` instance can be reused before being discarded. It works almost identical as the ``PooledConnectionLifetime`` attribute from the previous scenario.
 - We use the ``CreateClient`` method from the ``IHttpClientFactory`` to obtain a ``httpClient`` to call our API.
 
@@ -417,7 +418,7 @@ public class ScenarioFiveController : ControllerBase
 - It simplifies the declaration and usage of ``HttpClient`` instances.
 
 ### Cons
-- The ``IHttpClientFactory`` keeps everything nice and simple as long as you only want to modify the basic ``HttpClient`` parameters, it might be a bit harder if you need to tweak some of the less common parameters.     
+- The ``IHttpClientFactory`` keeps everything nice and simple as long as you only need to modify the common ``HttpClient`` parameters, it might be a bit harder if you need to tweak some of the less common parameters.     
 The next code snippet is an example of how to set the ``PooledConnectionIdleTimeout`` attribute discussed on scenario 4.1, as you can see you'll need to use the ``ConfigurePrimaryHttpMessageHandler`` extension method and create a new ``SocketsHttpHandler`` instance, just to set the value of the ``PooledConnectionIdleTimeout`` attribute.
 
 ```csharp
@@ -438,29 +439,29 @@ builder.Services.AddHttpClient("typicode", c =>
 ---
 
 Up to this point, we have only explored scenarios that affected .NET 5/6/7, but what if we want to use an ``HttpClient`` in an application built with .NET Framework 4.8?    
- - The recommended way is using **IHttpClientFactory**.**
+ - The recommended way to use ``HttpClient`` in .NET Framework 4.8 is using **IHttpClientFactory**.**
 
 _**You can use a static or singleton ``HttpClient``, if you are certain that you will not encounter DNS changes in the service you are calling._
 
 - Can we use a static or singleton ``HttpClient`` with the ``PooledConnectionLifetime`` attribute (like Scenario 4)?   
 
 No, we cannot. it doesn't work with .NET Framework, the ``SocketsHttpHandler`` doesn't exist in .NET Framework.   
-HttpClient is built on top of the pre-existing HttpWebRequest implementation, you could use the ``ServicePoint`` API to control and manage HTTP connections, including setting a connection lifetime by configuring the ``ConnectionLeaseTimeout`` for an endpoint.   
+``HttpClient`` is built on top of the pre-existing ``HttpWebRequest`` implementation, you could use the ``ServicePoint`` API to control and manage HTTP connections, including setting a connection lifetime by configuring the ``ConnectionLeaseTimeout`` for an endpoint.   
 
 # **Scenario 6: Using IHttpClientFactory with .NET Framework and Autofac** 
 
 ## Source code
 
 - This scenario uses Autofac as IoC container.
-- An ``IHttpClientFactory`` named client is setup in the ``AutofacWebapiConfig.cs``.
-- A few steps are required to setup ``IHttpClientFactory`` with Autofac:
+- An ``IHttpClientFactory`` named client is setup in the ``AutofacWebapiConfig.cs`` class.
+- A few additional steps are required to make ``IHttpClientFactory`` work with Autofac:
     - Add required packages:
         - ``Microsoft.Extensions.Http``
-    - Register ``IHttpClientFactory`` using Autofac:
+    - ``IHttpClientFactory`` must be registered properly in Autofac IoC container. To do that, we must follow the next steps:
         - Create a new ``ServiceCollection`` instance.
         - Add the ``IHttpClientFactory`` named client.
         - Build the ``ServiceProvider`` and resolve ``IHttpClientFactory``.
-        - **The ``IHttpClientFactory`` must be setup as ``SingleInstance`` on Autofac**, or it won't work properly.
+        - **The ``IHttpClientFactory`` must be registered as a ``Singleton`` on Autofac**, or it won't work properly.
 
 On ``Global.asax``:
 ```csharp
