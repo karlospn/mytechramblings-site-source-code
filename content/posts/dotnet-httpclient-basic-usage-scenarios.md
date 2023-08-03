@@ -411,7 +411,7 @@ public class ScenarioFiveController : ControllerBase
 
 {{< video src="/videos/httpclient-scenario5.mp4" type="video/mp4" preload="auto" >}}
 
-## Pros & cons
+## Pros & cons of this scenario
 ### Pros 
 - TCP connections are being reused, which further reduces the likelihood of experiencing a port exhaustion issue. 
 - It solves the DNS change issue mentioned on scenario 3.
@@ -551,7 +551,7 @@ public class AutofacWebapiConfig
 }
 ```
 
-## Pros & cons
+## Pros & cons of this scenario
 ### Pros 
 - TCP connections are being reused, which further reduces the likelihood of experiencing a port exhaustion issue. 
 - It solves the DNS change issues mentioned on scenario 3.
