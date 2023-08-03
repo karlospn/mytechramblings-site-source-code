@@ -1,7 +1,7 @@
 ---
 title: "Back to .NET basics: How to properly use HttpClient"
-date: 2023-08-02T10:07:52+02:00
-draft: true
+date: 2023-08-03T10:21:52+02:00
+draft: false
 tags: ["dotnet", "networking", "http", "netstat", "basics"]
 description: "In this post, we will explore a few common scenarios where HttpClient is employed. For each scenario, we will discuss the reasons behind its proper or improper usage, using the help of the netstat command."
 ---
