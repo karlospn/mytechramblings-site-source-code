@@ -130,5 +130,150 @@ If you don't want to lose your time searching for the preview ``boto3`` package,
 
 ## **4. Build the Q&A app using LangChain**
 
+We are going to set up a very simple UI:
+- A text input field where the users can type the question they want to ask.
+- A number input where the users can set the LLM temperature.
+- A number input where the user can set the LLM max tokens.
+- A dropdown to select with AWS Bedrock LLM you want to use.
+- And a submit button.
+
+To build the user interface I’m using [Streamlit](https://streamlit.io/). I decided to use Streamlit because I can build a simple and functional UI with just a few lines of Python.
+
+The next image showcases how the user interface will look once it is fully built.
+
+![app-result-0](/img/rag-aws-output-0.png)
+
+Once a user types a question in the text input, selects which AWS Bedrock LLM models wants to use and presses the submit button, the following steps will be executed:
+- Run the user query on AWS Kendra and retrieve the relevant information.
+- Assemble a prompt.
+- Send the prompt to one of the AWS Bedrock LLMs and get the answer that comes back.
+
+Now, let’s take a look at the source code and then I’ll try to explain the most relevant parts.
+```python
+from langchain.retrievers import AmazonKendraRetriever
+from langchain.llms.bedrock import Bedrock
+from langchain.chains import RetrievalQA
+from dotenv import load_dotenv
+import streamlit as st
+import os
+import boto3
+
+load_dotenv()
+
+if os.getenv('KENDRA_INDEX') is None:
+    st.error("KENDRA_INDEX not set. Please set this environment variable and restart the app.")
+if os.getenv('AWS_BEDROCK_REGION') is None:
+    st.error("AWS_BEDROCK_REGION not set. Please set this environment variable and restart the app.")
+if os.getenv('AWS_KENDRA_REGION') is None:
+    st.error("AWS_KENDRA_REGION not set. Please set this environment variable and restart the app.")
+
+kendra_index = os.getenv('KENDRA_INDEX')
+bedrock_region = os.getenv('AWS_BEDROCK_REGION')
+kendra_region = os.getenv('AWS_KENDRA_REGION')
+
+def get_kendra_doc_retriever():
+    
+    kendra_client = boto3.client("kendra", kendra_region)
+    retriever = AmazonKendraRetriever(index_id=kendra_index, top_k=3, client=kendra_client, attribute_filter={
+        'EqualsTo': {
+            'Key': '_language_code',
+            'Value': {'StringValue': 'en'}
+        }
+    }) 
+    return retriever
+
+st.title("AWS Q&A app 💎")
+
+query = st.text_input("What would you like to know?")
+
+max_tokens = st.number_input('Max Tokens', value=1000)
+temperature= st.number_input(label="Temperature",step=.1,format="%.2f", value=0.7)
+llm_model = st.selectbox("Select LLM model", ["Anthropic Claude V2", "Amazon Titan", "Ai21Labs J2 Grande Instruct"])
+
+
+if st.button("Search"):
+    with st.spinner("Building response..."):
+        if llm_model == 'Anthropic Claude V2':
+            
+            retriever = get_kendra_doc_retriever()  
+
+            bedrock_client = boto3.client("bedrock", bedrock_region)
+            llm = Bedrock(model_id="anthropic.claude-v2", region_name=bedrock_region, 
+                        client=bedrock_client, 
+                        model_kwargs={"max_tokens_to_sample": max_tokens, "temperature": temperature})
+
+            qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+            response = qa(query)
+            st.markdown("### Answer:")
+            st.write(response['result'])
+
+        if llm_model == 'Amazon Titan':
+            retriever = get_kendra_doc_retriever()       
+            
+            bedrock_client = boto3.client("bedrock", bedrock_region)
+            llm = Bedrock(model_id="amazon.titan-tg1-large", region_name=bedrock_region, 
+                        client=bedrock_client, 
+                        model_kwargs={"maxTokenCount": max_tokens, "temperature": temperature})
+
+            qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+            response = qa(query)
+            st.markdown("### Answer:")
+            st.write(response['result'])
+
+        if llm_model == 'Ai21Labs J2 Grande Instruct':
+            
+            retriever = get_kendra_doc_retriever()           
+            
+            bedrock_client = boto3.client("bedrock", bedrock_region)
+            llm = Bedrock(model_id="ai21.j2-grande-instruct", region_name=bedrock_region, 
+                        client=bedrock_client, 
+                        model_kwargs={"maxTokens": max_tokens, "temperature": temperature})
+
+            qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+            response = qa(query)
+            st.markdown("### Answer:")
+            st.write(response['result'])
+```
+
+There isn’t much to comment on here since the code is quite straightforward. Nevertheless, let’s delve into the 2 or 3 things that are worth mentioning.
+
+
+
+
+## **5. Build the Q&A app without using LangChain**
+
+> **This is exactly the same app from the previous section, but this time without using ``LangChain`` at all.**
+
+The ``Streamlit`` app we have built in the previous section makes heavy use of the ``LangChain`` library to implement the RAG pattern.
+
+But what if you prefer not to use any third-party libraries and set up the RAG pattern solely with the ``boto3`` library??
+
+Let's get to it:
+
+```python
+
+```
+
 
 # **Testing the query app**
+
+Let's test if the query app works correctly. 
+
+> Remember that the document we used to fill the knowledge base is the Microsoft .NET Microservices book, so all questions we ask should be about that specific topic.
+
+- Question 1:
+
+![app-result-1](/img/rag-aws-output-1.png)
+
+- Question 2:
+
+![app-result-2](/img/rag-aws-output-2.png)
+
+- Question 3:
+
+![app-result-3](/img/rag-aws-output-3.png)
+
+- Question 4:
+
+![app-result-4](/img/rag-aws-output-4.png)
+
