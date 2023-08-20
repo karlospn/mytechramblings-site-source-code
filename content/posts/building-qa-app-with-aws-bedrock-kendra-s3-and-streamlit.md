@@ -2,24 +2,27 @@
 title: "Building a Q&A app capable of answering questions related to your enterprise documents using AWS Bedrock, AWS Kendra, AWS S3 and Streamlit"
 date: 2023-08-10T18:57:03+02:00
 tags: ["python", "openai", "ai", "aws", "genai", "llm"]
-description: "The purpose of this post is to show you how to build another basic Q&A app that is capable of answering questions about your company's internal documents. This time we will use AWS Bedrock, AWS Kendra, AWS S3 and Streamlit to build it."
+description: "The purpose of this post is to show you how to build a basic Q&A app capable of answering questions about your company's internal documents. But this time, we will use only AWS services to build it, to be precise: AWS Bedrock, AWS Kendra and AWS S3 (plus Streamlit for the user interface)."
 draft: true
 ---
 
 > **Just show me the code!**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit).
 
-A couple of months ago, I wrote a post about how to build a quick Q&A app (powered by an LLM) capable of answering questions related to your private documents. You can find the post in [here](https://www.mytechramblings.com/posts/building-a-csharp-enhancing-app-using-openai-gpt4-and-streamlit/).
+A couple of months ago, I wrote a post about how to build a Q&A app using OpenAI GPT-4 capable of answering questions related to your private documents. You read it, in [here](https://www.mytechramblings.com/posts/building-a-csharp-enhancing-app-using-openai-gpt4-and-streamlit/).
 
 To build it, we were using the following services:
 -  ``Azure OpenAI GPT-4``
 -  ``Pinecone``   
 
-Now, I want to built a very similar app, but using **only AWS services** (+ Streamlit for the UI).
+In this post, **I want to built exactly the same app, but using only AWS services (+ Streamlit for the UI)**.
 
-But before we start talking tech stuff, I think it’s necessary to explain a couple of concepts to better understand how the app will work.
+That way, we can see and compare how the process of creating this type of apps differs when we use managed AWS services vs Azure services.
 
-# **How can an LLM model respond to a question about topics it doesn't know about?**
+Before we start developing the app, let me revisit a couple of concepts that I believe are key when building such applications (apps that use a LLM model to answer questions related to our private documents).    
+I've already discussed these topics in the _"Building a Q&A app using Azure OpenAI GPT-4"_ post, but I think it's necessary to emphasize these concepts.
+
+# **How can an LLM respond to a question about topics it doesn't know about?**
 
 We have two options for enabling our LLM model to understand and answer our private domain-specific questions:
 
@@ -50,10 +53,10 @@ CONTEXT:
 
 # **What are knowledge databases?**
 
-With RAG the retrieval of relevant information requires an external "Knowledge database", a place where we can store and use to efficiently retrieve information.    
+With RAG, the retrieval of relevant information requires an external "knowledge database", a place where we can store and use to efficiently retrieve information.    
 We can think of this database as the external long-term memory of our LLM.
 
-To retrieve information that is semantically related to our questions, we're going to use a "semantic search database". 
+To retrieve information that is semantically related to our questions, we're going to use a **semantic search database**. 
 
 ## **Semantic search database**
 
@@ -67,33 +70,39 @@ Overall, semantic search is designed to provide more precise and meaningful sear
 
 # **Which AWS services are we going to use?**
 
-For the Generative AI LLM models, we will be using:
+For the Generative AI LLM, we will be using:
 - [AWS Bedrock](https://aws.amazon.com/bedrock)
 
 For the knowledge database, we will be using:
 - [AWS Kendra](https://aws.amazon.com/kendra)
 - [AWS S3](https://aws.amazon.com/s3)
 
-The next image shows a more precise diagram of how the AWS services are going to interact between them:
+The next image shows a diagram of how the AWS services are going to interact between them:
 
 ![aws-services-diagram](/img/rag-aws-architecture-diagram.png)
 
-# **How the app works**
+# **How the Q&A app works**
 
-- The private documents are being stored in a s3 bucket.
-- The Kendra Index is configured to use an s3 connector, the Index checks the s3 bucket every N minutes for new content. If some new content is found in the bucket, then it gets automatically parsed and stored into Kendra database.   
-- When a user runs a query through the ``Streamlit`` app, the app does the following steps:
-    - Retrieve the relevant information to the given query from Kendra. 
+- The private documents are being stored in an s3 bucket.
+
+- The Kendra Index is configured to use an s3 connector. The Index checks the s3 bucket every N minutes for new content. If new content is found in the bucket, it gets automatically parsed and stored into Kendra database.   
+
+- When a user runs a query through the ``Streamlit`` app, the app follows these steps:
+    - Retrieve the relevant information for the given query from Kendra. 
     - Assembles the prompt. 
-    - Sends the prompt to one of the available Bedrock LLM models and get the answer that comes back.
+    - Sends the prompt to one of the available Bedrock LLM and receives the answer that comes back.
 
 ![rag-aws-app-interaction-diagram](/img/rag-aws-app-interaction-diagram.png)
 
-# **Building the app**
+One of the good things of using AWS Kendra (paired with AWS S3) as the knowledge database is that the ingest process is completely automated, you don't have to do anything at all.    
+Every time we add, update, or delete a document from the S3 bucket, the content of that document is parsed and automatically stored in Kendra.
+
+
+# **Building the Q&A app**
 
 There are a few steps required before we can begin developing the app.
 
-## **1. Deploying the required AWS services**
+## **1. Deploy the required AWS services**
 
 To make the app work we need to deploy the following AWS services:
 - An s3 bucket for housing our private docs.
@@ -102,11 +111,11 @@ To make the app work we need to deploy the following AWS services:
 
 You can deploy those resources as you like: using the AWS portal, AWS CDK, Terraform, Pulumi, ...
 
-⚠️ If you want to take the easy road, I have uploaded a few Terraform files on my [GitHub repository](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit/tree/main/infra) that will create those resource on your AWS account.
+⚠️ If you want to take the easy route, I have uploaded a few Terraform files to my [GitHub repository](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit/tree/main/infra) that will create the required resources on your AWS account.
 
 ## **2. Sign up for to the AWS Bedrock preview**
 
-As of today (08/16/2023), AWS Bedrock is still on preview. To access it, you'll need to sign up for the preview.
+As of today (08/21/2023), AWS Bedrock is still on preview. To access it, you'll need to sign up for the preview.
 
 ![rag-aws-bedrock-preview](/img/rag-aws-bedrock-preview.png)
 
@@ -116,24 +125,28 @@ If you try to use any of this third-party LLMs models using the API before they 
 
 From this point forward, I'm going to assume that you have access to AWS Bedrock and all the available LLM models.
 
-## **3. Download the boto3 preview wheels files**
+## **3. Get the boto3 preview version**
 
 The Q&A app will be a Python-based app, which means that you're going to need the ``boto3`` package.    
-``boto3`` is the AWS SDK package for Python, which allow Python apps to make use of AWS services.
+``boto3`` is the AWS SDK package for Python, which allows Python apps to make use of AWS services.
 
-Right now (08/16/2023), there is not a global available ``boto3`` package that allows us to work with the AWS Bedrock service. To work with it, you must download the ``boto3`` wheel preview version.
+Right now (08/21/2023), there is not a global available ``boto3`` package that allows us to work with the AWS Bedrock service. To work with it, you must download the ``boto3`` wheel preview version.
 
-> What is a wheel? Python wheels are a pre-built binary package format for Python modules and libraries. 
+> What is a wheel?    
+> Python wheels are a pre-built binary package format for Python modules and libraries. 
 
-⚠️ If you don't want to lose your time searching for the preview ``boto3`` package, I have  uploaded the ``boto3`` and ``botocore`` wheels that you're going to need to interact with Bedrock on my [GitHub Repository](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit/tree/main).
+⚠️ If you don't want to waste your time searching for the preview ``boto3`` package, I have uploaded the ``boto3`` and ``botocore`` wheel files that you're going to need to interact with AWS Bedrock on my [GitHub Repository](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit/tree/main).
 
-## **4. Building the Q&A app using LangChain**
+## **4. Build the Q&A app using LangChain**
+
+> ⚠️ If you're not a fan of [LangChain](https://www.langchain.com/) an prefer to do everything by yourself without the aid of any third-party library, go to the next section (section 5).    
+> In section 5, I will show you how to build the same Q&A app we're going to build here, but using only the ``AWS SDK for Python``.
 
 We are going to set up a very simple UI:
 - A text input field where the users can type the question they want to ask.
-- A number input where the users can set the LLM temperature.
-- A number input where the user can set the LLM max tokens.
-- A dropdown to select with AWS Bedrock LLM model we want to use to generate the response.
+- A numeric input where the users can set the LLM max tokens.
+- A numeric input where the users can set the LLM temperature.
+- A dropdown to select with AWS Bedrock LLM we want to use to generate the response.
 - And a submit button.
 
 To build the user interface I’m using [Streamlit](https://streamlit.io/). I decided to use Streamlit because I can build a simple and functional UI with just a few lines of Python.
@@ -142,19 +155,16 @@ The next image showcases how the user interface will look once it is fully built
 
 ![app-result-0](/img/rag-aws-output-0.png)
 
-Once a user types a question in the text input, selects which AWS Bedrock LLM models wants to use and presses the submit button, the following steps will be executed:
+Once a user types a question in the text input, selects which AWS Bedrock LLM wants to use, and presses the submit button, the following steps will be executed:
 - Run the user query on AWS Kendra and retrieve the relevant information.
 - Assemble a prompt.
 - Send the prompt to one of the AWS Bedrock LLMs and get the answer that comes back.
 
-In this first version of Q&A app we will make heavy use of the [LangChain](https://www.langchain.com/) library to build the RAG pattern and to interact with AWS Kendra and AWS Bedrock services.
+In this first version of Q&A app we will make heavy use of the [LangChain](https://www.langchain.com/) library to build the RAG pattern and to interact with AWS Kendra and AWS Bedrock.
 
 LangChain is a great library that eases the development of applications powered by large language models.
 
-LangChain works great when building a RAG pattern that involves AWS Kendra and AWS Bedrock, with LangChain we can retrieve the relevant documents related to our query from Kendra with just a single line of code and we can build a RAG pattern using one of the pre-built Langchain "chains".   
-
-⚠️  Building a RAG pattern with LangChain is super easy, and that's exactly what I'm going to do in this section.   
-But do not fret, if are no fan of LangChain an prefer to do everything by yourself without the aid of any third-party library, you can go to the next section (section 5). In section 5, I will show you how to build exactly the same Q&A app, but using only the AWS SDK for Python.
+LangChain works great when building an RAG pattern that involves AWS Kendra and AWS Bedrock. With LangChain, we can retrieve the relevant documents related to our query from Kendra with just a single line of code and build a RAG workflow using one of the already pre-built "chains" that LangChain offers.   
 
 Now, let’s take a look at the source code and then I’ll try to explain the most relevant parts.
 
@@ -244,7 +254,7 @@ if st.button("Search"):
             st.write(response['result'])
 ```
 
-There isn’t much to comment on here since the code is quite straightforward. Nevertheless, let’s delve into the 3 o r 4 things that are worth mentioning.
+There isn't much to comment on here since the code is quite straightforward. Nevertheless, let's delve deeper into it and explain what we're doing line by line.
 
 ### **4.1. Get user parameters from the User Interface**
 
@@ -253,7 +263,7 @@ The first step is to simply retrieve the user parameters from the UI:
 - User query.
 - LLM max tokens limit.
 - LLM temperature.
-- Which AWS Bedrock does the user want to use.
+- Which AWS Bedrock LLM does the user want to use.
 
 ```python
 query = st.text_input("What would you like to know?")
@@ -269,15 +279,16 @@ To retrieve the relevant docs from our knowledge database (AWS Kendra), we're go
 
 The ``AmazonKendraRetriever`` class uses Amazon Kendra’s Retrieve API to make queries to the Amazon Kendra index and obtain the docs that are most relevant to the user query.
 
-The ``AmazonKendraRetriever`` class will be plugged into a LangChain chain to build the RAG pattern. (More on section 4.4)
+The ``AmazonKendraRetriever`` class will be plugged into a LangChain chain to build the RAG pattern.    
+An important thing to understand here is that we're not retrieving the docs from Kendra right now; we're only declaring a way to retrieve them. It will be the LangChain chain who uses the ``AmazonKendraRetriever`` class to obtain the relevant documents. (More on section 4.4). 
 
-The LangChain ``AmazonKendraRetrieves`` class creates a Kendra ``boto3`` client by default, but if you want to customize the configuration, it is much better to explicitly create the client beforehand, and pass it to the Langchain.
+The LangChain ``AmazonKendraRetrieves`` class creates a Kendra ``boto3`` client by default, but if you want to customize the configuration, it is better to explicitly create the client beforehand, and pass it to the Langchain class.
 
-The ``top_k`` parameter is used to specify how many documents we want to retrieve, for this example we’re retrieving the top 3 docs that are most similar to our question.
+The ``top_k`` parameter is used to specify how many documents we want to retrieve from Kendra, for this example we’re retrieving the top 3 docs that are most similar to our question.
 
-- Why did we retrieve 3 docs from our knowledge database instead of just one?
-
-When we saved the documents, data is splitted into multiple chunks, so it’s possible that the complete answer to our question is not located in just one vector but in more than one. That’s why we’re retrieving the 3 most relevant documents to the given question.
+> Why did we retrieve 3 docs from our knowledge database instead of just one?
+>
+> When we saved the documents, data is stored into multiple chunks, so it’s possible that the complete answer to our question is not located in just one vector but in more than one. That’s why we’re retrieving the 3 most relevant documents to the given question.
 
 ```python
 def get_kendra_doc_retriever():   
@@ -293,13 +304,13 @@ def get_kendra_doc_retriever():
 
 ### **4.3. Initialize the LangChain Bedrock client**
 
-To interact with AWS Bedrock LLM models, we're going to use the LangChain ``Bedrock`` class.
+To interact with AWS Bedrock LLMs, we're going to use the LangChain ``Bedrock`` class.
 
-The LangChain ``Bedrock`` class allow us to setup which Bedrock LLM model are we want to use.
+The LangChain ``Bedrock`` class allow us to setup the Bedrock LLM we want to use. In this specific code snippet, we're setting up the ``Amazon Titan`` LLM.
 
 The ``Bedrock`` class will be plugged into a LangChain chain to build the RAG pattern. (More on section 4.4).
 
-The LangChain ``Bedrock`` class creates a Bedrock ``boto3`` client by default, but if you want to customize the configuration, it is much better to explicitly create the Bedrock client beforehand, and pass it to the Langchain.
+The LangChain ``Bedrock`` class creates a Bedrock ``boto3`` client by default, but if you want to customize the configuration, it is better to explicitly create the Bedrock client beforehand, and pass it to the Langchain.
 
 ```python
 bedrock_client = boto3.client("bedrock", bedrock_region)
@@ -310,13 +321,13 @@ llm = Bedrock(model_id="amazon.titan-tg1-large", region_name=bedrock_region,
 
 ### **4.4. Create a LangChain RetrievalQA chain**
 
-- In section 4.2, we have defined a way to retrieve the documents from our knowledge database using the  ``AmazonKendraRetriever`` implementation
-- In section 4.3, we have defined a way to interact with a Bedrock LLM.
+- In section 4.2, we declared a way to retrieve the documents from our knowledge database using the  ``AmazonKendraRetriever`` implementation.
+- In section 4.3, we declared a way to interact with a Bedrock LLM using the ``Bedrock`` class.
 
-Now, what we need to do to build a RAG workflow?    
+Now, what we need to do to build a RAG workflow? Just a LangChain "chain".
 
-The ``RetrievalQA`` chain is the key component for building the RAG pattern. This LangChain chain wires everything  for you:
-- Uses the ``AmazonKendraRetriever`` implemetation to retrieve the most relevant docs from Kendra
+The ``RetrievalQA`` chain is the key component for building the RAG pattern. This LangChain chain handles everything for you under the hood:
+- Uses the ``AmazonKendraRetriever`` implementation to retrieve the most relevant docs from Kendra
 - Creates the prompt and attaches the data obtain from Kendra.
 - Sends the prompt to one of AWS Bedrock LLMs and get the answer that comes back.
 
@@ -327,16 +338,17 @@ st.markdown("### Answer:")
 st.write(response['result'])
 ```
 
-And that's it! You have a functional RAG workflow that uses AWS Kendra and Bedrock and it is no more than 5 lines of code, and all thanks to LangChain.
+And that's it! You have a functional RAG workflow that uses AWS Kendra and Bedrock and it is no more than 10- 15 lines of code, and all thanks to LangChain.
 
-## **5. Building the Q&A app without using LangChain**
+## **5. Build the Q&A app using boto3 (and without using LangChain)**
 
-> **In this section we're going to build the same app from the previous section (section 4), but this time without making use of the ``LangChain`` library.**
+> **In this section we're going to build the same Q&A app from the previous section (section 4), but this time without making use of the ``LangChain`` library.**
 
 The ``Streamlit`` app we have built in the previous section makes heavy use of the ``LangChain`` library to implement the RAG pattern.
 
 But what if you prefer not to use any third-party libraries and set up the RAG pattern using only the AWS SDK for Python library?    
-It is true that ``LangChain`` makes some of the heavy work for you under the covers, but implementing the RAG pattern using only the ``boto3`` library is also pretty straightforward.
+
+It is true that ``LangChain`` handles part of the heavy work for you under the covers, but implementing the RAG pattern using only the ``boto3`` library is not hard at all.
 
 Let's get to it. First, let's take a look at the end result and then I’ll explain the most relevant parts again.
 
@@ -467,7 +479,7 @@ The first step is to simply retrieve the user parameters from the UI:
 - User query.
 - LLM max tokens limit.
 - LLM temperature.
-- Which AWS Bedrock does the user want to use.
+- Which AWS Bedrock LLM does the user want to use.
 
 ```python
 query = st.text_input("What would you like to know?")
@@ -479,15 +491,16 @@ llm_model = st.selectbox("Select LLM model", ["Anthropic Claude V2", "Amazon Tit
 
 ### **5.2. Retrieve the relevant information from Kendra**
 
-The ``retrieve`` method from the ``boto3`` Kendra client allow us to retrieve the relevant information from the knowledge database.
+The ``retrieve`` method from the ``boto3`` Kendra client allow us to retrieve the relevant docs from our knowledge database.
 
 The ``PageSize`` parameter is used to specify how many documents we want to retrieve, for this example we’re retrieving the top 3 docs that are most similar to our question.
 
-- Why did we retrieve 3 docs from our knowledge database instead of just one?
+> Why did we retrieve 3 docs from our knowledge database instead of just one?
+>
+> When we saved the documents, data is stored into multiple chunks, so it’s possible that the complete answer to our question is not located in just one vector but in more than one. That’s why we’re retrieving the 3 most relevant documents to the given question.
 
-When we saved the documents, data is splitted into multiple chunks, so it’s possible that the complete answer to our question is not located in just one vector but in more than one. That’s why we’re retrieving the 3 most relevant documents to the given question.
-
-Once we have retrieved the documents from Kendra, we merge them into a single 'string'. This 'string' represents the context that we will be added to the prompt and in which we will specify to Bedrock that it can only respond using the information given in this context, and in no case can use any data from outside this context to generate the answer to our question.
+Once we have retrieved the documents from Kendra, we merge them into a single _"string"_.    
+This _"string"_ represents the context that will be added to the prompt, specifying to the Bedrock LLM that it can only respond using the information provided in this context. It cannot use any data from outside this context to generate the answer to our question.
 
 ```python
 def retrieve_kendra_docs():  
@@ -504,11 +517,11 @@ def retrieve_kendra_docs():
 
 ### **5.3. Assemble the prompt**
 
-Now, we construct the prompt we will be sending to Bedrock.
+Now, we construct the prompt that we will be sending to a Bedrock LLM.
 
 Within the prompt, you will notice the placeholders ``{query}`` and ``{docs}``. 
-- The ``{query}`` placeholder is where the app will insert user query.
-- The ``{docs}`` placeholder is where the app will insert the documents retrieved from Kendra.
+- The ``{query}`` placeholder is where the app will add the user query.
+- The ``{docs}`` placeholder is where the app will add the context retrieved from Kendra.
 
 
 ```python
@@ -527,7 +540,7 @@ def build_prompt(query, docs):
 
 ### **5.4. Send the prompt to a Bedrock LLM and get the answer that comes back**
 
-The last step is sending the prompt to one of the Bedrock LLM models using the ``invoke_model`` method from the ``boto3`` Bedrock client and get the answer that comes back.
+The last step is sending the prompt to one of the Bedrock LLMs using the ``invoke_model`` method from the ``boto3`` Bedrock client and get the answer that comes back.
 
 ```python
 bedrock_client = boto3.client("bedrock", bedrock_region)
@@ -549,9 +562,11 @@ st.markdown("### Answer:")
 st.write(result.get('results')[0].get('outputText'))
 ```
 
-# **Testing the query app**
+And that's it! You have successfully built a RAG workflow using AWS Bedrock, AWS Kendra, and the AWS SDK for Python.
 
-Let's test if the query app works correctly. 
+# **Testing the Q&A app**
+
+Let's test if the Q&A app works correctly. 
 
 > Remember that the document we used to fill the knowledge base is the Microsoft .NET Microservices book, so all questions we ask should be about that specific topic.
 
