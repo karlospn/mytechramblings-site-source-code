@@ -1,9 +1,9 @@
 ---
 title: "Building a Q&A app capable of answering questions related to your enterprise documents using AWS Bedrock, AWS Kendra, AWS S3 and Streamlit"
-date: 2023-08-10T18:57:03+02:00
+date: 2023-08-21T10:00:03+02:00
 tags: ["python", "openai", "ai", "aws", "genai", "llm"]
 description: "The purpose of this post is to demonstrate how easy is to build a basic Q&A app capable of answering questions about your company's internal documents. This time, we will use only AWS services to build it (plus Streamlit for the user interface)."
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
