@@ -1,9 +1,9 @@
 ---
 title: "Back to .NET basics: How to easily build a Strategy pattern using dependency injection"
-date: 2023-09-13T15:03:54+02:00
+date: 2023-09-18T10:01:54+02:00
 tags: ["patterns", "dotnet", "basics"]
 description: "In this very brief post, we will see how easy is to build a Strategy pattern in .NET when using dependency injection."
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
