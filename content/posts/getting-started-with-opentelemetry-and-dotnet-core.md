@@ -1,26 +1,26 @@
 ---
-title: "Getting started with OpenTelemetry and distributed tracing in .NET Core"
-date: 2021-04-08T10:11:51+02:00
-Lastmod: 2022-01-06
+title: "Getting started with OpenTelemetry and distributed tracing in .NET"
+date: 2023-09-25T12:41:51+02:00
 tags: ["opentelemetry", "tracing", "jaeger", "dotnet", "csharp"]
-description: "OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. On today's post I'm going to show you how you can start using OTEL and distributed tracing with .NET Core."
+description: "OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. On today's post I'm going to show you how you can start using OTEL and distributed tracing with .NET."
 draft: false
 ---
 
 > **Just show me the code**   
-> As always if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/opentelemetry-tracing-demo)
+> As always, if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/opentelemetry-tracing-demo)
 
-A few months ago the first stable version of the OpenTelemetry client for dotnet was released and since then I have wanted to write a little bit about it.   
 
-OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. Today I'm going to focus on tracing.    
+This post was written over a year and a half ago, and since then, there have been several breaking changes in the OpenTelemetry .NET SDK. It's time to update it to reflect the current state of OpenTelemetry.
+
+OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as traces, metrics, and logs. This post will solely focus on tracing.    
 From my standpoint, there are at least **four main concepts** about tracing and OpenTelemetry that you need to know. 
 
-## **Span and activities** 
+# **Span and Activities** 
   
 A span is the building block that forms a trace, it has a unique identifier and represents a piece of the workflow in the distributed system.   
 Multiple spans are pieced together to create a trace. Traces are often viewed as a "tree" of spans that reflects the time that each span started and completed.
 
-In dotnet a Span is represented by an **Activity**.  
+In .NET a span is represented by an **Activity**.  
 
 The OpenTelemetry client for dotnet is reusing the existing Activity and associated classes to represent the OpenTelemetry Span.    
 This means that users can instrument their applications/libraries to emit OpenTelemetry compatible traces by using just the .NET Runtime.
@@ -36,7 +36,7 @@ And then call _"StartActivity"_ to begin recording, everything that happens insi
 using (var activity = Activity.StartActivity("Process Message", ActivityKind.Consumer, parentContext.ActivityContext)){}
 ```
 
-## **Propagators** 
+# **Propagators** 
 
 A propagator allows us to extract and inject context across process boundaries. 
 
@@ -64,23 +64,36 @@ If a value can not be parsed from the carrier, for a cross-cutting concern, the 
  var parentContext = Propagator.Extract(default, ea.BasicProperties, ExtractTraceContextFromBasicProperties);
 ```
 
-## **Exporters**
+# **Exporters**
 
-Let's be honest emiting traces is kind of pointless if you don't have a backend capable of aggregating the traces and displaying those traces in a friendly manner. 
+Let’s be honest emiting metrics is kind of pointless if you don’t have a backend capable of aggregating the metrics and displaying them in a friendly manner.
 
-An exporter is how data gets sent to those different back-ends. 
+There are 2 ways to exporting data on OpenTelemetry:
 
-Generally, an exporter translates the internal format into another defined format.
+- Using the OpenTelemetry Collector.
+- Exporting the data directly into a back-end (like Prometheus, Jaeger, Zipkin, Elastic APM, Azure Monitor, etc).
 
-These are the most well-known available trace exporters:
-- Jaeger
-- OTLP gRPC
-- OTLP HTTP
-- Zipkin
+## **Using the OpenTelemetry Collector**
 
-> In this post I'm going to use **Jaeger**.
+The OpenTelemetry Collector is a standalone process designed to receive, process and export telemetry data.   
 
-## **Attributes**
+It removes the need to run, operate and maintain multiple agents/collectors in order to support open-source telemetry data formats (e.g. Jaeger, Prometheus, Zipkin, etc.) sending to multiple open-source or commercial back-ends.  
+
+It eases the integration with your apps because you only need to export your data to a single endpoint, the collector endpoint, using the OTLP protocol.
+
+![otel-metrics-exporter-otel-collector](/img/otel-metrics-exporter-otel-collector.png)
+
+
+## **Exporting the data directly into a backend**
+
+You can export traces, metrics and logs directly to a backend using the ``OpenTelemetry.Exporter.*`` NuGet packages.
+
+![otel-metrics-exporter-backend](/img/otel-metrics-exporter-backend.png)
+
+
+> In this post, we're going to export traces directly to Jaeger using the ``OpenTelemetry.Exporter.OpenTelemetryProtocol`` NuGet package.
+
+# **Attributes**
 
 Attributes are key:value pairs that provide additional information to a trace.
 
@@ -91,87 +104,85 @@ In .NET those are called Tags. We can add an attribute into an Activity like thi
   activity?.SetTag("messaging.destination_kind", "queue");
   activity?.SetTag("messaging.rabbitmq.queue", "sample");
 ```
-***
+---
+---
 
-I'm going to stop talking about OpenTelemetry theory because I could end up writing and entire post about it.   
-And to be honest I would end up paraphrasing of the official docs, so instead of that I'm going to point you towards the official documentation: https://opentelemetry.io/docs/concepts/
+I'm going to stop discussing OpenTelemetry theory because I could end up writing an entire post about it.    
+And to be honest, I would essentially be paraphrasing the official documentation. So, instead of that, I'll direct you to the official documentation: https://opentelemetry.io/docs/concepts/
 
-After talking a little bit about OpenTelemetry let me refocus on the **real** purpose of this post.   
+After briefly discussing OpenTelemetry, let's refocus on the actual purpose of this post: **To provide you with a practical example of how you can start using OpenTelemetry when you have a series of .NET services that communicate with each other.**
 
-### In this post I want to show you a practical example about how you can start using OpenTelemetry when you have a series of .NET services that communicate amongst them.   
+# **Demo**
 
-
-# Example
-
-I have built 4 apps beforehand, these apps are not doing any business logic operations because that's not the goal here.    
-The important part is that all the apps are talking among them and also using other external services like Redis, MSSQL or Rabbit.   
+I have previously built four apps. These apps do not perform any business logic operations because that's not the objective here.    
+The crucial aspect is that all the apps communicate with each other and also interact with other external services such as Redis, MSSQL, or RabbitMQ.
 
 Here's the diagram:
 
 ![otel-diagram](/img/otel-components-diagram.png)
 
 
-- **App1.WebApi** is a **NET6 Web API** with 2 endpoints.
+- **App1.WebApi** is a **NET 7 Web API** with 2 endpoints.
     - The **/http** endpoint makes an HTTP request to the App2 _"/dummy"_ endpoint.
     - The **/publish-message** endpoint queues a message into a Rabbit queue named _"sample"_.
     
-- **App2.RabbitConsumer.Console** is a **NET6 console** application. 
+- **App2.RabbitConsumer.Console** is a **NET 7 console** application. 
   - Dequeues messages from the Rabbit _"sample"_ queue and makes a HTTP request to the **App3** _"/sql-to-event"_ endpoint with the content of the message.
 
-- **App3.WebApi** is a **NET6 Web API** with 2 endpoints
+- **App3.WebApi** is a **NET 7 Web API** with 2 endpoints
     - The **/dummy** endpoint returns a fixed _"Ok"_ response.
     - The **/sql-to-event** endpoint receives a message via HTTP POST, stores it in a MSSQL Server and afterwards publishes the message as an event into a RabbitMq queue named _"sample_2"_.
 
-- **App4.RabbitConsumer.HostedService** is a **NET6 Worker Service**.
+- **App4.RabbitConsumer.HostedService** is a **NET 7 Worker Service**.
   - A Hosted Service reads the messages from the Rabbitmq _"sample_2"_ queue and stores it into a Redis cache database.
 
-Those apps are not using OpenTelemetry right now, so in the next sections we're going to do a step-by-step guide about how to setup and use the OpenTelemetry client.
+Those apps are not currently utilizing OpenTelemetry. Therefore, in the following sections, we will provide a step-by-step guide on how to set up and use the OpenTelemetry client.
 
 # OpenTelemetry .NET Client
 
 To get started with OpenTelemetry we're going to need the following packages.
 
 ```xml
-<PackageReference Include="OpenTelemetry" Version="1.2.0-rc1" />
-<PackageReference Include="OpenTelemetry.Exporter.Jaeger" Version="1.2.0-rc1" />
-<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.0.0-rc8" />
-<PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.0.0-rc8" />
-<PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.0.0-rc8" />
-<PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.0.0-rc8" />
-<PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc8" />
+<PackageReference Include="OpenTelemetry" Version="1.6.0" />
+<PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.6.0" />
+<PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.6.0" />
+<PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.5.1-beta.1" />
+<PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.5.1-beta.1" />
+<PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.5.1-beta.1" />
+<PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.0.0-rc9.10" />
 ```
 
 - The _**OpenTelemetry**_ package is the core library.
-- The _**OpenTelemetry.Exporter.Jaeger**_ package allows us to export the traces to Jaeger.
-- The _**OpenTelemetry.Extensions.Hosting**_ package contains some extensions that allows us to add the dependencies into the DI container and configure the HostBuilder.
-- The _**OpenTelemetry.Instrumentation.***_ packages are instrumentation libraries. These packages are instrumenting common libraries/functionalities/classes so we don't have to do all the heavy lifting by ourselves. In our example we're using the following ones:
+- The _**OpenTelemetry.Exporter.OpenTelemetryProtocol**_ package allows us to send traces to a compatible OTLP endpoint. For this demo, the traces will be send to Jaeger.
+  - _In previous versions of OpenTelemetry, to send traces to Jaeger, the NuGet package used was ``OpenTelemetry.Exporter.Jaeger``. This package is deprecated in favor of this one: ``OpenTelemetry.Exporter.OpenTelemetryProtocol``._
+- The _**OpenTelemetry.Extensions.Hosting**_  package contains some extensions that allows us to configure the TraceProvider.
+- The _**OpenTelemetry.Instrumentation.***_ packages are instrumentation libraries. These packages instrument common libraries, functionalities, and classes, reducing the need for manual implementation. In our demo, we're using the following ones:
   - The _**OpenTelemetry.Instrumentation.AspNetCore**_ instruments _ASP.NET Core_ and collects telemetry about incoming web requests. This instrumentation also collects incoming gRPC requests using _Grpc.AspNetCore_.
   - The _**OpenTelemetry.Instrumentation.Http**_ instruments the _System.Net.Http.HttpClient_ and _System.Net.HttpWebRequest_ types and collects telemetry about outgoing HTTP requests. 
   - The _**OpenTelemetry.Instrumentation.SqlClient**_ instruments the _Microsoft.Data.SqlClient_ and _System.Data.SqlClient_ types and collects telemetry about database operations.
   - The _**OpenTelemetry.Instrumentation.StackExchangeRedis**_ instruments the _StackExchange.Redis_ type and collects telemetry about outgoing calls to Redis.
 
-In the near future I expect to see more and more instrumentation libraries like these ones so we can instrument the most common dependencies with no effort at all, just install a nuget, add some config lines in the _Startup_ and you're good to go.
+In the near future, I expect to see more and more instrumentation libraries like these ones. This will allow us to effortlessly instrument the most commonly used dependencies. Simply install a NuGet package, add some configuration lines on your app, and you're good to go.
 
 # Adding OpenTelemetry on App1
 
 **1 . Setup the OpenTelemetry library**
 
 ```csharp
-services.AddOpenTelemetryTracing(builder =>
+services.AddOpenTelemetry().WithTracing(builder =>
 {
     builder.AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
         .AddSource(nameof(PublishMessageController))
         .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App1"))
-        .AddJaegerExporter(opts =>
+        .AddOtlpExporter(opts =>
         {
-            opts.AgentHost = Configuration["Jaeger:AgentHost"];
-            opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
-            opts.ExportProcessorType = ExportProcessorType.Simple;
+            opts.Endpoint =
+                new Uri($"{Config["Jaeger:Protocol"]}://{Config["Jaeger:Host"]}:{Config["Jaeger:Port"]}");
         });
 });
 ```
-This is the first app we're instrumenting so I'm going to explain a little bit what we're doing line by line
+This is the first app we're instrumenting, so I'm going to explain what we're doing line by line.
 
 ```csharp
 AddAspNetCoreInstrumentation()
@@ -181,16 +192,15 @@ Enables NET Core instrumentation.
 ```csharp
 AddHttpClientInstrumentation()
 ```
-Enable HTTP Instrumentation.    
-The Api 1 makes an HTTP request to the App2, if we want to trace the HTTP call between these 2 apps we can do it simply by adding this extension method.
+Enables HTTP Instrumentation. App1 makes an HTTP request to App2, if we want to trace the HTTP call between these 2 apps we can do it simply by adding this extension method.
 
 ```csharp
 .AddSource(nameof(PublishMessageController))
 ```
 The `AddSource` method can be used to add a ActivitySource to the provider. Multiple AddSource can be called to add more than one span.
 
-Why we need this? The Api 1 queues a message into a rabbit queue and we want to record this trace.   
-In the former paragraph we have seen that  HTTP requests has built-in instrumentation via method extension, that is not the case for the RabbitMQ dependency. In order to continue the distributed transaction, we must create a new Activity.
+Why we need this? App1 queues a message into a rabbit queue and we want to record this trace.   
+OpenTelemetry has many instrumentation libraries, but there is none available for RabbitMQ. To create a distributed transaction between two applications that communicate using RabbitMQ, we must implement it ourselves, using an Activity.
 
 
 ```csharp
@@ -200,13 +210,13 @@ A Resource is the immutable representation of the entity producing the telemetry
 With the `SetResourceBuilder` method we're configuring the Resource for the application.
 
 ```csharp
-AddJaegerExporter(opts =>
+AddOtlpExporter(opts =>
 {
-    opts.AgentHost = Configuration["Jaeger:AgentHost"];
-    opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
+    opts.Endpoint =
+        new Uri($"{Config["Jaeger:Protocol"]}://{Config["Jaeger:Host"]}:{Config["Jaeger:Port"]}");
 });
 ```
-This method sets Jaeger as the exporter where all the traces are going to be sent.
+This method is utilized to specify the endpoint to which the traces will be sent. Every trace in this demo will be transmitted directly to a Jaeger instance.
 
 **2 . Instrument dependency calls**
 
@@ -302,21 +312,20 @@ public class PublishMessageController : ControllerBase
 
 **1 . Setup the OpenTelemetry library**
 
-The App2 is a console app so we have to setup the library in a different way,  instead of using an IServiceCollection extension we're creating directly a TraceProvider. Apart from that the setup looks pretty much the same.
+App2 is a console app so we have to setup the library in a different way, instead of using an IServiceCollection extension we're creating directly a TraceProvider. Apart from that, the setup looks pretty much the same.
 
 ```csharp
- Sdk.CreateTracerProviderBuilder()
-    .AddHttpClientInstrumentation()
-    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App2"))
-    .AddSource(nameof(Program))
-    .AddJaegerExporter(opts =>
-    {
-        opts.AgentHost = _configuration["Jaeger:AgentHost"];
-        opts.AgentPort = Convert.ToInt32(_configuration["Jaeger:AgentPort"]);
-    })
-    .Build();
+Sdk.CreateTracerProviderBuilder()
+  .AddHttpClientInstrumentation()
+  .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App2"))
+  .AddSource(nameof(Program))
+  .AddOtlpExporter(opts =>
+  {
+      opts.Endpoint =
+          new Uri($"{_config["Jaeger:Protocol"]}://{_config["Jaeger:Host"]}:{_config["Jaeger:Port"]}");
+  })
+  .Build();
 ```
-
 
 **2 . Instrument dependency calls**
 
@@ -395,28 +404,28 @@ private static void AddActivityTags(Activity activity)
 **1 . Setup the OpenTelemetry library**
 
 ```csharp
-services.AddOpenTelemetryTracing(builder =>
+services.AddOpenTelemetry().WithTracing(builder =>
 {
     builder.AddAspNetCoreInstrumentation()
         .AddSource(nameof(RabbitRepository))
         .AddSqlClientInstrumentation()
         .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App3"))
-        .AddJaegerExporter(opts =>
+        .AddOtlpExporter(opts =>
         {
-            opts.AgentHost = Configuration["Jaeger:AgentHost"];
-            opts.AgentPort = Convert.ToInt32(Configuration["Jaeger:AgentPort"]);
+            opts.Endpoint = 
+                new Uri($"{Config["Jaeger:Protocol"]}://{Config["Jaeger:Host"]}:{Config["Jaeger:Port"]}");
         });
 });
 ```
 
-The setup looks almost identical as the ones on the App1 and App2. There is only one thing worth mentioning here:
+The setup looks almost identical as the ones on App1 and App2. There is only one thing worth mentioning here:
 
 ```csharp
 AddSqlClientInstrumentation()
 ```
-This app is not making any HTTP request, instead of that is querying a database, so we're using the SQL extension method to enable SQL instrumentation. We're simply swapping the `OpenTelemetry.Instrumentation.Http` library for the `OpenTelemetry.Instrumentation.SqlClient` library.
+This app does not make any HTTP requests. Instead, it queries a database. Therefore, we're using the SQL extension method to enable SQL instrumentation. We're simply swapping the `OpenTelemetry.Instrumentation.Http` library for the `OpenTelemetry.Instrumentation.SqlClient` library.
 
-This app is also queuing a message into a RabbitMq queue, but the code it's exactly the same as the one I have showed for the app1 section.
+This app is also enqueueing a message into a RabbitMQ queue, but the code is exactly the same as the one I have shown for the App1 section.
 
 
 ## Adding OpenTelemetry on App4
@@ -424,7 +433,7 @@ This app is also queuing a message into a RabbitMq queue, but the code it's exac
 **1 . Setup the OpenTelemetry library**
 
 ```csharp
-services.AddOpenTelemetryTracing(builder =>
+services.AddOpenTelemetry().WithTracing(builder =>
 {
     var provider = services.BuildServiceProvider();
     IConfiguration config = provider
@@ -432,29 +441,28 @@ services.AddOpenTelemetryTracing(builder =>
 
     builder.AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
-        .Configure((sp, builder) =>
-          {
-              RedisCache cache = (RedisCache)sp.GetRequiredService<IDistributedCache>();
-              builder.AddRedisInstrumentation(cache.GetConnection());
-          })
+        .AddRedisInstrumentation()
+        .ConfigureRedisInstrumentation((sp, i) =>
+        {
+            var cache = (RedisCache)sp.GetRequiredService<IDistributedCache>();
+            i.AddConnection(cache.GetConnection());
+        })
         .AddSource(nameof(Worker))
         .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("App4"))
-        .AddJaegerExporter(opts =>
-        {                    
-            
-            opts.AgentHost = config["Jaeger:AgentHost"];
-            opts.AgentPort = Convert.ToInt32(config["Jaeger:AgentPort"]);
-            opts.ExportProcessorType = ExportProcessorType.Simple;
-        });
+        .AddOtlpExporter(opts =>
+        {
+            opts.Endpoint =
+                new Uri($"{config["Jaeger:Protocol"]}://{config["Jaeger:Host"]}:{config["Jaeger:Port"]}");
+        }); ;
 });
 ```
-This app dequeues a message from a RabbitMq queue and stores the message content into a Redis cache database.
+This app dequeues a message from a RabbitMQ queue and stores the message content in a Redis cache database.
 
-The instrumentation part for dequeuing the message from RabbitMq looks exactly the same as the snippet I have put on the App2 section, so I'm going to skip that part.
+The instrumentation for dequeuing the message from RabbitMQ is identical to the snippet I provided in the App2 section, so I'll skip that part.
 
-The instrumentation for Redis is a little more problematic.    
-The issue when trying to instrument Redis is that the `AddRedisInstrumentation()` extension method needs an instance of the Redis `ConnectionMultiplexer`.   
-If you're using an `IDistributedCache` interface and the `AddStackExchangeRedisCache` extension method to configure the Redis connection, like this one: 
+The instrumentation for Redis is a little more troublesome.    
+
+The issue when trying to instrument Redis using the `AddRedisInstrumentation()` extension method is that you need an instance of the Redis ``ConnectionMultiplexer``. However, in the case of App4, Redis is set up using the ``IDistributedCache`` interface, as you can see in the code snippet below.
 
 ```csharp
 services.AddStackExchangeRedisCache(options =>
@@ -465,7 +473,9 @@ services.AddStackExchangeRedisCache(options =>
 });
 ```
 
-You will realize that you can't access the `ConnectionMultiplexer` property because is not publicly accesible, so I'm writing an extension method that is using Reflection to obtain it.
+Which means that you won't be able to access the `ConnectionMultiplexer` property from the ``IDistributedCache`` implementation because it is not publicly accessible.    
+
+To circumvent this issue, I have created an extension method that employs Reflection to acquire an instance of the ``ConnectionMultiplexer``.
 
 ```csharp
 public static class RedisCacheExtensions
@@ -482,14 +492,25 @@ public static class RedisCacheExtensions
     }
 }
 ```
-Also, as you can see I'm not using directly the ``AddRedisInstrumentation()`` method, instead of that I'm wrapping the ``AddRedisInstrumentation()`` methood with the ``Configure()`` method.    
-The ``Configure()`` method is an overload method that allows to get a hold of the ``IServiceProvider`` instance.
+Now we can utilize the ``ConfigureRedisInstrumentation`` extension method alongside the extension I have built in the previous code snippet to successfully instrument Redis.
+
+```csharp
+...
+.AddRedisInstrumentation()
+.ConfigureRedisInstrumentation((sp, i) =>
+{
+    var cache = (RedisCache)sp.GetRequiredService<IDistributedCache>();
+    i.AddConnection(cache.GetConnection());
+})
+...
+```
+
 
 # Jaeger  
 
-After adding the OpenTelemetry library on these 4 apps we are going to generate some traffic and afterwards access Jaeger to start analyzing the traces that the apps are sending.
+After adding the OpenTelemetry library to these four apps, we will generate some traffic and then access Jaeger to begin analyzing the traces that the apps are sending.
 
-If we take a look at the entire trace, this is how it looks:
+If we examine an entire trace, here is how it looks:
 
 ![otel-jaeger](/img/otel-jaeger.png)
 
@@ -562,7 +583,7 @@ Here's the docker-compose file:
 
 
 ```yaml
-version: '3.4'
+ersion: '3.4'
 
 networks:
   tracing:
@@ -570,7 +591,7 @@ networks:
     
 services:
   rabbitmq:
-    image: rabbitmq:3.6.15-management
+    image: rabbitmq:3.12-management
     ports:
       - 15672:15672
       - 5672
@@ -588,7 +609,7 @@ services:
       - tracing
 
   redis:
-    image: redis:6.2.1
+    image: redis:7.2.1
     ports:
     - 6379:6379
     networks:
@@ -600,14 +621,20 @@ services:
     restart: unless-stopped
     ports:
       - 5775:5775/udp
-      - 5778:5778
       - 6831:6831/udp
       - 6832:6832/udp
-      - 9411:9411
-      - 14268:14268
+      - 5778:5778
       - 16686:16686
+      - 14250:14250
+      - 14268:14268
+      - 14269:14269
+      - 4317:4317
+      - 4318:4318
+      - 9411:9411
     networks:
       - tracing
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
 
   app1:
     build:
@@ -621,8 +648,9 @@ services:
       - jaeger
       - app3
     environment:
-      Jaeger__AgentHost: jaeger
-      Jaeger__AgentPort: 6831
+      Jaeger__Protocol: http
+      Jaeger__Port: 4317
+      Jaeger__Host: jaeger
       RabbitMq__Host: rabbitmq
       App3Endpoint: http://app3/dummy
 
@@ -639,8 +667,9 @@ services:
       - app3
     entrypoint: ["./wait.sh", "30", "dotnet", "App2.RabbitConsumer.Console.dll"]
     environment:
-      Jaeger__AgentHost: jaeger
-      Jaeger__AgentPort: 6831
+      Jaeger__Protocol: http
+      Jaeger__Port: 4317
+      Jaeger__Host: jaeger
       RabbitMq__Host: rabbitmq
       App3UriEndpoint: http://app3
 
@@ -656,11 +685,12 @@ services:
       - jaeger
       - sqlserver
     environment:
-      Jaeger__AgentHost: jaeger
-      Jaeger__AgentPort: 6831
+      Jaeger__Protocol: http
+      Jaeger__Port: 4317
+      Jaeger__Host: jaeger
       RabbitMq__Host: rabbitmq
       SqlDbConnString: server=sqlserver;user id=sa;password=Pass@Word1;
-
+  
   app4:
     build:
       context: ./App4.RabbitConsumer.HostedService
@@ -672,8 +702,9 @@ services:
       - redis
     entrypoint: ["./wait.sh", "30", "dotnet", "App4.RabbitConsumer.HostedService.dll"]
     environment:
-      Jaeger__AgentHost: jaeger
-      Jaeger__AgentPort: 6831
+      Jaeger__Protocol: http
+      Jaeger__Port: 4317
+      Jaeger__Host: jaeger
       RabbitMq__Host: rabbitmq
       Redis__Host: redis
       Redis__Port: 6379
