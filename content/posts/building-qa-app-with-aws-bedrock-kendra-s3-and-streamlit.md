@@ -1,6 +1,6 @@
 ---
 title: "Building a Q&A app capable of answering questions related to your enterprise documents using AWS Bedrock, AWS Kendra, AWS S3 and Streamlit"
-date: 2023-08-21T10:00:03+02:00
+date: 2023-10-03T10:00:03+02:00
 tags: ["python", "openai", "ai", "aws", "genai", "llm"]
 description: "The purpose of this post is to demonstrate how easy is to build a basic Q&A app capable of answering questions about your company's internal documents. This time, we will use only AWS services to build it (plus Streamlit for the user interface)."
 draft: false
@@ -9,7 +9,7 @@ draft: false
 > **Just show me the code!**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit).
 
-A couple of months ago, I wrote a post about how to build a Q&A app capable of answering questions related to your private documents using OpenAI GPT-4. You can read it, in [here](https://www.mytechramblings.com/posts/building-qa-app-with-openai-pinecone-and-streamlit/).
+A few months ago, I wrote a post about how to build a Q&A app capable of answering questions related to your private documents using OpenAI GPT-4. You can read it, in [here](https://www.mytechramblings.com/posts/building-qa-app-with-openai-pinecone-and-streamlit/).
 
 To build it, I used the following services:
 -  ``Azure OpenAI GPT-4``
@@ -113,31 +113,19 @@ You can deploy those resources as you like: using the AWS portal, AWS CDK, Terra
 
 ⚠️ If you want to take the easy route, I have uploaded a few Terraform files to my [GitHub repository](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit/tree/main/infra) that will create the required resources on your AWS account.
 
-## **2. Sign up for to the AWS Bedrock preview**
+## **2. Request access to AWS Bedrock third-party LLMs**
 
-As of today (08/21/2023), AWS Bedrock is still on preview. To access it, you'll need to sign up for the preview.
+By default, in Bedrock you will have access only to the Amazon Titan LLM. To utilize any of the third-party LLMs (Anthropic, Ai21 Labs, Cohere), you must register for access separately.
 
-![rag-aws-bedrock-preview](/img/rag-aws-bedrock-preview.png)
+![rag-aws-bedrock-third-party-llm-access](/img/rag-aws-bedrock-third-party-llm-access.png)
 
-Once admitted to the preview, you will have access only to the Amazon Titan LLM. To utilize any of the third-party LLMs (Anthropic and AI21 Labs models), you must register for access separately.
+In the "Model Access" section, you have an overview of which LLMs you have access to and which ones you do not.
 
-If you try to use any of this third-party LLMs before they have give you access, the Bedrock API will respond with an error message.
+![rag-aws-third-party-model-access](/img/rag-aws-third-party-model-access.png)
 
-From this point forward, I'm going to assume that you have fully access to AWS Bedrock and all the available models.
+To fully use this application, you must **have access to every AWS Bedrock third-paty LLMs**.
 
-## **3. Get the boto3 preview version**
-
-The Q&A app will be a Python-based app, which means that you're going to need the ``boto3`` package.    
-``boto3`` is the AWS SDK package for Python, which allows Python apps to make use of AWS services.
-
-Right now (08/21/2023), there is not a global available ``boto3`` package that allows us to work with the AWS Bedrock service. To work with it, you must download the ``boto3`` wheel preview version.
-
-> What is a wheel?    
-> Python wheels are a pre-built binary package format for Python modules and libraries. 
-
-⚠️ If you don't want to waste your time searching for the preview ``boto3`` package, I have uploaded the ``boto3`` and ``botocore`` wheel files that you're going to need to interact with AWS Bedrock on my [GitHub Repository](https://github.com/karlospn/building-qa-app-with-aws-bedrock-kendra-s3-and-streamlit/tree/main).
-
-## **4. Build the Q&A app using LangChain**
+## **3. Build the Q&A app using LangChain**
 
 > ⚠️ If you're not a fan of [LangChain](https://www.langchain.com/) an prefer to do everything by yourself without the aid of any third-party library, go to the next section (section 5).    
 > In section 5, I will show you how to build the same Q&A app we're going to build here, but using only the ``AWS SDK for Python``.
@@ -205,7 +193,7 @@ query = st.text_input("What would you like to know?")
 
 max_tokens = st.number_input('Max Tokens', value=1000)
 temperature= st.number_input(label="Temperature",step=.1,format="%.2f", value=0.7)
-llm_model = st.selectbox("Select LLM model", ["Anthropic Claude V2", "Amazon Titan", "Ai21Labs J2 Grande Instruct"])
+llm_model = st.selectbox("Select LLM", ["Anthropic Claude V2", "Amazon Titan Text Express v1", "Ai21 Labs Jurassic-2 Ultra"])
 
 
 if st.button("Search"):
@@ -214,7 +202,7 @@ if st.button("Search"):
             
             retriever = get_kendra_doc_retriever()  
 
-            bedrock_client = boto3.client("bedrock", bedrock_region)
+            bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
             llm = Bedrock(model_id="anthropic.claude-v2", region_name=bedrock_region, 
                         client=bedrock_client, 
                         model_kwargs={"max_tokens_to_sample": max_tokens, "temperature": temperature})
@@ -224,11 +212,11 @@ if st.button("Search"):
             st.markdown("### Answer:")
             st.write(response['result'])
 
-        if llm_model == 'Amazon Titan':
+        if llm_model == 'Amazon Titan Text Express v1':
             retriever = get_kendra_doc_retriever()       
             
-            bedrock_client = boto3.client("bedrock", bedrock_region)
-            llm = Bedrock(model_id="amazon.titan-tg1-large", region_name=bedrock_region, 
+            bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
+            llm = Bedrock(model_id="amazon.titan-text-express-v1", region_name=bedrock_region, 
                         client=bedrock_client, 
                         model_kwargs={"maxTokenCount": max_tokens, "temperature": temperature})
 
@@ -237,12 +225,12 @@ if st.button("Search"):
             st.markdown("### Answer:")
             st.write(response['result'])
 
-        if llm_model == 'Ai21Labs J2 Grande Instruct':
+        if llm_model == 'Ai21 Labs Jurassic-2 Ultra':
             
             retriever = get_kendra_doc_retriever()           
             
-            bedrock_client = boto3.client("bedrock", bedrock_region)
-            llm = Bedrock(model_id="ai21.j2-grande-instruct", region_name=bedrock_region, 
+            bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
+            llm = Bedrock(model_id="ai21.j2-ultra-v1", region_name=bedrock_region, 
                         client=bedrock_client, 
                         model_kwargs={"maxTokens": max_tokens, "temperature": temperature})
 
@@ -254,7 +242,7 @@ if st.button("Search"):
 
 There isn't much to comment on here since the code is quite straightforward. Nonetheless, let's take a closer look and provide a step-by-step explanation of what each line of code is accomplishing.
 
-### **4.1. Get user parameters from the User Interface**
+### **3.1. Get user parameters from the User Interface**
 
 The first step is to simply retrieve the user parameters from the UI: 
 
@@ -268,10 +256,10 @@ query = st.text_input("What would you like to know?")
 
 max_tokens = st.number_input('Max Tokens', value=1000)
 temperature= st.number_input(label="Temperature",step=.1,format="%.2f", value=0.7)
-llm_model = st.selectbox("Select LLM model", ["Anthropic Claude V2", "Amazon Titan", "Ai21Labs J2 Grande Instruct"])
+llm_model = st.selectbox("Select LLM", ["Anthropic Claude V2", "Amazon Titan Text Express v1", "Ai21 Labs Jurassic-2 Ultra"])
 ```
 
-### **4.2. Define how we're going to retrieve the relevant information from Kendra**
+### **3.2. Define how we're going to retrieve the relevant information from Kendra**
 
 To retrieve the relevant docs from our knowledge database (AWS Kendra), we're going to use the LangChain``AmazonKendraRetriever`` class.
 
@@ -300,24 +288,24 @@ def get_kendra_doc_retriever():
     return retriever
 ```
 
-### **4.3. Initialize the LangChain Bedrock client**
+### **3.3. Initialize the LangChain Bedrock client**
 
 To interact with AWS Bedrock LLMs, we're going to use the LangChain ``Bedrock`` class.
 
-The LangChain ``Bedrock`` class allow us to setup the Bedrock LLM we want to use. In this specific code snippet, we're setting up the ``Amazon Titan Large`` LLM.
+The LangChain ``Bedrock`` class allow us to setup the Bedrock LLM we want to use. In this specific code snippet, we're setting up the ``Amazon Titan Text Express v1`` LLM.
 
 This ``Bedrock`` class will be plugged into a LangChain chain to build the RAG pattern. (More on section 4.4).
 
 The LangChain ``Bedrock`` class creates a Bedrock ``boto3`` client by default, but if you want to customize the configuration, it is better to explicitly create the Bedrock client beforehand, and pass it to the Langchain.
 
 ```python
-bedrock_client = boto3.client("bedrock", bedrock_region)
-llm = Bedrock(model_id="amazon.titan-tg1-large", region_name=bedrock_region, 
+bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
+llm = Bedrock(model_id="amazon.titan-text-express-v1", region_name=bedrock_region, 
             client=bedrock_client, 
             model_kwargs={"maxTokenCount": max_tokens, "temperature": temperature})
 ```
 
-### **4.4. Create a LangChain RetrievalQA chain**
+### **3.4. Create a LangChain RetrievalQA chain**
 
 - In section 4.2, we declared a way to retrieve the documents from our knowledge database using the  ``AmazonKendraRetriever`` implementation.
 - In section 4.3, we declared a way to interact with a Bedrock LLM using the ``Bedrock`` class.
@@ -338,7 +326,7 @@ st.write(response['result'])
 
 And that's it! You have a functional RAG workflow that uses AWS Kendra and AWS Bedrock and it is no more than 10 - 15 lines of code, and all thanks to LangChain.
 
-## **5. Build the Q&A app using boto3 (and without using LangChain)**
+## **4. Build the Q&A app using boto3 (and without using LangChain)**
 
 > **In this section we're going to build the same Q&A app from the previous section (section 4), but this time without making use of the ``LangChain`` library.**
 
@@ -372,8 +360,8 @@ kendra_region = os.getenv('AWS_KENDRA_REGION')
 
 def retrieve_kendra_docs():  
     kendra_client = boto3.client("kendra", kendra_region)
-    result = kendra_client.retrieve(QueryText = query,IndexId = 
-                                    kendra_index,  
+    result = kendra_client.retrieve(QueryText = query,
+                                    IndexId = kendra_index,  
                                     PageSize = 3,
                                     PageNumber = 1)
 
@@ -382,7 +370,7 @@ def retrieve_kendra_docs():
     return joined_chunks
 
 def build_prompt(query, docs):
-    prompt = f"""
+    prompt = f"""Human: You're a QA assistant.
     Answer the following question based on the context below.
     If you don't know the answer, just say that you don't know. Don't try to make up an answer. Do not answer beyond this context.
     ---
@@ -390,7 +378,9 @@ def build_prompt(query, docs):
     ---
     CONTEXT:
     {docs}
-    """
+
+    Assistant:"""
+
     return prompt
 
 st.title("AWS Q&A app 💎")
@@ -399,7 +389,7 @@ query = st.text_input("What would you like to know?")
 
 max_tokens = st.number_input('Max Tokens', value=1000)
 temperature= st.number_input(label="Temperature",step=.1,format="%.2f", value=0.7)
-llm_model = st.selectbox("Select LLM model", ["Anthropic Claude V2", "Amazon Titan", "Ai21Labs J2 Grande Instruct"])
+llm_model = st.selectbox("Select LLM", ["Anthropic Claude V2", "Amazon Titan Text Express v1", "Ai21 Labs Jurassic-2 Ultra"])
 
 
 if st.button("Search"):
@@ -415,7 +405,7 @@ if st.button("Search"):
                 "temperature": temperature
             })
 
-            bedrock_client = boto3.client("bedrock", bedrock_region)
+            bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
             response = bedrock_client.invoke_model(
                 body=body, 
                 modelId='anthropic.claude-v2'
@@ -425,11 +415,11 @@ if st.button("Search"):
             st.markdown("### Answer:")
             st.write(response.get("completion"))
 
-        if llm_model == 'Amazon Titan':
+        if llm_model == 'Amazon Titan Text Express v1':
             docs = retrieve_kendra_docs()
             prompt = build_prompt(query, docs) 
             
-            bedrock_client = boto3.client("bedrock", bedrock_region)
+            bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
             body = json.dumps({
                 "inputText": prompt, 
                 "textGenerationConfig":{
@@ -440,19 +430,19 @@ if st.button("Search"):
 
             response = bedrock_client.invoke_model(
                 body=body, 
-                modelId='amazon.titan-tg1-large'
+                modelId='amazon.titan-text-express-v1'
             )
 
             result = json.loads(response.get('body').read())
             st.markdown("### Answer:")
             st.write(result.get('results')[0].get('outputText'))
 
-        if llm_model == 'Ai21Labs J2 Grande Instruct':
+        if llm_model == 'Ai21 Labs Jurassic-2 Ultra':
             
             docs = retrieve_kendra_docs()
             prompt = build_prompt(query, docs) 
             
-            bedrock_client = boto3.client("bedrock", bedrock_region)
+            bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
             body = json.dumps({
                 "prompt": prompt, 
                 "maxTokens": max_tokens, 
@@ -461,16 +451,15 @@ if st.button("Search"):
 
             response = bedrock_client.invoke_model(
                 body=body, 
-                modelId='ai21.j2-grande-instruct'
+                modelId='ai21.j2-ultra-v1'
             )
 
             result = json.loads(response.get("body").read())
             st.markdown("### Answer:")
             st.write(result.get("completions")[0].get("data").get("text"))
-
 ```
 
-### **5.1. Get user parameters from the User Interface**
+### **4.1. Get user parameters from the User Interface**
 
 The first step is to simply retrieve the user parameters from the UI: 
 
@@ -484,10 +473,10 @@ query = st.text_input("What would you like to know?")
 
 max_tokens = st.number_input('Max Tokens', value=1000)
 temperature= st.number_input(label="Temperature",step=.1,format="%.2f", value=0.7)
-llm_model = st.selectbox("Select LLM model", ["Anthropic Claude V2", "Amazon Titan", "Ai21Labs J2 Grande Instruct"])
+llm_model = st.selectbox("Select LLM", ["Anthropic Claude V2", "Amazon Titan Text Express v1", "Ai21 Labs Jurassic-2 Ultra"])
 ```
 
-### **5.2. Retrieve the relevant information from Kendra**
+### **4.2. Retrieve the relevant information from Kendra**
 
 The ``retrieve`` method from the ``boto3`` Kendra client allow us to retrieve the relevant docs from our knowledge database.
 
@@ -513,7 +502,7 @@ def retrieve_kendra_docs():
     return joined_chunks
 ```
 
-### **5.3. Assemble the prompt**
+### **4.3. Assemble the prompt**
 
 Now, we construct the prompt that we will be sending to a Bedrock LLM.
 
@@ -524,7 +513,7 @@ Within the prompt, you will notice the placeholders ``{query}`` and ``{docs}``.
 
 ```python
 def build_prompt(query, docs):
-    prompt = f"""
+    prompt = f"""Human: You're a QA assistant.
     Answer the following question based on the context below.
     If you don't know the answer, just say that you don't know. Don't try to make up an answer. Do not answer beyond this context.
     ---
@@ -532,16 +521,18 @@ def build_prompt(query, docs):
     ---
     CONTEXT:
     {docs}
-    """
+
+    Assistant:"""
+
     return prompt
 ```
 
-### **5.4. Send the prompt to a Bedrock LLM and get the answer that comes back**
+### **4.4. Send the prompt to a Bedrock LLM and get the answer that comes back**
 
 The last step is sending the prompt to one of the Bedrock LLMs using the ``invoke_model`` method from the ``boto3`` Bedrock client, and get the answer that comes back.
 
 ```python
-bedrock_client = boto3.client("bedrock", bedrock_region)
+bedrock_client = boto3.client("bedrock-runtime", bedrock_region)
 body = json.dumps({
     "inputText": prompt, 
     "textGenerationConfig":{
@@ -552,7 +543,7 @@ body = json.dumps({
 
 response = bedrock_client.invoke_model(
     body=body, 
-    modelId='amazon.titan-tg1-large'
+    modelId='amazon.titan-text-express-v1'
 )
 
 result = json.loads(response.get('body').read())
