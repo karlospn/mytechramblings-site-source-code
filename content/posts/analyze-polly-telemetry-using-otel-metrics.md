@@ -12,7 +12,7 @@ draft: true
 
 This post does not aim to be an introductory post on how the Polly library works, how to configure its various strategies, etc. There are already multiple posts on the Internet that explain these topics very well.
 
-I also won't be delving into the specific details of how OpenTelemetry Metrics work, such as explaining what a MeterProvider is or providing insights into how the OTEL Collector operates.     
+I also won't be delving into the specific details of how OpenTelemetry Metrics works.    
 If you want to learn more about OpenTelemetry Metrics and how to use it with .NET, you can read my introductory post that I wrote a few months ago. 
 > Here's a link to my _["Getting started with OpenTelemetry Metrics in .NET"](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-metrics-and-dotnet-part-1/)_ blog post.
 
@@ -129,7 +129,7 @@ In this section, I will explore the Instruments and Metrics that are built into 
 
 The Polly built-in Telemetry implementation can be found in the _[Polly.Telemetry.TelemetryListenerImpl](https://github.com/App-vNext/Polly/blob/main/src/Polly.Extensions/Telemetry/TelemetryListenerImpl.cs)_ class.   
 
-Within this class, we find the creation of the ``Meter`` and the ``Instruments`` responsible for reporting ``Measuments``. Those are fundamental concepts in OpenTelemetry Metrics.    
+Within this class, we find the ``Meter`` and the ``Instruments`` responsible for reporting ``Measuments``. Those are fundamental concepts in OpenTelemetry Metrics.    
 
 Let's do a very quick recap of what each of these terms means:
 
@@ -138,14 +138,16 @@ Let's do a very quick recap of what each of these terms means:
 - ``Measurements`` are what we create or observe in our applications.
 
 
-If we take a look at the ``TelemetryListenerImpl`` class, we can see that all the metrics emitted by Polly can be found within the "Polly" ``Meter``.
-
-> The ``TelemetryUtil.PollyDiagnosticSource`` is nothing more than a string:   
-``internal const string PollyDiagnosticSource = "Polly";``
+If we take a look at the ``TelemetryListenerImpl`` class, we can see that all the metrics emitted by the Polly library can be found within this single  ``Meter``.
 
 ```csharp
  internal static readonly Meter Meter = new(TelemetryUtil.PollyDiagnosticSource, "1.0");
 ```
+
+> The ``TelemetryUtil.PollyDiagnosticSource`` is nothing more than a string:   
+``internal const string PollyDiagnosticSource = "Polly";``
+
+
 
 The above ``Meter`` has 3 built-in ``Instruments`` capable of emitting ``Measurements``:
 
@@ -165,7 +167,7 @@ ExecutionDuration = Meter.CreateHistogram<double>(
     description: "The execution duration of resilience pipelines.");
 ```
 
-These are the ``Instruments`` that will generate the metrics we'll send to Prometheus and Grafana for more in-depth analysis.
+These are the ``Instruments`` responsible for generating the Polly metrics that we will send to Prometheus and Grafana for more a comprehensive analysis of our application.
 
 # **Demo Application**
 
@@ -176,7 +178,7 @@ The following diagram shows what we're going to build from this point forward.
 ![polly-metrics-components-diagram](/img/polly-metrics-components-diagram.png)
 
 - A .NET WebAPI that makes calls to the https://jsonplaceholder.typicode.com/ API, utilizing various Polly strategies to enhance resiliency during these HTTP requests.
-- The WebApi uses the OpenTelemetry Metrics alongside the OTLP exporter package (``OpenTelemetry.Exporter.OpenTelemetryProtocol``) to send the Polly Telemetry to an OpenTelemetry Collector.
+- The WebApi uses the OpenTelemetry OTLP exporter package (``OpenTelemetry.Exporter.OpenTelemetryProtocol``) to send the Polly Telemetry to an OpenTelemetry Collector.
 - A Prometheus server that retrieves the Polly metric data from the OTEL Collector.
 - A Grafana server, where we can create dashboard panels to visualize the Polly metrics received from the WebAPI.
 
@@ -252,7 +254,7 @@ builder.Services.AddHttpClient("typicode-comments", c =>
 
 }).AddPolicyHandler(PollyResiliencePipelines.CreateRetryStrategy().AsAsyncPolicy());
 ```
-The final step is to create the /comments endpoint itself.
+And the last step is to create the ``/comments`` endpoint itself.
 
 ```csharp
 [ApiController]
@@ -288,7 +290,7 @@ This endpoint makes a call to the ``https://jsonplaceholder.typicode.com/users/{
 
 To invoke the TypiCode API, the app will use an ``HttpClient`` with a Polly Circuit Breaker Strategy attached to it.
 
-The first step is to create the Polly Strategy, which will exhibit the following behavior:
+The first step is to create the Polly Circuit Breaker Strategy, which will exhibit the following behavior:
 - It will handle exceptions of type HttpRequestException or 500 status codes returned by the TypiCode API.
 - If there are more than 5 HTTP calls within 30 seconds, and 30% of them result in a failure, the circuit will open for 15 seconds.
 
@@ -369,7 +371,7 @@ builder.Services.AddHttpClient("typicode-comments", c =>
 }).AddPolicyHandler(PollyResiliencePipelines.CreateRetryStrategy().AsAsyncPolicy());
 ```
 
-And the final step is to create the /users endpoint itself.
+And the final step is to create the ``/users`` endpoint itself.
 
 ```csharp
 [ApiController]
@@ -400,7 +402,7 @@ public class UsersController : ControllerBase
 
 ## **3. Configuring the .NET OpenTelemetry Metrics provider**
 
-In the last 2 sections, we have created 2 Polly strategies, enabled Telemetry for each of them, and incorporated them into their respective HTTP clients. However, all this effort is pointless unless we configure OpenTelemetry Metrics to send the Polly Telemetry someplace where we can analyze it later.
+In the last 2 sections, we have created 2 Polly strategies, enabled Telemetry for each of them, and incorporated them into their respective HTTP clients. However, all this effort is pointless unless we send the Polly Telemetry someplace where we can analyze it.
 
 In this section, we will configure OpenTelemetry Metrics to send Polly's metrics to an OpenTelemetry Collector.
 
@@ -408,7 +410,7 @@ The following code snippet shows how to set up OpenTelemetry Metrics to export P
 
 ```csharp
 builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
-    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Pollyv8.WebApi"))
+    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("PollyTelemetryDemo.WebApi"))
     .AddMeter("Polly")
     .AddOtlpExporter(options =>
     {
@@ -417,9 +419,9 @@ builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
     }));
 ```
 
-As you can see, the configuration is quite standard. The only point worth commenting on is ``AddMeter("Polly")`` command.
+As you can see, the configuration is quite standard. The only point worth commenting on is the use of the ``AddMeter("Polly")`` extension method.
 
-Do you remember that at the beginning of the post, we mentioned that all Polly metrics are emitted by a ``Meter`` with the name "Polly"? The ``AddMeter("Polly")`` extension method configures OpenTelemetry to transmit all the metrics collected by this particular "Polly" ``Meter``.   
+Do you remember that at the beginning of the post, we mentioned that all Polly metrics are emitted by ``Instruments`` within  a  ``Meter`` named "Polly"? The ``AddMeter("Polly")`` extension method configures OpenTelemetry to transmit all the metrics collected by this particular "Polly" ``Meter``.   
 
 If we omit the ``AddMeter("Polly")`` line during the configuration of the OpenTelemetry Metrics provider, the metrics generated by Polly will not be sent to the OpenTelemetry Collector.
 
@@ -483,7 +485,7 @@ Once we have configured Prometheus, if we access the .NET API and execute it a f
 
 When we configured the Circuit Breaker strategy, do you remember that we added an ``MeteringEnricher`` to it?
 
-When the circuit becomes open, this enricher adds a tag that specifies its duration. If we run the .NET API until we force the circuit to open, we can observe in Prometheus how the duration tag is successfully added.
+When the circuit becomes open, this enricher adds a tag that specifies its duration. If we run the .NET API until we force the circuit to open, we can observe in Prometheus how the duration tag is effectively incorporated into the generated metrics.
 
 ![polly-metrics-prometheus-metrics-custom-tags](/img/polly-metrics-prometheus-metrics-custom-tags.png)
 
@@ -491,7 +493,7 @@ When the circuit becomes open, this enricher adds a tag that specifies its durat
 
 Once we have Polly's Telemetry in Prometheus, we can start building a dashboard to put these metrics to work.
 
-What can we do with the Polly's Telemetry in Grafana? Let me show you a few examples.
+What can we do with Polly's Telemetry in Grafana? Let me show you a few examples.
 
 > The following Grafana panels are only a few examples of what we can build using the metrics emitted by Polly, we could do more things with them.
 
