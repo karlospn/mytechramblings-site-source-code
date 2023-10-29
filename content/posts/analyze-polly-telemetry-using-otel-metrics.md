@@ -341,11 +341,169 @@ builder.Services.AddHttpClient("typicode-comments", c =>
 
 ## **3. Configure OpenTelemetry Metrics .NET provider**
 
+In the last 2 sections, we have created 2 Polly strategies, enabled Telemetry for each of them, and incorporated them into their respective HTTP clients. However, all this effort is pointless unless we configure OpenTelemetry Metrics to send the Polly metrics that we are going to generate to a place where we can analyze them later.
+
+In this section, we will configure OpenTelemetry Metrics to send Polly's metrics to an OpenTelemetry Collector.
+
+The following code snippet shows how to set up OpenTelemetry Metrics to export Polly Telemetry.
+
+```csharp
+builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
+    .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("Pollyv8.WebApi"))
+    .AddMeter("Polly")
+    .AddOtlpExporter(options =>
+    {
+        options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OtlpEndpointUri") 
+                                    ?? throw new InvalidOperationException());
+    }));
+```
+
+
+As you can see, the configuration is quite standard, and the only point worth commenting on is the ``AddMeter("Polly")`` part.
+
+Do you remember that at the beginning of the post, we mentioned that all Polly metrics are emitted by a ``Meter`` with the name "Polly"?   
+
+The ``AddMeter("Polly")`` extension method configures OpenTelemetry to transmit all the metrics collected by the "Polly" ``Meter``.   
+If we don't add  the ``AddMeter("Polly")`` line when configuring the OpenTelemetry Metrics provider, the metrics emitted by Polly won't be taken into account.
 
 # **OpenTelemetry Collector**
 
+The OpenTelemetry Collector consists of three components:
+
+- ``Receivers``: Can be push or pull based, is how data gets into the Collector.
+- ``Processors``: Run on data between being received and being exported.
+- ``Exporters``: Can be push or pull based, is how you send data to one or more backends/destinations.
+
+In this case, the OpenTelemetry Collector receives the Polly metrics from the .NET API via gRPC and exports them into Prometheus.   
+
+The following code snippet demonstrates how the OpenTelemetry Collector is configured.
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+processors:
+  batch:
+
+extensions:
+  health_check:
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+```
+
 # **Prometheus**
+
+Prometheus is setup to scrape the OpenTelemetry Collector metrics endpoints.
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'otel-collector'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['otel-collector:8889']
+      - targets: ['otel-collector:8888']
+```
+
+
+Once we have configured Prometheus, if we access the .NET API and execute it a few times to generate a certain number of metrics, we will be able to see in Prometheus how the Polly metrics start to appear.
+
+<add-img>
+
+When we configured the Circuit Breaker strategy, do you remember that we added an ``MeteringEnricher`` to it?
+
+When the circuit becomes open, this enricher adds a tag that specifies its duration. If we run the .NET API until we force the circuit to open, we can observe in Prometheus how the duration tag is successfully added.
+
+<add-img>
 
 # **Grafana**
 
+Once we have Polly's Telemetry in Prometheus, it's time to leverage and visualize it. To do that, we are going to use Grafana.
+
+
 # **How to test the application**
+
+If you want to take a look at the app source code and maybe try it out for youself, you can go to my [GitHub repository](https://github.com/karlospn/analyze-polly-telemetry-using-otel-metrics).
+
+If you want to execute the app by yourself, I have uploaded a ``docker-compose`` file that starts up the app and also the external dependencies.   
+The external dependencies (Prometheus, Grafana and OpenTelemetry Collector) are already preconfigured so you don’t need to do any extra setup. Just run ``docker-compose`` up and you’re good to go!
+
+But, there is a **catch** to test this app, that you need to be aware of.    
+
+Take a look at the ``docker-compose``:
+
+```yaml
+version: '3.8'
+
+networks:
+  polly:
+    name: polly-network
+
+services:
+  prometheus:
+    build: 
+      context: ./scripts/prometheus
+    ports:
+      - 9090:9090
+    networks:
+      - polly
+
+  grafana:
+    build: 
+      context: ./scripts/grafana
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    networks:
+      - polly
+  
+  otel-collector:
+    image: otel/opentelemetry-collector:0.73.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./scripts/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "8888:8888" 
+      - "8889:8889" 
+      - "13133:13133"
+      - "4317:4317"
+    networks:
+      - polly
+
+  app:
+    build:
+      context: ./src/PollyTelemetryDemo.WebApi
+    depends_on:
+      - otel-collector
+    ports:
+      - 5001:8080
+    environment:
+      TypiCodeBaseUri: https://jsonplceholder.typicode.com/
+      OtlpEndpointUri: http://otel-collector:4317
+    networks:
+      - polly
+```
+
+As you can see, the app requires a couple of environment variables to function correctly:
+- ``TypiCodeBaseUri``: The URI address of the TypiCode API.
+- ``OtlpEndpointUri``: The URI address of the OpenTelemetry Collector
+
+If you examine the value of ``TypiCodeBaseUri``, you'll notice a typo in the address. The correct address should be ``jsonplaceholder.typicode.com``, but there is a missing 'a' in it.
+
+**This error is intentional**, we want to ensure that calls to TypiCode API fail so that the Polly strategies are executed. This way, we can generate an entire set of Polly metrics.   
+You can fix the typo and run the ``docker-compose`` if you wish, but you won't see half of the Polly metrics, because some of the Polly strategies, like retries or circuit breaker, are only triggered when something goes wrong.
