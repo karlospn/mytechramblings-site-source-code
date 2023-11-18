@@ -14,10 +14,13 @@ However, registering apps manually can pose several challenges. As your organiza
 
 A more efficient alternative is to use Infrastructure as Code (IaC) tools, such as Terraform. Terraform allows you to manage your Entra apps in a more predictable way. Moreover, you can seamlessly integrate Terraform with a CI/CD process, further automating the registration process.
 
-Terraform already has an official Entra provider written by Microsoft itself (https://registry.terraform.io/providers/hashicorp/azuread/latest).    
+Terraform already has an official Entra provider written by Microsoft itself.
+ - https://registry.terraform.io/providers/hashicorp/azuread/latest    
+
 In this post, I want to explore its capabilities, and I'll attempt to construct a fairly common authorization scenario. To achieve this, I'm going to register multiple apps on Microsoft Entra ID and have them interact with each other using a couple of different OAuth2 authorization flows.
 
-> _This post has been written using the version **2.45.0** of the Terraform provider for Microsoft Entra ID. Keep in mind that when you read this post, there might be a more recent version available, and certain resources may have undergone changes or experienced breaking modifications._
+> _This post has been written using the version **2.45.0** of the Terraform provider for Microsoft Entra ID.     
+> Keep in mind that when you read this post, there might be a more recent version available, and certain resources may have undergone changes or experienced some kind of breaking change._
 
 # **Scenario Details**
 
@@ -70,6 +73,7 @@ There are multiple ways to setup the ``azuread`` Terraform provider. It supports
 - Using a Managed Identity.
 - Using a Service Principal and a Client Certificate.
 - Using a Service Principal and a Client Secret.
+- Using a Service Principal and OpenID Connect.
 
 In this post, I'll be using the **Service Principal + Client Secret** method. This approach is well-suited for a potential CI/CD implementation in the future, and it's quite easy to set up. 
 
@@ -87,6 +91,7 @@ Additionally, you need to create a new client secret for this app.
 ![testing-entra-with-terraform-master-app-secret](/img/testing-entra-with-terraform-master-app-secret.png)
 
 Once we have completed these steps, we are ready to configure the Terraform Provider using the "master app" client_id, client_secret, and our Microsoft Entra Tenant ID.   
+
 There are a a couple of ways to configure the Provider:
 
 - Using environment variables (the recommended way).
@@ -472,8 +477,8 @@ Here's an access token acquired by John. As you can see, it possesses the "Admin
 
 # **Closing thoughts**
 
-As you have seen in this post, we have successfully implemented both authorization scenarios using Microsoft Entra ID and Terraform. We haven't built anything overly complex; in fact, both scenarios were quite simple.However, many times, we don't need to create elaborate authorization setups; using the basics properly is often more than enough.
+As you have seen in this post, we have successfully implemented both authorization scenarios using Microsoft Entra ID and Terraform. We haven't built anything overly complex; in fact, both scenarios were quite simple. However, many times, we don't need to create elaborate authorization setups; using the basics properly is often more than enough.
 
 For those of you who have been following my blog for some time, you may know that I conducted a similar test around three years ago when the Terraform provider for AAD was in version 1.1.1. The results were quite disappointing because setting up a simple scenario like the one we have seen in this post was practically impossible at that time. Therefore, I can conclude by saying that this provider has evolved positively. 
 
-Today, if I had to use Microsoft Entra ID as my IDP, I would undoubtedly use this Terraform provider and deploy changes through a CI/CD flow.
+Today, if I had to use Microsoft Entra ID as my IDP, I would undoubtedly use this Terraform Provider and deploy changes through a CI/CD flow.
