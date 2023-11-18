@@ -1,7 +1,7 @@
 ---
 title: "Trying to automate Microsoft Entra ID App Registration process using Terraform"
 date: 2023-11-13T13:48:48+01:00
-description: "The purpose of this post is to test the App Registration process using the latest version of the Terraform provider for Microsoft Entra ID. To achieve this, we're going to register multiple apps and make them interact with each other. "
+description: "The purpose of this post is to test the App Registration process using the latest version of the Terraform provider for Microsoft Entra ID. To achieve this, we're going to register multiple apps on Microsoft Entra ID and make them interact with each other using a couple of different OAuth2 authorization flows."
 tags: ["azure", "terraform", "graph", "entra"]
 draft: true
 ---
@@ -9,60 +9,61 @@ draft: true
 > **Just show me the code!**   
 > As always, if you don’t care about the post I have uploaded the source code on my [Github](https://github.com/karlospn/testing-entra-app-registration-process-using-terraform).
 
-If you're looking to secure your applications, Microsoft Entra ID ( aka. Azure Active Directory) is a good option. However, registering apps manually can pose several challenges. As your organization expands and the number of applications grows, managing them manually can become time-consuming and increase the risk of inconsistencies between them.
+If you're looking to secure your applications, Microsoft Entra ID (aka. Azure Active Directory) is a great option.    
+However, registering apps manually can pose several challenges. As your organization expands and the number of applications grows, managing them manually can become time-consuming and increase the risk of inconsistencies between them.
 
 A more efficient alternative is to use Infrastructure as Code (IaC) tools, such as Terraform. Terraform allows you to manage your Entra apps in a more predictable way. Moreover, you can seamlessly integrate Terraform with a CI/CD process, further automating the registration process.
 
-Terraform already has an official Entra provider written by Microsoft itself (https://registry.terraform.io/providers/hashicorp/azuread/latest). In this post, I want to explore its capabilities when we need to register multiple apps that interact with each other. To put it to the test, I'll try to construct a fairly common scenario and see how it behaves. 
+Terraform already has an official Entra provider written by Microsoft itself (https://registry.terraform.io/providers/hashicorp/azuread/latest).    
+In this post, I want to explore its capabilities, and I'll attempt to construct a fairly common authorization scenario. To achieve this, I'm going to register multiple apps on Microsoft Entra ID and have them interact with each other using a couple of different OAuth2 authorization flows.
 
-> _This post has been created using the Terraform provider for Microsoft Entra version **2.45.0**. Keep that in mind because when you read this post, there might be a new version that contains some breaking change._
+> _This post has been written using the version **2.45.0** of the Terraform provider for Microsoft Entra ID. Keep in mind that when you read this post, there might be a more recent version available, and certain resources may have undergone changes or experienced breaking modifications._
 
 # **Scenario Details**
 
-The scenario we're going to build is the following one:
+The scenario we're going to build in this post is the following one:
 
 - **Payments API**
-  - Exposes 2 scopes:
-    - _payment.write_ scope. It requires admin consent to be used.
-    - _payment.read_ scope. 
+  - It exposes 2 scopes:
+    - A ``payment.write`` scope. It requires an admin consent to be used.
+    - A ``payment.read`` scope. 
   - It has 2 app roles:
-    - A _Reader_ role.
-    - An _Admin_ role.
+    - A ``Reader`` role. It can be assigned to both users and applications.
+    - An ``Admin`` role. It can be assigned to both users and applications.
 
 - **Bookings API**
   - Consumes the Payments API through a **Client Credentials** flow.
-    - Acquires an access_token from the Entra `/token` endpoint and utilizes it to gain access to the Payments API.
-  - Has the Payments API _Reader_ Role assigned.
+    - Acquires an access token from the Entra `/token` endpoint and uses it to gain access to the Payments API.
+  - It has the Payments API ``Reader`` Role assigned.
 
 - **FrontEnd SPA**
-  - A Single Page Application.
-    - Utilizes an **Authorization Code flow with PKCE** to obtain an access token and uses it to access the Payments API.
-  - The FrontEnd SPA app is granted permission only to request the `payment.read` scope.
+  - A Single Page Application that utilizes the **Authorization Code flow with PKCE** to acquire an access token and make calls to the Payments API.
+  - The FrontEnd SPA app is granted permission only to request the `payment.read` scope from the Payments API.
 
 - **User Permissions**
-  - Two users are registered on my Entra ID:
-    - John.
-    - Jane.
+  - Two users are registered on my Microsoft Entra ID tenant:
+    - John and Jane.
   - Jane holds a `Reader` role in the Payments API app.
   - John possesses an `Admin` role in the Payments API app.
 
-# **Scenario Diagrams**
+# **OAuth2 Authorization diagrams**
 
-The following diagrams shows the authorization flows we're going to implement.
+The following diagrams shows the authorization flows we're going to implement in this post.
 
-- **The Bookings API uses a Credentials Flow to acquire an access token from Microsoft Entra ID, utilizing it to invoke various methods within the Payments API.**
+- **The Bookings API uses a Client Credentials Flow to acquire an access token from Microsoft Entra ID, utilizing it to invoke various methods within the Payments API.**
 
 ![testing-entra-with-terraform-client-credentials](/img/testing-entra-with-terraform-client-credentials.png)
 
-- **The FrontEnd SPA uses an Authorization Code flow with PKCE to acquire a token from Microsoft Entra ID,utilizing it to invoke various methods within the Payments API.**
+- **The FrontEnd SPA uses an Authorization Code flow with PKCE to acquire a token from Microsoft Entra ID, utilizing it to invoke various methods within the Payments API.**
 
 ![testing-entra-with-terraform-auth-code-flow](/img/testing-entra-with-terraform-auth-code-flow.png)
 
-# **1. Configure the Microsoft Entra provider**
+# **1. Configure the Microsoft Entra ID Terraform provider**
 
-> **_As of today (11/15/2023), the Terraform provider for Microsoft Entra still has its former name: ``azuread``. It is expected that at some point in the future, it will be renamed to Entra._**
+> **_As of today (11/18/2023), the Terraform provider for Microsoft Entra ID still has its former name: ``azuread``._**
 
-The first step is to configure the Terraform Provider.   
+The first step is to configure the Terraform Provider for Microsoft Entra ID.   
+
 There are multiple ways to setup the ``azuread`` Terraform provider. It supports a number of different methods for authenticating to Entra:
 
 - Using the Azure CLI.
@@ -70,11 +71,11 @@ There are multiple ways to setup the ``azuread`` Terraform provider. It supports
 - Using a Service Principal and a Client Certificate.
 - Using a Service Principal and a Client Secret.
 
-In this post I'll be using the **Service Principal and a Client Secret** method. his approach is well-suited for a potential CI/CD implementation in the future, and it's quite easy to set up. 
+In this post, I'll be using the **Service Principal + Client Secret** method. This approach is well-suited for a potential CI/CD implementation in the future, and it's quite easy to set up. 
 
 Essentially, we're registering a "master app" on Entra. This "master app" is nothing more than an application with permissions to create other apps.
 
-To create this "master app," we'll manually register an app in Entra with the following permissions for `Microsoft.Graph`:
+To create this "master app", we'll manually register an app in Entra with the following permissions for `Microsoft.Graph`:
 - ``Application.ReadWrite.All``
 - ``AppRoleAssignment.ReadWrite.All``
 - ``User.Read.All``
@@ -85,8 +86,8 @@ Additionally, you need to create a new client secret for this app.
 
 ![testing-entra-with-terraform-master-app-secret](/img/testing-entra-with-terraform-master-app-secret.png)
 
-Once we have completed these steps, we are ready to configure the Terraform provider using the "master app" client_id, client_secret, and our Microsoft Entra Tenant ID.   
-There area a couple of ways to configure the Terraform provider:
+Once we have completed these steps, we are ready to configure the Terraform Provider using the "master app" client_id, client_secret, and our Microsoft Entra Tenant ID.   
+There are a a couple of ways to configure the Provider:
 
 - Using environment variables (the recommended way).
 
@@ -109,7 +110,7 @@ terraform {
 provider "azuread" {}
 ```
 
-- Configure the provider directly using variables.
+- Configuring the provider directly using variables.
 
 ```yaml
 terraform {
@@ -128,13 +129,15 @@ provider "azuread" {
 }
 ```
 
-At this point running either ``terraform plan`` or ``terraform apply`` should allow Terraform to authenticate using the Client ID and Client Secret.
+At this point running either ``terraform plan`` or ``terraform apply`` should allow Terraform to authenticate to your Entra Tenant using the provided Client ID and Client Secret.
 
-# **2.Create the Payments API application**
+# **2. Create the Payments API application**
 
 Next step is to create the Payments API using Terraform. This API has the following configuration:
 - It exposes 2 scopes : ``payment.write`` and ``payment.read``.
+  - The ``payment.write`` scope requires an admin consent to be used, while the ``payment.read`` scope does not.
 - It has 2 application roles: ``Reader`` and ``Admin``.
+  - Both app roles can be assigned to Entra users and applications.
 
 
 ```yaml
@@ -238,15 +241,15 @@ resource "azuread_app_role_assignment" "john_payments_api_role_assignment" {
 }
 ```
 
-Not much to say here. I'm simply utilizing the ``azuread_user`` resource to retrieve the users within my Entra and the ``azuread_app_role_assignment`` resource to assign them one of the Payment API app roles.
+Not much to say here. I'm simply utilizing the ``azuread_user`` resource to retrieve the users within my Entra Tenant and the ``azuread_app_role_assignment`` resource to assign them one of the Payments API app roles.
 
-# **4.Create the Bookings API application**
+# **4. Create the Bookings API application**
 
 The Bookings API has the following configuration:
 
 - Consumes the Payments API through a **Client Credentials** flow.
-- Acquires an access token from the Entra `/token` endpoint and uses it to access the Payments API.
-- Has the Payments API ``Reader`` Role assigned.
+- Acquires an access token from the Entra `/token` endpoint and uses it to make calls to the Payments API.
+- It has the Payments API ``Reader`` Role assigned.
 
 
 ```yaml
@@ -284,23 +287,20 @@ resource "azuread_service_principal" "bookings_sp" {
 }
 ```
 
-In addition to creating the app, we're also generating a client secret to test the Client Credentials flow.
+In addition to creating the app, we're using the ``azuread_application_password`` resource to create a client secret to test the Client Credentials flow.
 
 Keep in mind, that Entra apps are authorized to call APIs when they are granted permissions by user/admins as part of the consent process. Therefore, it is necessary to manually grant admin consent for the Bookings API to call the Payments API.
 
 ![testing-entra-with-terraform-admin-grant-consent](/img/testing-entra-with-terraform-admin-grant-consent.png)
 
-There is no native functionality in the ``azuread`` Terraform provider to grant admin consent to an API permission. 
+There is no native functionality in the ``azuread`` Terraform Provider to grant admin consent to an API permission. 
 
-A workaround can be built using the Terraform ``null_resource`` resource and the AZ CLI. We can use both to invoke the ``az ad app permission admin-consent`` command. However, to successfully run this command, the Service Principal needs to have a ``Global Administrator`` role on our Entra.    
+A workaround can be built using the Terraform ``null_resource`` resource and the AZ CLI. We can use both to invoke the ``az ad app permission admin-consent`` command. However, to successfully run this command, the Service Principal needs to have a ``Global Administrator`` role assigned.    
 
-This role is one of the most powerful roles in Entra, capable of managing all aspects of Microsoft Entra and Microsoft services that use Azure AD identities. I am not very comfortable assigning such a powerful role to a Service Principal, I prefer that an Entra Admin manually grants admin consent.
+This role is one of the most powerful ones, it is capable of managing all aspects of Microsoft Entra. I am not very comfortable assigning such a powerful role to a Service Principal, I prefer that an Entra Admin manually grants admin consent.
 
-Anyways, after granting consent to the Bookings API to call the Payments API, let’s test and see if the Client Credentials flow works properly. 
+Anyways, after granting consent to the Bookings API to call the Payments API, let’s test and see if the Client Credentials flow works properly.    
 With the following command, I'm going to request an access token using the Bookings API client ID and client secret.
-
-> **What’s of the .default scope?**  
-> The .default scope is a built-in scope for every application and it refers to the static list of permissions configured on the application registration. You must specify the .default scope in a Client Credentials flow, you cannot ask for a concrete scope.
 
 ```text
 curl -k -X POST \
@@ -309,6 +309,11 @@ curl -k -X POST \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -d 'grant_type=client_credentials&client_id=e896bbda-6a3b-4309-a140-41c816049f09&client_secret=uPd8Q~D.Ntc1D2MbzTuJJwdIwxuFKVARezmURduC&scope=api://payments/.default'
 ```
+
+> **What’s of the .default scope?**  
+> The .default scope is a built-in scope for every Entra application and it refers to the static list of permissions configured on the application registration.     
+> You must specify the .default scope in a Client Credentials flow, you cannot ask for a concrete one.
+
 And it returns an access token with the following attributes:
 
 ```json
@@ -333,20 +338,20 @@ And it returns an access token with the following attributes:
 }
 ```
 
-If we examine the received token, we can verify that the token includes the following attributes:
+If we examine the received access token, we can verify that it includes the following attributes:
 
-- The ``iss`` (issuer) should match my Entra ID tenant, formatted as: https://login.microsoftonline.com/{tenant-id}/v2.0"
+- The ``iss`` (issuer) should match your Entra ID tenant, formatted as: https://login.microsoftonline.com/{tenant-id}/v2.0"
 - The ``aud`` (audience) should match the client ID of the Payments API.
 - It must possess a ``Reader`` role.
 
-Now with this access token we could call the Payments API and it should respond properly.
+Now with this access token we should be able to successfully call the Payments API.
 
-# **5.Create  the FrontEnd SPA application**
+# **5. Create  the FrontEnd SPA application**
 
 The FrontEnd SPA has the following configuration:
 
 - It's a public Single Page Application.
-- Utilizes an **Authorization Code flow with PKCE** to obtain an access token and uses it to access the Payments API.
+- Utilizes an **Authorization Code flow with PKCE** to obtain an access token and uses it to make calls to the Payments API.
 - The FrontEnd SPA app has permission only to ask for the `payment.read` scope.
 
 ```yaml
@@ -465,8 +470,10 @@ Here's an access token acquired by John. As you can see, it possesses the "Admin
 }
 ```
 
-# **Final thoughts**
+# **Closing thoughts**
 
-It is straightforward to build a pretty common scenario using the Microsoft Entra ID Terraform provider. If you already have some knowledge about how Entra works, it’s going to be a breeze switching from the portal to Terraform.
+As you have seen in this post, we have successfully implemented both authorization scenarios using Microsoft Entra ID and Terraform. We haven't built anything overly complex; in fact, both scenarios were quite simple.However, many times, we don't need to create elaborate authorization setups; using the basics properly is often more than enough.
 
-The Terraform Azure AD provider has come a long way since version 1.x, addressing several critical feature gaps.
+For those of you who have been following my blog for some time, you may know that I conducted a similar test around three years ago when the Terraform provider for AAD was in version 1.1.1. The results were quite disappointing because setting up a simple scenario like the one we have seen in this post was practically impossible at that time. Therefore, I can conclude by saying that this provider has evolved positively. 
+
+Today, if I had to use Microsoft Entra ID as my IDP, I would undoubtedly use this Terraform provider and deploy changes through a CI/CD flow.
