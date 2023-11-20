@@ -1,9 +1,9 @@
 ---
 title: "Trying to automate Microsoft Entra ID App Registration process using Terraform"
-date: 2023-11-13T13:48:48+01:00
+date: 2023-11-20T10:00:48+01:00
 description: "The purpose of this post is to test the App Registration process using the latest version of the Terraform provider for Microsoft Entra ID. To achieve this, we're going to register multiple apps on Microsoft Entra ID and make them interact with each other using a couple of different OAuth2 authorization flows."
-tags: ["azure", "terraform", "graph", "entra"]
-draft: true
+tags: ["azure", "terraform", "auth", "entra", "iac"]
+draft: false
 ---
 
 > **Just show me the code!**   
