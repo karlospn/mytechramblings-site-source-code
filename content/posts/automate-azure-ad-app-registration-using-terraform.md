@@ -7,10 +7,8 @@ description: "Today I want to try to use Terraform to automate the app registrat
 draft: false
 ---
 
-> **> Updated content:**   
-> I wrote the original post almost 6 months ago and since then the AAD Terraform provider has been updated several times.   
-> When I wrote the post I used the version 0.11 and right now the provider is on version 1.1.1, that's a considerable version bump so some people asked me if I could update this post.   
-> Without further ado **let's rebuild this example using the 1.1.1 version**.   
+> # **Update (11/29/2023) : This post has been deprecated. If you want to read a more recent one, click [here](https://www.mytechramblings.com/posts/automate-entra-app-registration-process-using-terraform/).**
+
 
 Today I want to try to use Terraform to automate the app registration process in Azure Active Directory.
 
