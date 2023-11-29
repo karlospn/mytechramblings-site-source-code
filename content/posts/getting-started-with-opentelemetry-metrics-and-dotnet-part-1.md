@@ -1,21 +1,21 @@
 ---
-title: "Getting started with OpenTelemetry Metrics in .NET. Part 1: Key concepts"
-date: 2023-04-10T16:20:55+02:00
+title: "Getting started with OpenTelemetry Metrics in .NET 8. Part 1: Key concepts"
+date: 2023-11-29T10:00:55+01:00
 tags: ["opentelemetry", "dotnet", "csharp", "metrics", "prometheus", "grafana"]
-description: "In this two-part series I’m going to show you how to use OpenTelemetry to generate custom metrics and how to visualize those metrics using Prometheus and Grafana. In part 1 I’ll be talking about some key concepts that you should know when using OpenTelemetry Metrics with dotnet."
+description: "In this two-part series, I’m going to show you how to use OpenTelemetry to generate custom metrics and how to visualize those metrics using Prometheus and Grafana. In part 1, I’ll be discussing some key concepts that you should know when using OpenTelemetry Metrics with dotnet."
 draft: false
 ---
 
-> This is a 2 part-series post.
+> This is a two-part series post.
 > - **Part 1**: Key concepts that you should know when using OpenTelemetry Metrics with .NET.
-> - **Part 2**: A practical example about how to add OpenTelemetry Metrics on a real life .NET app and how to visualize those metrics using Prometheus and Grafana. If you want to read it, click [here](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-metrics-and-dotnet-part-2/)
+> - **Part 2**: A practical example of how to add OpenTelemetry Metrics to a real life .NET 8 app and how to visualize those metrics using Prometheus and Grafana. If you want to read it, click [here](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-metrics-and-dotnet-part-2/)
 
 
 OpenTelemetry is a set of APIs, SDKs, tooling and integrations that are designed for the creation and management of telemetry data such as **traces**, **metrics**, and **logs**. 
 
-In one of my [previous posts](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-and-dotnet-core/) I talked about how to get started with OpenTelemetry and distributed tracing, today I want to **focus on metrics**.   
+In one of my [previous posts](https://www.mytechramblings.com/posts/getting-started-with-opentelemetry-and-dotnet-core/) I talked about how to get started with OpenTelemetry and distributed tracing, now I want to **focus on metrics**.   
 
-At the end of this 2 part-series post we will have a .NET 7 app that emits a series of metrics, those metrics will be send to the OpenTelemetry Collector, a Prometheus Server will receive the metrics from the OTEL Collector and we will have a Grafana dashboard to visualize them.
+At the end of this two-part series post, we will have a .NET 8 app that emits a series of metrics. These metrics will be sent to an OpenTelemetry Collector, and a Prometheus Server will receive the metrics from the OTEL Collector. Finally, we will have a Grafana dashboard to visualize them.
 
 ![otel-metrics-app-diagram](/img/otel-metrics-app-diagram.png)
 
@@ -86,6 +86,53 @@ public class Program
     }
 }
 ```
+
+# **IMeterFactory interface**
+
+Before .NET 8, to create a new ``Meter`` object, you needed to instantiate an object of the ``Meter`` class and pass the meter name, like this:
+
+```csharp
+var meter = new Meter("BookStore");
+```
+Starting from .NET 8, the ``IMeterFactory`` interface is the recommended way to create a new ``Meter``. It can be used with the DI container and it is registered on it by default, no extra registration is required. 
+
+The interface only exposes a single ``Create()`` method.
+
+```csharp
+public interface IMeterFactory : IDisposable
+{
+    /// <summary>
+    /// Creates a new <see cref="Meter"/> instance.
+    /// </summary>
+    /// <param name="options">The <see cref="MeterOptions"/> to use when creating the meter.</param>
+    /// <returns>A new <see cref="Meter"/> instance.</returns>
+    /// <remarks>
+    /// The <see cref="Meter"/> instance returned by this method should be cached by the factory and returned for subsequent requests for a meter with the same parameters (name, version, and tags).
+    /// </remarks>
+    Meter Create(MeterOptions options);
+}
+```
+And if we take a peek at the implementation, you'll see it's a very straightforward one.
+
+```csharp
+internal sealed class DummyMeterFactory : IMeterFactory
+{
+    public Meter Create(MeterOptions options) => new Meter(options);
+
+    public void Dispose() { }
+}
+```
+
+The next code snippet, shows an example of how to use it. Simply inject the ``IMeterFactory`` interface and use it to create the ``Meter``. Afterward use that ``Meter`` to create the desired ``Instruments``.
+
+```csharp
+  public BookStoreMetrics(IMeterFactory meterFactory, IConfiguration configuration)
+  {
+      var meter = meterFactory.Create("BookStore");
+      BooksAddedCounter = meter.CreateCounter<int>("books-added", "Book");
+  }
+```
+
 
 # **Types of Instruments**
 
@@ -204,7 +251,7 @@ ObservableUpDownCounter<int> TotalCategoriesUpDownCounter = meter.CreateObservab
 
 In the above section we have seen the different types of instruments available in the OpenTelemetry specification,  **.NET has support for all of them**.   
 
-Keep in mind that the ``UpDownCounter`` and the ``Asynchronous UpDownCounter`` instruments are only available starting from .NET 7.
+> Keep in mind that the ``UpDownCounter`` and the ``Asynchronous UpDownCounter`` instruments are only available starting from .NET 7.
 
 # **Choosing the correct instrument**
 
@@ -222,6 +269,18 @@ Choosing the correct instrument to report measurements is critical to achieving 
 - If it makes sense to add up the values across different sets of attributes and the value is monotonically increasing, use an ``Asynchronous Counter``.
 - If it makes sense to add up the values across different sets of attributes and the value is NOT monotonically increasing, use an ``Asynchronous UpDownCounter``.
 
+# **.NET built-in metrics**
+
+Starting from .NET 8, the .NET framework itself has some built-in metrics.    
+
+These metrics are generated by the ``System.Diagnostics.Metrics`` API. You can see a full list in the following link:
+
+- https://learn.microsoft.com/en-us/dotnet/core/diagnostics/built-in-metrics-aspnetcore
+
+
+For now, it's enough for you to know that the .NET framework itself is instrumented to generate a series of metrics, and we can listen to them and send them wherever we consider appropriate for their analysis.
+
+In the second part of the post, we will explore in detail the various options we have for emitting and exporting these metrics.
 
 # **Exporters**
 
@@ -247,7 +306,7 @@ To send metrics to the OpenTelemetry Collector in .NET, you'll need to install t
 ```csharp
 builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
     .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("BookStore.WebApi"))
-    .AddMeter(meters.MetricName)
+    .AddMeter(builder.Configuration.GetValue<string>("BookStoreMeterName"))
     .AddOtlpExporter(opts =>
     {
         opts.Endpoint = new Uri(builder.Configuration["Otlp:Endpoint"]);
@@ -265,7 +324,7 @@ Here's an example of how to send the metrics data directly to Prometheus using t
 ```csharp
 builder.Services.AddOpenTelemetry().WithMetrics(opts => opts
     .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("BookStore.WebApi"))
-    .AddMeter(meters.MetricName)
+    .AddMeter(builder.Configuration.GetValue<string>("BookStoreMeterName"))
     .AddPrometheusExporter());
 ```
 
