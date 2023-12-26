@@ -1,7 +1,7 @@
 ---
-title: "My opinionated list of tips for building a .NET 8 app template"
+title: "An opinionated list of tips for building a .NET 8 app template"
 date: 2023-12-25T14:36:32+01:00
-description: "TBD"
+description: "I have been building .NET templates for quite some time. And as a result, I thought it might be helpful to compile a list of tips to consider when creating a .NET app template for yourself or your company."
 tags: ["dotnet", "csharp", "templates"]
 draft: true
 ---
@@ -391,7 +391,7 @@ However, I try to avoid it, basically because it a niche way of creating images 
 
 # **Don't disable package dependencies security auditing**
 
-Since .NET 8, there was no straightforward method to audit package dependencies for security vulnerabilities.
+Since .NET 8, there was no straightforward method to audit package dependencies for security vulnerabilities inside your app.
 
 Previously, you could utilize the ``dotnet list package --vulnerable`` command to generate a list of packages with known vulnerabilities. However, this required either proactive execution, integration into your CI/CD pipeline, or running it through a Git webhook.
 
@@ -400,7 +400,7 @@ With .NET 8, package dependency auditing is integrated by default when dotnet re
 This is a really nice feature available starting from NuGet 6.8, the .NET 8 SDK (8.0.100), and Visual Studio 2022 17.8. There is no valid reason to disable this feature in your templates. Personally, I prefer to configure ``NuGetAuditMode`` to include auditing for transitive dependencies as well. However, if you believe this might be excessive for your needs, at the very least, keep the default configuration.
 
 
-# **Add a preconfigured nuget.config that uses source mapping**
+# **Add a preconfigured nuget.config and use the packageSourceMapping section**
 
 You should always put a nuget.config in your application templates. Basically because 
 
@@ -430,7 +430,7 @@ The following code snippet shows an example of a ``nuget.config``, where package
 </configuration>
 ```
 
-# **Add your own .editorconfig**
+# **Add your own .editorconfig file**
 
 You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to uphold a consistent coding style across all your applications.
 
@@ -475,9 +475,9 @@ public static IServiceCollection AddCustomApiVersioning(this IServiceCollection 
 }
 ```
 
-# **If possible try to use the default .NET DI implementation, instead of another one**
+# **Use the default .NET DI container**
 
-Is there really any reason why I should to use another DI container that its not the default one? To be honest, I haven't found one.
+Is there really any reason why I should to use another DI container (e.g. Autofac) that its not the default one? To be honest, I haven't found one.
 
 And speaking about the default DI container, one thing I like to set in my templates is the ``ValidateScopes`` and ``ValidateOnBuild`` properties to ``true``.
 
