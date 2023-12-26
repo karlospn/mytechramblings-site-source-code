@@ -389,31 +389,214 @@ To create a .NET image, you have the option to use Container Support for .NET SD
 However, I try to avoid it, basically because it a niche way of creating images that is not widely known. In contrast, a Dockerfile follows an industry-standard approach that can be adopted by developers from various backgrounds, whether they are .NET developers, Python developers, or SysAdmins.
 
 
-# **Enable security auditing on your projects**
+# **Don't disable package dependencies security auditing**
+
+Since .NET 8, there was no straightforward method to audit package dependencies for security vulnerabilities.
+
+Previously, you could utilize the ``dotnet list package --vulnerable`` command to generate a list of packages with known vulnerabilities. However, this required either proactive execution, integration into your CI/CD pipeline, or running it through a Git webhook.
+
+With .NET 8, package dependency auditing is integrated by default when dotnet restore is executed. By default, a security audit is performed only for top-level dependencies. You can customize the security auditing according to your company's needs using the ``NuGetAuditMode`` and ``NuGetAuditLevel`` MSBuild properties.
+
+This is a really nice feature available starting from NuGet 6.8, the .NET 8 SDK (8.0.100), and Visual Studio 2022 17.8. There is no valid reason to disable this feature in your templates. Personally, I prefer to configure ``NuGetAuditMode`` to include auditing for transitive dependencies as well. However, if you believe this might be excessive for your needs, at the very least, keep the default configuration.
+
 
 # **Add a preconfigured nuget.config that uses source mapping**
 
-# **Use something else to store your secrets than the appsettings.json file**
+You should always put a nuget.config in your application templates. Basically because 
 
-# **Don't be afraid of building your own opinionated NuGets for cross-cutting things like logging, swagger or opentelemtry**
+You should always include a ``nuget.config`` file in your templates. But even more so if you use a private feed. Creating a new application using a template and getting a dozen package errors, and having to investigate the source of each package, is a hassle.
 
-# **Try to avoid opinionated NuGets, go with the industry standards if possible**
+Another topic you should include in the ``nuget.config``, especially if you work with a private NuGet feed, is the ``packageSourceMapping`` section. This section allows us to define the source from which to obtain each of our packages, enhancing security against potential package identity spoofing.
+
+The following code snippet shows an example of a ``nuget.config``, where packages with names that start with ``MTR.*`` and ``MyTechRamblings.*`` are being fetched from my private feed, and the rest from nuget.org.
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+    <add key="mtr-nuget" value="https://mytechramblings.pkgs.visualstudio.com/_packaging/my-feed/nuget/v3/index.json" />
+  </packageSources>
+  <packageSourceMapping>
+    <packageSource key="nuget.org">
+      <package pattern="*" />
+    </packageSource>
+    <packageSource key="mtr-nuget">
+      <package pattern="MTR.*" />
+      <package pattern="MyTechRamblings.*" />
+    </packageSource>
+  </packageSourceMapping>
+</configuration>
+```
 
 # **Add your own .editorconfig**
 
-# **Set langversion to latest**
+You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to uphold a consistent coding style across all your applications.
 
-# **Don't use minimal apis**
+The same thing can be said if you have some custom Roslyn Analyzers. Just install them into all your .NET templates.
+
+Nothing more to say in here. 
+
+# **Prefer controller-base APIs over minimal APIs**
+
+This might be a little bit controversial, but when building a .NET API template you don't know the complexity of the resulting application, and controller-based APIs are by default easier to scale than minimal APIs. 
+
+The clear structure and organization of controller-based APIs make it straightforward to add new features and entities without disrupting the existing code. On the other hand, minimal APIs can become increasingly complex and challenging to manage as you add more and more endpoints.
+
+Certainly, there are ways to enhance the structure and organization of minimal API source code, but is it really worth the effort? I don't think so. If I have to develop a .NET API template that will be used for a wide range of applications, I would unequivocally choose to use a controller-based API.
+
 
 # **Always set controller versioning**
 
+Enable API versioning in your API templates from the get go, don't expect that your app will always have a single version.
+
+Also enabling it, is really quite straightforward, you need to install the ``Asp.Versioning.Mvc`` and``Asp.Versioning.Mvc.ApiExplorer`` NuGet packages and configure versioning as you see fit.
+
+The next code snippet shows how I configure versioning on my templates, but you should tailor it to your needs.
+```csharp
+public static IServiceCollection AddCustomApiVersioning(this IServiceCollection services)
+{
+    services
+        .AddApiVersioning(opt =>
+        {
+            opt.ReportApiVersions = true;
+            opt.AssumeDefaultVersionWhenUnspecified = true;
+            opt.DefaultApiVersion = new ApiVersion(1, 0);
+            opt.ApiVersionReader = new UrlSegmentApiVersionReader();
+        })
+        .AddApiExplorer(options =>
+        {
+            options.GroupNameFormat = "'v'VVVV";
+            options.SubstituteApiVersionInUrl = true;
+        });
+
+    return services;
+}
+```
+
 # **If possible try to use the default .NET DI implementation, instead of another one**
+
+Is there really any reason why I should to use another DI container that its not the default one? To be honest, I haven't found one.
+
+And speaking about the default DI container, one thing I like to set in my templates is the ``ValidateScopes`` and ``ValidateOnBuild`` properties to ``true``.
+
+Set the ``ValidateOnBuild`` to ``true`` to perform a check that verifies that scoped services never gets resolved from the root provider.
+
+Set the ``ValidateOnBuild`` to ``true`` to perform a check that verifies that all services can be created during the``BuildServiceProvider`` call.
+
+
+```csharp
+builder.Host.UseDefaultServiceProvider((opt) =>
+{
+    opt.ValidateScopes = true;
+    opt.ValidateOnBuild = true;
+});
+```
 
 # **Add an opinionated deploymnet pipeline**
 
+If possible, incorporate a pipeline into your templates. This will be an opinionated pipeline, as the structures vary significantly based on whether you're deploying to one cloud or another, also if you're using VCS or another, the pipeline format can be entirely different.
+
+However, the goal is to offer a ready-to-use pipeline that, in most cases, requires no modification and can efficiently deploy your application.
+
+The following code snippet illustrates an example of a pipeline included in some of my templates. Certain values, such as "appServiceName" or "registryName," are parameters that need to be provided when creating the app using the ``dotnet new`` command.
+
+
+```yaml
+trigger:
+- master
+
+pool: 
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: azureSubscription
+    value: 'AZURE-SUBSCRIPTION-ENDPOINT-NAME'
+  - name: appServiceName
+    value: 'APP-SERVICE-NAME'
+  - name: registryName
+    value: 'ACR-REGISTRY-NAME'
+
+steps:
+  - task: AzureCLI@2
+    displayName: AZ ACR Login
+    inputs:
+      azureSubscription: $(azureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: 'az acr login --name $(registryName)'
+
+  - task: AzureCLI@2
+    displayName: AZ ACR Build
+    inputs:
+      azureSubscription: $(azureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: 'az acr build -t ApplicationName:$(Build.BuildId) -t ApplicationName:latest -r $(registryName) -f Dockerfile .'
+      useGlobalConfig: true
+      workingDirectory: '$(Build.SourcesDirectory)'
+
+  - task: AzureWebAppContainer@1
+    displayName: Deploy to App Service
+    inputs:
+      azureSubscription: '$(azureSubscription)'
+      appName: '$(appServiceName)'
+      containers: '$(registryName).azurecr.io/ApplicationName:latest'
+```
+
 # **Do not use Moq for mocking, use NSubstitute or another one**
 
-# **- Add a README file with the basic sections**
+Moq is probably the most well-known mocking library for .NET. If you're not aware, a few months ago, it had some concerning security issues. The most troubling aspect is that these security issues were intentionally introduced into Moq by its creator.
+
+If you want to read more about it, here is a more detailed explanation:
+- https://snyk.io/blog/moq-package-exfiltrates-user-emails/
+
+The changes were rolled back after a short period, but why would I use this library after its own creator deliberately opened a security loophole? There are other libraries that perform the same function, allowing us to avoid potential scares in the future.
+
+A good alternative is [NSubstitute](https://nsubstitute.github.io/), and you should consider using it or another option, but it's advisable to stay away from Moq.
+
+# **Add a README file with the essential sections**
+
+It is advisable to add a ``README.md`` into every .NET template. This readme should contains the basic skeleton and sections that the application developer needs to fill out. 
+
+This README should feature a set of well-defined sections that you can effortlessly populate with pertinent information. 
+
+The next code snippet is an example that could serve as a starting point.
+
+```markdown
+# Welcome to the MyTechRamblings.WebApi documentation
+
+Provide a concise yet informative description outlining the primary functionality and purpose of the MyTechRamblings.WebApi application. This introductory section serves as a quick reference point for developers and users seeking to understand the core aspects of the template.
 
 
+# Documentation
+Delve into the specifics with the general documentation for MyTechRamblings.WebApi. This section becomes the go-to resource for understanding the template's architecture, components, and overall design philosophy.
 
+
+## Building blocks diagram
+Include a visual representation of the application's architecture. This diagram acts as a high-level overview, showcasing the key components and their interactions. Utilize tools like draw.io or other diagramming software to create an illustrative and accessible diagram.
+
+
+## Dependencies
+Outline the external dependencies crucial for the proper functioning of MyTechRamblings.WebApi. This includes databases, web services, caching mechanisms, and queues. 
+
+## More info.
+Offer additional resources and links to related documentation. This could include links to API documentation, user guides, or detailed data models.
+
+
+## Release Notes
+Keep track of the version history in this section, detailing each release's improvements and changes. Highlight notable fixes and commits, providing a clear picture of the template's evolution.
+
+- **Version X.Y.Z**
+	- **Notable Fixes and Commits**
+		- [ABC-123456] Fix error
+		- [ABC-123456] Deprecated 
+	- **Known Issues**
+		- [CRT-123456] Invalid data
+
+```
+
+Also, incorporating a README into the template will ensure a consistent format across all your README files, enhancing the overall user experience. Having a standardized format is not only convenient but also contributes to a cohesive documentation structure.
