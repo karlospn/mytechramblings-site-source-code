@@ -10,10 +10,10 @@ When you install the .NET SDK, it comes equipped with a variety of templates tha
 
 This implies that several elements need to be incorporated to make them truly production-ready. This is where having a set of prebuilt .NET templates with everything already pre-configured and all the necessary building blocks set up comes into play.
 
-The recently announced [.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/get-started/aspire-overview) embodies a similar philosophy. It is an opinionated, cloud ready stack for building applications, offering a template that comes preconfigured with set of tools such as HealthChecks and OpenTelemetry. You can take a look at the Aspire templates in [here](https://github.com/dotnet/aspire/tree/main/src/Aspire.ProjectTemplates)
+The recently announced [.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/get-started/aspire-overview) tries to fill this gap. It is an opinionated, cloud ready stack for building applications, offering a template that comes preconfigured with set of tools such as HealthChecks and OpenTelemetry. You can take a look at the Aspire templates in [here](https://github.com/dotnet/aspire/tree/main/src/Aspire.ProjectTemplates)
 
 In the realm of enterprise development, I usually tend to find that there are a set of opinionated rules defined when you have to build an application.    
-These rules might dictate the use of specific application architectures (e.g., Clean Architecture or Vertical Slice) or mandate the utilization of certain custom NuGet packages for functionalities like logging or configuration.    
+These rules might dictate the use of specific application architectures (e.g. Clean Architecture or Vertical Slice) or mandate the utilization of certain custom NuGet packages for functionalities like logging or configuration.    
 This is where .NET Aspire has limitations, as, despite its well-implemented nature, it remains a generic template. Consequently, regardless of how robust .NET Aspire may be, it doesn't cater to the specific, tailored needs of individual enterprises, this is where creating and using your own templates that enforce your organization's rules becomes a valuable approach when starting the development of a new application.
 
 I have been building .NET templates for quite some time and for multiple companies. As a result, I thought it might be helpful to compile a list of tips to consider when creating a .NET app template. 
@@ -27,7 +27,7 @@ So, without further ado, let's get started.
 
 # **Don't try to build a single template that does everything**
 
-The first tip is very simple. Don't try to create a single template that does everything, like encompassing multiples architectures (e.g. Clean Architecture or N-layer architecture) or multiple kind of apps (e.g. APIs, Worker Services).
+The first tip is very simple. Don't try to create a single template that does everything, like encompassing multiples architectures (e.g. Clean Architecture and N-layer Architecture) or multiple kind of apps (e.g. APIs and Worker Services).
 
 Instead of that, it is much better to have several templates where each one fulfills a concrete objective. That way it is much more easy to maintain an update them.
 
@@ -207,6 +207,9 @@ This file specifies which command-line parameters need to appear within a projec
 
 ![dotnet-templates-tips-visual-studio](/img/dotnet-templates-tips-visual-studio.png)
 
+If you want to know more about setting up the ``ide.host.json`` file, I recommend reading one of my posts. Although it's a bit old, the process of creating .NET templates hasn't changed significantly during this time.
+- https://www.mytechramblings.com/posts/create-dotnet-templates-for-visual-studio-part-1/
+
 # **Every project that constitutes your template should start with the exact same prefix name**
 
 When creating a .NET template with multiple projects, each one of them should begin with the exact same prefix name.
@@ -240,7 +243,7 @@ This consistency is because I will be utilizing the ``sourceName`` property from
 The ``sourceName`` property value is replaced with the value provided by the ``-n``, ``--name`` parameter when running a template.    
 The template engine will look for any occurrence of the name present in the config file and replace it in file names and file contents. If no name is specified by the host, the current directory is used.
 
-Now, imagine that I have finished building my Clean Architecture .NET template and opted to package it into a NuGet package. The ``template.json`` file for this template includes the following properties:
+Now, imagine that I have finished building my Clean Architecture .NET template and created the template package. The ``template.json`` file for this specific template includes the following properties:
 
 ```json
 {
@@ -274,15 +277,15 @@ Foo.slm
             \--AppDbContext.cs
 ```
 
-As you can see, the new application wil lbe correctly renamed based on the specified input.
+As you can see, the new application will be completely (and correctly) renamed based on the user input.
 
 # **Make use of built-in conditional pragmas to enable or disable certain features of the application**
 
 Not every application needs to have the same features, and you can control this variability using the built-in conditional pragmas.
 
-Authorization is one of them. Depending on the type of API you're building, you might need to set the auth middleware or not. To achieve this, you can make use of the dotnet engine's conditional pragmas.
+Authorization is one of them. Depending on the type of API you're building, you might need to set authorization or not. To achieve this, you can make use of the dotnet engine's conditional pragmas.
 
-Let's see an example. In the ``template.json`` file I declare the symbol ``Authorization`` of type ``bool`` with the default value of true. 
+Let's see an example. In the ``template.json`` file, I declare the symbol ``Authorization`` of type ``bool`` with the default value of true. 
 
 ```json
   "Authorization": {
@@ -384,7 +387,7 @@ This is just a simple example of what you can achieve with conditional operators
 If you want to read more about it, the following link is the official documentation:
 - https://github.com/dotnet/templating/wiki/Conditional-processing-and-comment-syntax
 
-# **Try to build a generic enough dockerfile, and also avoid Container support for .NET SDK**
+# **Try to build a generic enough Dockerfile, and also avoid Container support for .NET SDK**
 
 If you're working mainly with containers, it's beneficial to include a Dockerfile in your template. Aim to make this Dockerfile generic enough to work with most applications created using the template. The goal is to provide a ready-to-use Dockerfile that requires no modification in most of the cases.
 
@@ -400,12 +403,14 @@ The following code snippet showcases a Dockerfile from my .NET 6 API template. T
 
 - To enable the restoration of my private custom NuGet packages, an Azure DevOps Personal Access Token (PAT) must be provided as an argument to the Dockerfile.
 
-- The Dockerfile copies all files and executes the ``dotnet restore``, ``dotnet build``, ``dotnet test`` and ``dotnet publish`` commands.    
+- Every project used in the Dockerfile begins with the prefix name "MyTechRamblings" (see one of my previous tips).
+
+- The Dockerfile copies the entire solution and then executes the ``dotnet restore``, ``dotnet build``, ``dotnet test`` and ``dotnet publish`` commands.    
 
 In a .NET Dockerfile, it is generally recommended to use Docker's layer caching mechanism to optimize the build process. The idea is to minimize the number of layers that need to be rebuilt when changes are made to your application.    
 Copying only the .csproj file and restoring packages separately is a common practice because it allows Docker to cache the restored NuGet packages as a separate layer.   
 
-If you take a look at the Dockerfile below, I deviate from this approach. I choose to copy everything, as it yields a more generic Dockerfile capable of working with almost every API created using the .NET template.
+If you take a look at the Dockerfile below, I deviate from this approach. I choose to copy everything, as it yields a more generic Dockerfile capable of working with almost every API I create using my .NET template.
 
 ```csharp
 FROM mtr.azurecr.io/net6.sdk.base:6.0-bullseye-slim AS build-env
@@ -444,7 +449,7 @@ RUN dotnet publish "./src/MyTechRamblings.WebApi/MyTechRamblings.WebApi.csproj" 
 	--runtime linux-x64
 
 # Build runtime image
-FROM mtr.azurecr.io/et6.runtime.deps:6.0-bullseye-slim
+FROM mtr.azurecr.io/net6.runtime.deps:6.0-bullseye-slim
 
 # Expose port
 EXPOSE 8080
@@ -463,7 +468,7 @@ In contrast, the Dockerfile syntax has become an industry standard known by ever
 
 # **Don't disable the package dependencies security scan**
 
-Since .NET 6, there has been no native method that allows us to analyze security vulnerabilities in the packages used by the application.
+Since .NET 8, there has been no native method that allows us to analyze security vulnerabilities in the packages used by our applications.
 
 You could use a external tool or utilize the ``dotnet list package --vulnerable`` command to generate a list of packages with known vulnerabilities. However, this required a proactive approach,  involving either manually running the command, integrating it into your CI/CD pipeline, or executing it through a Git webhook.
 
@@ -472,6 +477,7 @@ With .NET 8, package dependency auditing is integrated by default when ``dotnet 
 ![dotnet-templates-tips-nuget-audit](/img/dotnet-templates-tips-nuget-audit.png)
 
 This is a really nice feature available starting from NuGet 6.8, the .NET 8 SDK, and Visual Studio 2022 17.8.    
+
 You can disable it by setting the ``NuGetAudit`` property to ``false``, but there is no compelling reason to turn off this feature in your templates. 
 
 Personally, I recommend configuring the ``NuGetAuditMode`` in a more restrictive manner, ensuring that it audits not only the direct packages but also their transitive dependencies. However, if you find this level of scrutiny to be excessive for your requirements, it is advisable to, at the very least, maintain the default configuration.
@@ -507,9 +513,9 @@ The following code snippet shows an example of a ``nuget.config`` where packages
 
 # **Add your own .editorconfig file**
 
-You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to uphold a consistent coding style across all your applications. (The same thing can be said if you have build any custom Roslyn Analyzer).
+You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to maintain a consistent coding style across all your applications. (The same principle applies if you have built any custom Roslyn Analyzer.).
 
-Nothing more to say in here. 
+Nothing more to say here. 
 
 # **Prefer controller-based APIs over minimal APIs**
 
@@ -562,7 +568,7 @@ builder.Host.UseDefaultServiceProvider((opt) =>
 });
 ```
 
-- Set the ``ValidateOnBuild`` to ``true`` to conduct a check ensuring that scoped services are not resolved from the root providerfrom the root provider.
+- Set the ``ValidateOnBuild`` to ``true`` to conduct a check ensuring that scoped services are not resolved from the root provider.
 
 - Set the ``ValidateOnBuild`` to ``true`` to perform a check that verifies that all services can be created during the``BuildServiceProvider`` call.
 
@@ -572,11 +578,11 @@ This helps enhance the reliability and integrity of your dependency injection co
 
 # **Add an opinionated deployment pipeline**
 
-If possible, incorporate a deployment pipeline into your templates. This will be an opinionated pipeline, as the structures vary significantly based on where you're deploying the app. Additionally, if you're using one VCS or another, the pipeline format and syntax may be entirely different.
+If possible, incorporate a deployment pipeline into your templates. This will be an opinionated pipeline, as the structures vary significantly based on where you're deploying the app. Also, if you're using one VCS or another, the pipeline format and syntax will be entirely different.
 
-However, the goal is to offer a ready-to-use pipeline that, in most cases, requires no modification and can efficiently deploy your application.
+However, the goal is to provide a ready-to-use pipeline that, in most cases, requires no modifications and can efficiently deploy your application to whatever place your company deploys their apps.
 
-The following code snippet illustrates an example of a pipeline included in some of my templates. Certain values, such as "appServiceName" or "registryName," are parameters that need to be provided when creating the app using the ``dotnet new`` command.
+The following code snippet illustrates an example of a pipeline included in some of my templates. Certain values, such as "azureSubscription", "appServiceName" or "registryName," are parameters that need to be provided when creating the app using the ``dotnet new`` command.
 
 
 ```yaml
@@ -623,7 +629,7 @@ steps:
       containers: '$(registryName).azurecr.io/ApplicationName:latest'
 ```
 
-# **Do not use Moq for mocking, use NSubstitute or another one**
+# **Do not use Moq in your Unit Tests, consider using NSubstitute or another alternative**
 
 Moq is probably the most well-known mocking library for .NET. If you're not aware, a few months ago, it had some concerning security issues. The most troubling aspect is that these security issues were intentionally introduced into Moq by its creator.
 
@@ -639,6 +645,8 @@ A good alternative is [NSubstitute](https://nsubstitute.github.io/), and you sho
 You should absolutely add a ``README.md`` into every .NET template. This readme should contains the basic skeleton and sections that the application developer needs to fill out. 
 
 This README should feature a clear set of well-defined sections that the developer can populate with pertinent information. 
+
+Incorporating a ``README.md`` into the template will ensure a consistent format across all your README files, enhancing the overall user experience. Having a standardized format is not only convenient but also contributes to a more cohesive documentation structure.
 
 The next code snippet is an example that could serve as a starting point.
 
@@ -679,5 +687,3 @@ Keep track of the version history in this section, detailing each release's impr
 		- [CRT-123456] Invalid data
 
 ```
-
-Incorporating a ``README.md`` into the template will ensure a consistent format across all your README files, enhancing the overall user experience. Having a standardized format is not only convenient but also contributes to a more cohesive documentation structure.
