@@ -1,16 +1,20 @@
 ---
-title: "An opinionated list of tips for building a .NET 8 app template"
+title: "An opinionated list of tips for building .NET 8 app templates"
 date: 2023-12-25T14:36:32+01:00
-description: "I have been building .NET templates for quite some time. And as a result, I thought it might be helpful to compile a list of tips to consider when creating a .NET app template for yourself or your company."
+description: "I have been developing .NET templates for quite some time, and as a result, I thought it might be helpful to compile a list of tips to consider when creating a .NET template for your own or your company's apps."
 tags: ["dotnet", "csharp", "templates"]
 draft: true
 ---
 
 When you install the .NET SDK, it comes equipped with a variety of templates that are readily available for your use. However, these templates are essentially bare, serving as a foundational starting point for your projects.
 
-[.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/get-started/aspire-overview) embodies a similar philosophy. It is an opinionated, cloud ready stack for building applications, offering a preconfigured set of tools such as HealthChecks and OpenTelemetry. You can take a look at the Aspire templates in [here](https://github.com/dotnet/aspire/tree/main/src/Aspire.ProjectTemplates)
+This implies that several elements need to be incorporated to make them truly production-ready. This is where having a set of prebuilt .NET templates with everything already pre-configured and all the necessary building blocks set up comes into play.
 
-In the realm of enterprise development, I usually tend to find that there aree a set of opinionated rules defined when you have to build an application. These rules might dictate the use of specific application architectures (e.g., Clean Architecture or Vertical Slice) or mandate the utilization of private NuGet packages for functionalities like logging or configuration. This is where .NET Aspire has limitations, as, despite its well-implemented nature, it remains a generic template. Consequently, regardless of how robust .NET Aspire may be, it doesn't cater to the specific, tailored needs of individual enterprises, this is where creating and use your own templates that enforce your organization's rules becomes a valuable approach when starting the development of a new application.
+The recently announced [.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/get-started/aspire-overview) embodies a similar philosophy. It is an opinionated, cloud ready stack for building applications, offering a template that comes preconfigured with set of tools such as HealthChecks and OpenTelemetry. You can take a look at the Aspire templates in [here](https://github.com/dotnet/aspire/tree/main/src/Aspire.ProjectTemplates)
+
+In the realm of enterprise development, I usually tend to find that there aree a set of opinionated rules defined when you have to build an application.    
+These rules might dictate the use of specific application architectures (e.g., Clean Architecture or Vertical Slice) or mandate the utilization of certain custom NuGet packages for functionalities like logging or configuration.    
+This is where .NET Aspire has limitations, as, despite its well-implemented nature, it remains a generic template. Consequently, regardless of how robust .NET Aspire may be, it doesn't cater to the specific, tailored needs of individual enterprises, this is where creating and using your own templates that enforce your organization's rules becomes a valuable approach when starting the development of a new application.
 
 I have been building .NET templates for quite some time and for multiple companies. As a result, I thought it might be helpful to compile a list of tips to consider when creating a .NET app template. 
 
@@ -21,20 +25,20 @@ Furthermore, I'm sure I'll overlook a few points that I consider crucial, but at
 So, without further ado, let's get started.
 
 
-# **Don't try to build a single template with everything**
+# **Don't try to build a single template that does everything**
 
 The first tip is very simple. Don't try to create a single template that does everything, like encompassing multiples architectures (e.g. Clean Architecture or N-layer architecture) or multiple kind of apps (e.g. APIs, Worker Servies).
 
 Instead of that, it is much better to have several templates where each one fulfills a concrete objective. That way it is much more easy to maintain an update them.
 
-When it comes to distributing your templates, it doesn't matter if you have 1 or 10; the distribution process will be exactly the same. More info, in the next tip.
+When it comes to distributing the templates, it doesn't matter if you have 1 or 10; the distribution process will be exactly the same. More info, in the next tip.
 
 
 # **Pack all your .NET templates into a single NuGet package**
 
-The best way to distribute your custom .NET app templates is via NuGet package. You can package has many templates as you want in a single package, but each template needs to have a ``.template.config`` folder at its root level. 
+The best way to distribute your custom .NET templates is via NuGet package. You can package as many templates as you want in a single package, but each template needs to have a ``.template.config`` folder at its root level. 
 
-Inside the ``.template.config`` folder you need to place at least a file named ``template.json``. This file provides information about what the template engine should do with your template
+Inside the ``.template.config`` folder you need to place at least a file named ``template.json``. This file provides information about what the template engine should do with your template.
 
 Within the NuGet package all the templates must be stored in the ``/content`` folder.
 
@@ -62,9 +66,9 @@ Also, when you install or uninstall a template package, all templates contained 
 Once you have created your template package, you can upload it to your company's feed (e.g., Azure Artifacts, GitHub Packages, Artifactory), allowing everyone to start using it right away.
 
 
-# **Add the template package version as a tag**
+# **Add the template package version as a classification tag**
 
-When creating your template package, include the package version as a tag in the ``.template.config`` file. This becomes especially useful when you can't recall the specific version of the package template installed on your machine.
+When creating your template package, include the package version as a classification tag in the ``.template.config`` file. This becomes especially useful when you can't recall the specific version of the package template installed on your machine.
 
 This step can be automated in a dozen different ways, making it a straightforward process.
 
@@ -85,10 +89,9 @@ The ``.template.config`` file should end up looking like this:
 }
 ```
 
-Now, by listing the available templates using the ``dotnet new list`` command, I can easily identify the versions of my custom .NET templates installed on my computer.
+Now, by simply listing the available templates using the ``dotnet new list`` command, you can easily identify which versions of the templates you have installed on your computer.
 
-<add-img>
-
+![dotnet-templates-tips-nuget-version](/img/dotnet-templates-tips-nuget-version.png)
 
 # **Centralize the NuGet package versions using a Directory.Packages.props files**
 
@@ -138,9 +141,6 @@ Create a ``Directory.Packages.props`` file in the root of your template, similar
   </ItemGroup>
 </Project>
 ```
-
-In every project, set the property ``ManagePackageVersionsCentrally`` to ``true`` and then define which packages from the ``Directory.Packages.props`` are you going to use.
-
 In each project, set the property ``ManagePackageVersionsCentrally`` to ``true`` and then define which packages from the ``Directory.Packages.props`` file you want to use. Here's an example:
 
 
@@ -171,9 +171,9 @@ In each project, set the property ``ManagePackageVersionsCentrally`` to ``true``
 
 # **Use a Directory.build.props to manage the common properties required in all your projects**
 
-This tip, like the last one, applies if you're building a template that is comprised of multiple projects (e.g., a Clean Architecture template).
+This tip, like the last one, applies if you're building a template that is comprised of multiple projects.
 
-If you take a look at the various projects constituting your .NET template, you will see a set of properties repeated in each of them. For instance, the ``LangVersion`` property, the ``Nullable`` property, or the ``ImplicitUsings`` property.
+If you take a look at the various projects constituting your .NET template, you will see a set of properties repeated in each of them. For instance, the ``LangVersion``, the ``Nullable``, or the ``ImplicitUsings`` property.
 
 It is much better to create a ``Directory.build.props`` file at the root level of your template to manage the common  settings required in all your projects.
 
@@ -182,15 +182,14 @@ The next code snippet, shows the ``Directory.build.props`` file I am currently u
 ```xml
 <Project>
   <PropertyGroup>
-    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
     <IsPackable>false</IsPackable>
-    <NuGetAudit>true</NuGetAudit>
-    <NuGetAuditMode>direct</NuGetAuditMode>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>high</NuGetAuditLevel>
   </PropertyGroup>
 </Project>
@@ -198,16 +197,21 @@ The next code snippet, shows the ``Directory.build.props`` file I am currently u
 
 # **Add Visual Studio support**
 
-Adding support for Visual Studio to your .NET templates can be a very useful feature for developers utilizing this IDE, and it is remarkably simple to implement. Create a file named ``ide.host.json`` and place it inside the ``.template.config`` folder.   
-This file will be utilized to display command-line parameters within a project dialog in Visual Studio when attempting to create a new project.
+> To use it, you require at least Visual Studio version 16.10 or higher.
 
-To employ it, you require at least Visual Studio version 16.10 or higher.
+Adding support for Visual Studio to your .NET templates is a very useful feature for developers utilizing this IDE, and it is remarkably simple to implement. 
 
-# **Every project that constitutes your app template should start with the exact same name**
+Create a file named ``ide.host.json`` and place it inside the ``.template.config`` folder. 
 
-If you're creating a multi-project .NET template, each project should begin with the exact same name.
+This file specifies which command-line parameters need to appear within a project dialog in Visual Studio when attempting to create a new project.
 
-Why? Let's consider building a Clean Architecture API .NET template; the folder structure will look (more or less) something like this:
+![dotnet-templates-tips-visual-studio](/img/dotnet-templates-tips-visual-studio.png)
+
+# **Every project that constitutes your template should start with the exact same prefix name**
+
+When creating a .NET template with multiple projects, each one of them should begin with the exact same prefix name.
+
+Why? Let's consider building a Clean Architecture API .NET template; the folder structure will look something like this (more or less):
 
 ```shell
 MyTechRamblings.slm
@@ -231,9 +235,10 @@ MyTechRamblings.slm
 ```
 
 As you can see, the solution (sln), every folder name, and every .csproj file that I have created begins with the "MyTechRamblings" prefix.   
-This consistency is because I will be utilizing the ``sourceName`` property from the ``template.json`` file to rename the prefix based on whatever value the user provides when creating a new app.
+This consistency is because I will be utilizing the ``sourceName`` property from the ``template.json`` file to rename the prefix based on whatever value the user provides when creating a new app using the template.
 
-The ``sourceName`` property value is replaced with the value provided using the ``-n``, ``--name`` options when running a template. The template engine will look for any occurrence of the name present in the config file and replace it in file names and file contents. If no name is specified by the host, the current directory is used.
+The ``sourceName`` property value is replaced with the value provided by the ``-n``, ``--name`` parameter when running a template.    
+The template engine will look for any occurrence of the name present in the config file and replace it in file names and file contents. If no name is specified by the host, the current directory is used.
 
 Now, imagine that I have finished building my Clean Architecture .NET template and opted to package it into a NuGet package. The ``template.json`` file for this template includes the following properties:
 
@@ -271,7 +276,7 @@ Foo.slm
 
 As you can see, the new application wil lbe correctly renamed based on the specified input.
 
-# **Make use of the template built-in conditional pragmas to or disable certain features**
+# **Make use of built-in conditional pragmas to enable or disable certain features of the application**
 
 Not every application needs to have the same features, and you can control this variability using the built-in conditional pragmas.
 
@@ -291,7 +296,7 @@ Which means:
  - If the user sets the value to false, the template engine needs to remove any ``Microsoft.Web.Identity`` reference from the solution.
  - If the user sets this symbol to true, the template engine needs to keep the references to the ``Microsoft.Web.Identity`` library.
 
-In the ``Program.cs`` file the Auth calls are being wrapped by the ``Authorization`` symbol.
+In the ``Program.cs`` file every authorization logic is wrapped by the ``Authorization`` conditional.
 ```csharp
 #if Authorization
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -339,7 +344,7 @@ namespace WebApplication
 Same thing in the ``appsettings.json`` file.
 
 ```json
-﻿{
+{
   //#if (Authorization)  
   "AzureAd": {
     "Instance": "https://login.microsoftonline.com/",
@@ -374,41 +379,38 @@ And also in the API Controller
     }
 ```
 
-This is a simple example of what you can do with the conditional operators, but there are capable of more things like excluding files based on a symbol or use a symbol value to compute another one.
+This is just a simple example of what you can achieve with conditional operators, but they are capable of more things, like excluding files based on a symbol or using a symbol value to compute another one.
 
 If you want to read more about it, the following link is the official documentation:
 - https://github.com/dotnet/templating/wiki/Conditional-processing-and-comment-syntax
 
 # **Try to build a generic enough dockerfile, and also avoid Container support for .NET SDK**
 
-If you're working with containers, it's beneficial to include a Dockerfile in your application template. Aim to make this Dockerfile generic enough to function seamlessly with most applications created using the template. The goal is to provide a ready-to-use Dockerfile that requires no modification in most of the cases.
+If you're working with containers, it's beneficial to include a Dockerfile in your template. Aim to make this Dockerfile generic enough to work with most applications created using the template. The goal is to provide a ready-to-use Dockerfile that requires no modification in most of the cases.
 
 Also, if your company uses some custom elements in their images, such as platform images, ensure to configure them in the Dockerfile.
 
-To create a .NET image, you have the option to use Container Support for .NET SDK instead of a Dockerfile.    
-However, I try to avoid it, basically because it a niche way of creating images that is not widely known. In contrast, a Dockerfile follows an industry-standard approach that can be adopted by developers from various backgrounds, whether they are .NET developers, Python developers, or SysAdmins.
+To create a .NET image, you have the option to use Container Support for .NET SDK instead of a Dockerfile. However, I tend to avoid it, mainly because it's a niche method of creating images that is not widely known. In contrast, the Dockerfile syntax has become an industry standard known by everyone. Nowadays, almost anyone can read and modify a Dockerfile, regardless of whether they are .NET developers, Python developers, or SysAdmins.
 
 
-# **Don't disable package dependencies security auditing**
+# **Don't disable the package dependencies security scan**
 
 Since .NET 8, there was no straightforward method to audit package dependencies for security vulnerabilities inside your app.
 
-Previously, you could utilize the ``dotnet list package --vulnerable`` command to generate a list of packages with known vulnerabilities. However, this required either proactive execution, integration into your CI/CD pipeline, or running it through a Git webhook.
+Previously, you could utilize the ``dotnet list package --vulnerable`` command to generate a list of packages with known vulnerabilities. However, this required a proactive approach,  involving either manually running the command, integrating it into your CI/CD pipeline, or executing it through a Git webhook.
 
-With .NET 8, package dependency auditing is integrated by default when dotnet restore is executed. By default, a security audit is performed only for top-level dependencies. You can customize the security auditing according to your company's needs using the ``NuGetAuditMode`` and ``NuGetAuditLevel`` MSBuild properties.
+With .NET 8, package dependency auditing is integrated by default when ``dotnet restore`` is executed. By default, a security audit is performed only for top-level dependencies. You can customize the security auditing according to your company's needs using the ``NuGetAuditMode`` and ``NuGetAuditLevel`` MSBuild properties.
 
-This is a really nice feature available starting from NuGet 6.8, the .NET 8 SDK (8.0.100), and Visual Studio 2022 17.8. There is no valid reason to disable this feature in your templates. Personally, I prefer to configure ``NuGetAuditMode`` to include auditing for transitive dependencies as well. However, if you believe this might be excessive for your needs, at the very least, keep the default configuration.
+This is a really nice feature available starting from NuGet 6.8, the .NET 8 SDK, and Visual Studio 2022 17.8. And there is no valid reason to disable this feature in your templates. Personally, I prefer to configure ``NuGetAuditMode`` to include auditing for transitive dependencies as well. However, if you believe this might be excessive for your needs, at the very least, keep the default configuration.
 
 
-# **Add a preconfigured nuget.config and use the packageSourceMapping section**
-
-You should always put a nuget.config in your application templates. Basically because 
+# **Add a preconfigured nuget.config and utilize the packageSourceMapping section**
 
 You should always include a ``nuget.config`` file in your templates. But even more so if you use a private feed. Creating a new application using a template and getting a dozen package errors, and having to investigate the source of each package, is a hassle.
 
 Another topic you should include in the ``nuget.config``, especially if you work with a private NuGet feed, is the ``packageSourceMapping`` section. This section allows us to define the source from which to obtain each of our packages, enhancing security against potential package identity spoofing.
 
-The following code snippet shows an example of a ``nuget.config``, where packages with names that start with ``MTR.*`` and ``MyTechRamblings.*`` are being fetched from my private feed, and the rest from nuget.org.
+The following code snippet shows an example of a ``nuget.config`` where packages with names that start with ``MTR.*`` and ``MyTechRamblings.*`` are being fetched from my private feed, and the rest from nuget.org.
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -432,13 +434,11 @@ The following code snippet shows an example of a ``nuget.config``, where package
 
 # **Add your own .editorconfig file**
 
-You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to uphold a consistent coding style across all your applications.
-
-The same thing can be said if you have some custom Roslyn Analyzers. Just install them into all your .NET templates.
+You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to uphold a consistent coding style across all your applications. (The same thing can be said if you have some custom Roslyn Analyzers).
 
 Nothing more to say in here. 
 
-# **Prefer controller-base APIs over minimal APIs**
+# **Prefer controller-based APIs over minimal APIs**
 
 This might be a little bit controversial, but when building a .NET API template you don't know the complexity of the resulting application, and controller-based APIs are by default easier to scale than minimal APIs. 
 
