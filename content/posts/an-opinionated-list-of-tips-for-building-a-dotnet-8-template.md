@@ -12,7 +12,7 @@ This implies that several elements need to be incorporated to make them truly pr
 
 The recently announced [.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/get-started/aspire-overview) embodies a similar philosophy. It is an opinionated, cloud ready stack for building applications, offering a template that comes preconfigured with set of tools such as HealthChecks and OpenTelemetry. You can take a look at the Aspire templates in [here](https://github.com/dotnet/aspire/tree/main/src/Aspire.ProjectTemplates)
 
-In the realm of enterprise development, I usually tend to find that there aree a set of opinionated rules defined when you have to build an application.    
+In the realm of enterprise development, I usually tend to find that there are a set of opinionated rules defined when you have to build an application.    
 These rules might dictate the use of specific application architectures (e.g., Clean Architecture or Vertical Slice) or mandate the utilization of certain custom NuGet packages for functionalities like logging or configuration.    
 This is where .NET Aspire has limitations, as, despite its well-implemented nature, it remains a generic template. Consequently, regardless of how robust .NET Aspire may be, it doesn't cater to the specific, tailored needs of individual enterprises, this is where creating and using your own templates that enforce your organization's rules becomes a valuable approach when starting the development of a new application.
 
@@ -27,7 +27,7 @@ So, without further ado, let's get started.
 
 # **Don't try to build a single template that does everything**
 
-The first tip is very simple. Don't try to create a single template that does everything, like encompassing multiples architectures (e.g. Clean Architecture or N-layer architecture) or multiple kind of apps (e.g. APIs, Worker Servies).
+The first tip is very simple. Don't try to create a single template that does everything, like encompassing multiples architectures (e.g. Clean Architecture or N-layer architecture) or multiple kind of apps (e.g. APIs, Worker Services).
 
 Instead of that, it is much better to have several templates where each one fulfills a concrete objective. That way it is much more easy to maintain an update them.
 
@@ -42,7 +42,7 @@ Inside the ``.template.config`` folder you need to place at least a file named `
 
 Within the NuGet package all the templates must be stored in the ``/content`` folder.
 
-Here’s how the folder structure should look like:
+Here’s how the folder structure inside your .NET template package should look like:
 
 ```shell
 ---content
@@ -68,7 +68,7 @@ Once you have created your template package, you can upload it to your company's
 
 # **Add the template package version as a classification tag**
 
-When creating your template package, include the package version as a classification tag in the ``.template.config`` file. This becomes especially useful when you can't recall the specific version of the package template installed on your machine.
+When creating your template package, include the package version as a classification tag in every ``.template.config`` file. This becomes especially useful when you can't recall the specific version of the package template installed on your machine.
 
 This step can be automated in a dozen different ways, making it a straightforward process.
 
@@ -282,7 +282,7 @@ Not every application needs to have the same features, and you can control this 
 
 Authorization is one of them. Depending on the type of API you're building, you might need to set the auth middleware or not. To achieve this, you can make use of the dotnet engine's conditional pragmas.
 
-In the ``template.json`` file I declare the symbol ``Authorization`` of type ``bool`` with the default value of true. 
+Let's see an example. In the ``template.json`` file I declare the symbol ``Authorization`` of type ``bool`` with the default value of true. 
 
 ```json
   "Authorization": {
@@ -293,8 +293,8 @@ In the ``template.json`` file I declare the symbol ``Authorization`` of type ``b
   }
 ```
 Which means:
- - If the user sets the value to false, the template engine needs to remove any ``Microsoft.Web.Identity`` reference from the solution.
- - If the user sets this symbol to true, the template engine needs to keep the references to the ``Microsoft.Web.Identity`` library.
+ - If the user sets the value to ``false``, the template engine needs to remove any auth reference from the solution.
+ - If the user sets this symbol to ``true``, the template engine needs to keep the auth references.
 
 In the ``Program.cs`` file every authorization logic is wrapped by the ``Authorization`` conditional.
 ```csharp
@@ -386,22 +386,95 @@ If you want to read more about it, the following link is the official documentat
 
 # **Try to build a generic enough dockerfile, and also avoid Container support for .NET SDK**
 
-If you're working with containers, it's beneficial to include a Dockerfile in your template. Aim to make this Dockerfile generic enough to work with most applications created using the template. The goal is to provide a ready-to-use Dockerfile that requires no modification in most of the cases.
+If you're working mainly with containers, it's beneficial to include a Dockerfile in your template. Aim to make this Dockerfile generic enough to work with most applications created using the template. The goal is to provide a ready-to-use Dockerfile that requires no modification in most of the cases.
 
 Also, if your company uses some custom elements in their images, such as platform images, ensure to configure them in the Dockerfile.
 
-To create a .NET image, you have the option to use Container Support for .NET SDK instead of a Dockerfile. However, I tend to avoid it, mainly because it's a niche method of creating images that is not widely known. In contrast, the Dockerfile syntax has become an industry standard known by everyone. Nowadays, almost anyone can read and modify a Dockerfile, regardless of whether they are .NET developers, Python developers, or SysAdmins.
+The following code snippet showcases a Dockerfile from my .NET 6 API template. There are a few interesting things to comment in here:
+
+- Instead of relying on official images, this Dockerfile employs custom platform images.
+
+>**What’s a platform image?**    
+>When talking about containers security on the enterprise one of the best practices is to use your own platform images, those platform images are the base for your company applications.   
+> The point of having a platform image instead of directly using a base image is to ensure that the resulting containers are hardened according to any corporate policies before being deployed to production.
+
+- To enable the restoration of my private custom NuGet packages, an Azure DevOps Personal Access Token (PAT) must be provided as an argument to the Dockerfile.
+
+- The Dockerfile copies all files and executes the ``dotnet restore``, ``dotnet build``, ``dotnet test`` and ``dotnet publish`` commands.    
+
+In a .NET Dockerfile, it is generally recommended to use Docker's layer caching mechanism to optimize the build process. The idea is to minimize the number of layers that need to be rebuilt when changes are made to your application.    
+Copying only the .csproj file and restoring packages separately is a common practice because it allows Docker to cache the restored NuGet packages as a separate layer.   
+
+If you take a look at the Dockerfile below, I deviate from this approach. I choose to copy everything, as it yields a more generic Dockerfile capable of working with almost every API created using the .NET template.
+
+```csharp
+FROM mtr.azurecr.io/net6.sdk.base:6.0-bullseye-slim AS build-env
+WORKDIR /app
+
+# Get PAT from args
+ARG AZDO_PAT
+
+# Setup cred-provider
+ENV VSS_NUGET_EXTERNAL_FEED_ENDPOINTS {\"endpointCredentials\": [{\"endpoint\":\"https://mytechramblings.pkgs.visualstudio.com/_packaging/my-feed/nuget/v3/index.json\", \"username\":\"build\", \"password\":\"$AZDO_PAT\"}]}
+
+# Copy everything and restore packages
+COPY . ./
+RUN dotnet restore -s "https://mytechramblings.pkgs.visualstudio.com/_packaging/my-feed/nuget/v3/index.json" \
+    -s "https://api.nuget.org/v3/index.json" \
+	--runtime linux-x64	
+
+# Build project
+RUN dotnet build "./src/MyTechRamblings.WebApi/MyTechRamblings.WebApi.csproj" \ 
+    -c Release \
+	--runtime linux-x64 \ 
+	--self-contained true \	
+	--no-restore
+
+# Test UnitTest project
+RUN dotnet test "./test/MyTechRamblings.UnitTests/MyTechRamblings.UnitTests.csproj" \
+	--no-restore
+
+# Publish app
+RUN dotnet publish "./src/MyTechRamblings.WebApi/MyTechRamblings.WebApi.csproj" \
+	-c Release \
+	-o /app/publish \
+	--no-restore \ 
+	--no-build \
+	--self-contained true \
+	--runtime linux-x64
+
+# Build runtime image
+FROM mtr.azurecr.io/et6.runtime.deps:6.0-bullseye-slim
+
+# Expose port
+EXPOSE 8080
+
+# Copy artifact
+WORKDIR /app
+COPY --from=build-env /app/publish .
+
+# Set entrypoint
+ENTRYPOINT ["./MyTechRamblings.WebApi"]
+```
+
+To create a .NET image, you have the option to use Container Support for .NET SDK instead of a Dockerfile. However, I tend to avoid it, mainly because it's a niche method of creating images that is not widely known.    
+In contrast, the Dockerfile syntax has become an industry standard known by everyone. Nowadays, almost anyone can read and modify a Dockerfile if needed, regardless of whether they are .NET developers, Python developers, or SysAdmins.
 
 
 # **Don't disable the package dependencies security scan**
 
-Since .NET 8, there was no straightforward method to audit package dependencies for security vulnerabilities inside your app.
+Since .NET 6, there has been no native method that allows us to analyze security vulnerabilities in the packages used by the application.
 
-Previously, you could utilize the ``dotnet list package --vulnerable`` command to generate a list of packages with known vulnerabilities. However, this required a proactive approach,  involving either manually running the command, integrating it into your CI/CD pipeline, or executing it through a Git webhook.
+You could use a external tool or utilize the ``dotnet list package --vulnerable`` command to generate a list of packages with known vulnerabilities. However, this required a proactive approach,  involving either manually running the command, integrating it into your CI/CD pipeline, or executing it through a Git webhook.
 
-With .NET 8, package dependency auditing is integrated by default when ``dotnet restore`` is executed. By default, a security audit is performed only for top-level dependencies. You can customize the security auditing according to your company's needs using the ``NuGetAuditMode`` and ``NuGetAuditLevel`` MSBuild properties.
+With .NET 8, package dependency auditing is integrated by default when ``dotnet restore`` is executed. By default, a security audit is performed only for top-level dependencies. You can customize the security auditing according to your company's needs using the ``NuGetAudit``, ``NuGetAuditMode`` and ``NuGetAuditLevel`` MSBuild properties.
 
-This is a really nice feature available starting from NuGet 6.8, the .NET 8 SDK, and Visual Studio 2022 17.8. And there is no valid reason to disable this feature in your templates. Personally, I prefer to configure ``NuGetAuditMode`` to include auditing for transitive dependencies as well. However, if you believe this might be excessive for your needs, at the very least, keep the default configuration.
+![dotnet-templates-tips-nuget-audit](/img/dotnet-templates-tips-nuget-audit.png)
+
+This is a really nice feature available starting from NuGet 6.8, the .NET 8 SDK, and Visual Studio 2022 17.8.    
+You can disable it by setting the ``NuGetAudit`` property to ``false``, but there is no compelling reason to turn off this feature in your templates. 
+
+Personally, I recommend configuring the ``NuGetAuditMode`` in a more restrictive manner, ensuring that it audits not only the direct packages but also their transitive dependencies. However, if you find this level of scrutiny to be excessive for your requirements, it is advisable to, at the very least, maintain the default configuration.
 
 
 # **Add a preconfigured nuget.config and utilize the packageSourceMapping section**
@@ -434,7 +507,7 @@ The following code snippet shows an example of a ``nuget.config`` where packages
 
 # **Add your own .editorconfig file**
 
-You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to uphold a consistent coding style across all your applications. (The same thing can be said if you have some custom Roslyn Analyzers).
+You should include an ``.editorconfig`` file in all your .NET templates. It will enable you to uphold a consistent coding style across all your applications. (The same thing can be said if you have build any custom Roslyn Analyzer).
 
 Nothing more to say in here. 
 
@@ -447,13 +520,13 @@ The clear structure and organization of controller-based APIs make it straightfo
 Certainly, there are ways to enhance the structure and organization of minimal API source code, but is it really worth the effort? I don't think so. If I have to develop a .NET API template that will be used for a wide range of applications, I would unequivocally choose to use a controller-based API.
 
 
-# **Always set controller versioning**
+# **Always set API Versioning**
 
-Enable API versioning in your API templates from the get go, don't expect that your app will always have a single version.
+You should always enable API versioning in your API templates right from the start, don't assume that your application will always have a single version.
 
-Also enabling it, is really quite straightforward, you need to install the ``Asp.Versioning.Mvc`` and``Asp.Versioning.Mvc.ApiExplorer`` NuGet packages and configure versioning as you see fit.
+Enabling API versioning is a straightforward process. You simply need to install the ``Asp.Versioning.Mvc`` and``Asp.Versioning.Mvc.ApiExplorer`` NuGet packages and configure versioning according to your requirements.
 
-The next code snippet shows how I configure versioning on my templates, but you should tailor it to your needs.
+The following code snippet demonstrates how I configure versioning in my templates, but you should customize it based on your specific needs.
 ```csharp
 public static IServiceCollection AddCustomApiVersioning(this IServiceCollection services)
 {
@@ -475,16 +548,11 @@ public static IServiceCollection AddCustomApiVersioning(this IServiceCollection 
 }
 ```
 
-# **Use the default .NET DI container**
+# **Use the default .NET Dependency Injection Container**
 
-Is there really any reason why I should to use another DI container (e.g. Autofac) that its not the default one? To be honest, I haven't found one.
+Is there really any reason why I should use another DI container (e.g. Autofac) that its not the default one? To be honest, I haven't found one.
 
-And speaking about the default DI container, one thing I like to set in my templates is the ``ValidateScopes`` and ``ValidateOnBuild`` properties to ``true``.
-
-Set the ``ValidateOnBuild`` to ``true`` to perform a check that verifies that scoped services never gets resolved from the root provider.
-
-Set the ``ValidateOnBuild`` to ``true`` to perform a check that verifies that all services can be created during the``BuildServiceProvider`` call.
-
+Regarding the default DI container, one thing I like to set in my templates is the ``ValidateScopes`` and ``ValidateOnBuild`` properties to ``true``.
 
 ```csharp
 builder.Host.UseDefaultServiceProvider((opt) =>
@@ -494,9 +562,17 @@ builder.Host.UseDefaultServiceProvider((opt) =>
 });
 ```
 
-# **Add an opinionated deploymnet pipeline**
+- Set the ``ValidateOnBuild`` to ``true`` to conduct a check ensuring that scoped services are not resolved from the root providerfrom the root provider.
 
-If possible, incorporate a pipeline into your templates. This will be an opinionated pipeline, as the structures vary significantly based on whether you're deploying to one cloud or another, also if you're using VCS or another, the pipeline format can be entirely different.
+- Set the ``ValidateOnBuild`` to ``true`` to perform a check that verifies that all services can be created during the``BuildServiceProvider`` call.
+
+This helps enhance the reliability and integrity of your dependency injection configuration.
+
+
+
+# **Add an opinionated deployment pipeline**
+
+If possible, incorporate a deployment pipeline into your templates. This will be an opinionated pipeline, as the structures vary significantly based on where you're deploying the app. Additionally, if you're using one VCS or another, the pipeline format and syntax may be entirely different.
 
 However, the goal is to offer a ready-to-use pipeline that, in most cases, requires no modification and can efficiently deploy your application.
 
@@ -554,34 +630,39 @@ Moq is probably the most well-known mocking library for .NET. If you're not awar
 If you want to read more about it, here is a more detailed explanation:
 - https://snyk.io/blog/moq-package-exfiltrates-user-emails/
 
-The changes were rolled back after a short period, but why would I use this library after its own creator deliberately opened a security loophole? There are other libraries that perform the same function, allowing us to avoid potential scares in the future.
+The changes were rolled back after a short period, but why would I use this library after its own creator deliberately opened a security loophole? There are other libraries that perform the same function, allowing me to avoid potential scares in the future.
 
-A good alternative is [NSubstitute](https://nsubstitute.github.io/), and you should consider using it or another option, but it's advisable to stay away from Moq.
+A good alternative is [NSubstitute](https://nsubstitute.github.io/), and you should consider using it or another option, but my recommendation is to stay away from Moq.
 
 # **Add a README file with the essential sections**
 
-It is advisable to add a ``README.md`` into every .NET template. This readme should contains the basic skeleton and sections that the application developer needs to fill out. 
+You should absolutely add a ``README.md`` into every .NET template. This readme should contains the basic skeleton and sections that the application developer needs to fill out. 
 
-This README should feature a set of well-defined sections that you can effortlessly populate with pertinent information. 
+This README should feature a clear set of well-defined sections that the developer can populate with pertinent information. 
 
 The next code snippet is an example that could serve as a starting point.
 
 ```markdown
 # Welcome to the MyTechRamblings.WebApi documentation
-
 Provide a concise yet informative description outlining the primary functionality and purpose of the MyTechRamblings.WebApi application. This introductory section serves as a quick reference point for developers and users seeking to understand the core aspects of the template.
 
+# Getting Started
+To get started with MyTechRamblings.WebApi, follow these steps:
+
+- Clone the repository.
+- Navigate to the project directory.
+[Include any necessary setup or configuration steps.]
 
 # Documentation
-Delve into the specifics with the general documentation for MyTechRamblings.WebApi. This section becomes the go-to resource for understanding the template's architecture, components, and overall design philosophy.
+Delve into the specifics with the general documentation for MyTechRamblings.WebApi. This section becomes the go-to resource for understanding the application architecture, components, and overall design philosophy.
 
 
-## Building blocks diagram
+## Building Blocks diagram
 Include a visual representation of the application's architecture. This diagram acts as a high-level overview, showcasing the key components and their interactions. Utilize tools like draw.io or other diagramming software to create an illustrative and accessible diagram.
 
 
 ## Dependencies
-Outline the external dependencies crucial for the proper functioning of MyTechRamblings.WebApi. This includes databases, web services, caching mechanisms, and queues. 
+Outline the external dependencies crucial for the proper functioning of MyTechRamblings.WebApi. This could include databases, web services, caching mechanisms, and queues. 
 
 ## More info.
 Offer additional resources and links to related documentation. This could include links to API documentation, user guides, or detailed data models.
@@ -599,4 +680,4 @@ Keep track of the version history in this section, detailing each release's impr
 
 ```
 
-Also, incorporating a README into the template will ensure a consistent format across all your README files, enhancing the overall user experience. Having a standardized format is not only convenient but also contributes to a cohesive documentation structure.
+Incorporating a ``README.md`` into the template will ensure a consistent format across all your README files, enhancing the overall user experience. Having a standardized format is not only convenient but also contributes to a more cohesive documentation structure.
