@@ -1,9 +1,9 @@
 ---
 title: "An opinionated list of tips for building .NET 8 app templates"
-date: 2023-12-25T14:36:32+01:00
+date: 2023-12-28T12:03:32+01:00
 description: "I have been developing .NET templates for quite some time, and as a result, I thought it might be helpful to compile a list of tips to consider when creating a .NET template for your own or your company's apps."
 tags: ["dotnet", "csharp", "templates"]
-draft: true
+draft: false
 ---
 
 When you install the .NET SDK, it comes equipped with a variety of templates that are readily available for your use. However, these templates are essentially bare, serving as a foundational starting point for your projects.
