@@ -1,9 +1,9 @@
 ---
 title: "How to push a container image to Azure Container Registry (ACR) using Terraform"
-date: 2024-01-13T22:32:47+01:00
+date: 2024-01-15T11:50:00+01:00
 description: "In this brief post, I want to show 3 options you can use to push an application into an Azure Container Registry (ACR) using Terraform."
 tags: ["azure", "terraform", "iac"]
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
