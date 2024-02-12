@@ -1,9 +1,9 @@
 ---
 title: "How to update an Azure API Management API that is configured with a remote OpenApi definition using Terraform"
-date: 2024-02-12T10:00:06+01:00
+date: 2024-02-12T10:20:06+01:00
 description: "In this post, you'll learn how to create and update an Azure API Management API configured to fetch the OpenAPI definition from a downstream API using Terraform."
 tags: ["azure", "terraform", "iac"]
-draft: true
+draft: false
 ---
 
 > **Just show me the code!**   
