@@ -1,9 +1,9 @@
 ---
 title: "Building and deploying a .NET 8 App on an ARM64 processor using Azure Pipelines and AWS ECS Fargate. Part 1: How to build multi-platform images"
-date: 2024-03-01T09:42:30+01:00
+date: 2024-03-12T22:00:30+01:00
 tags: ["dotnet", "containers", "azure", "aws", "devops", "arm64"]
-description: "In this two-part series, I’m going to show you how to build and deploy a .NET 8 app container image that targets an ARM64 processor. In part 1, I’ll be discussing some key concepts that you should know about how to build multi-platform images with .NET."
-draft: true
+description: "In this two-part series, I’m going to show you how to build and deploy a .NET 8 app container image that targets an ARM64 processor. In part 1, I’ll be discussing some key concepts that you should know about how to build .NET multi-platform images."
+draft: false
 ---
 
 > This is a two-part series post.
@@ -11,11 +11,10 @@ draft: true
 > - **Part 2**: A practical example of how to build a container image targeting an ARM64 processor using Azure Pipelines and how to deploy it on AWS ECS Fargate.    
 It will also include a quick benchmark to compare the performance of the application running on an ARM64 Fargate container against the same app using an AMD64 Fargate container.
 
-
 If you examine the enhancements in the latest .NET versions, you'll notice that each one of them brings quite a few improvements for ARM64 processors. The argument for using ARM64 processors over AMD64 is that ARM64 processors are cheaper, more efficient, and can reduce the carbon footprint.
 
 But, how easy is it to work with ARM64 in .NET? Let's conduct a little test in this post.    
-Let's explore the entire process of building and deploying a simple .NET 8 API to an ARM64 host.
+Let's explore the entire process of building and deploying a .NET 8 API to an ARM64 host.
 
 My machine has an AMD64 processor, and I want to create a container image that targets an ARM64 processor. This is the most common scenario when attempting to build your application on most CI providers, like Azure Pipelines, GitHub Actions, or GitLab CI. They don't offer hosted ARM64 runners.
 
