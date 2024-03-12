@@ -334,8 +334,9 @@ COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "Arm64Testing.WebApi.dll"]
 ```
 
-Finally modify the ``dotnet restore``, ``dotnet build`` and ``dotnet publish`` commands so they create the application binaries for the target architecture (in our case ``arm64``).    
-To achieve that, we're going to use the ``--arch`` attribute. This attribute can be used in all three commands (``dotnet restore``, ``dotnet build`` and ``dotnet publish``) and it is used to set the Runtime Identifier (RID).
+Finally modify the ``dotnet restore``, ``dotnet build`` and ``dotnet publish`` commands so they generate the application binaries for the target architecture (in our case ``arm64``).    
+
+To accomplish this, we're going to use the ``--arch`` attribute. This attribute can be used in all three commands (``dotnet restore``, ``dotnet build`` and ``dotnet publish``) and it is used to set the Runtime Identifier (RID).
 
 ```yml
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
