@@ -36,13 +36,20 @@ The API can perform the following actions:
 - Get, add, update and delete inventory.
 - Get, add and update orders.
 
-This application requires a SQL Server database, but to simplify, we will use EF with an in-memory database.
+This application requires a SQL Server database, but to simplify it, we will use **EF with an in-memory database**.
+
+```csharp
+services.AddDbContext<BookStoreDbContext>(options =>
+{
+    options.UseInMemoryDatabase("BookStoreDb");
+});
+```
 
 - You can find the source code [here](https://github.com/karlospn/opentelemetry-metrics-demo)
 
 # **Building the Dockerfile**
 
-Instead of building a single multi-platform Dockerfile, let's make the effort to build two: one multi-platform Dockerfile that uses emulation and another one that uses cross-compilation.
+Instead of building a single multi-platform Dockerfile, let's make the effort to build two: one that uses emulation and another one with cross-compilation.
 
 ## **Using emulation**
 
@@ -51,7 +58,7 @@ To create a multi-platform Dockerfile that uses emulation, we don't need to do a
 Emulation is the easiest option of the three available, because it requires no changes at all to your Dockerfile. The BuildKit automatically detects the secondary architectures that are available and when BuildKit needs to run a binary for a different architecture, it automatically loads it.
 
 The following code snippet shows the Dockerfile with the following features:
-- It is a multi-stage Dockerfile: it uses Ubuntu 22.04 as a base image for the build stage and an Ubuntu Chiseled image for the runtime stage.
+- It is a multi-stage Dockerfile: it uses an Ubuntu 22.04 as a base image for the build stage and an Ubuntu Chiseled image for the runtime stage.
 - The app is published as self-contained, resulting in an application bundle that includes the .NET runtime, libraries, as well as the application itself and its dependencies.
 
 ```yml
@@ -108,14 +115,12 @@ The idea behind Cross-Compilation is to utilize a multi-stage build Dockerfile. 
 
 Using the Dockerfile from the previous section as a starting point, there are several modifications needed to make it compatible with Cross-Compilation.
 
-1. Use the pre-defined build argument ``BUILDPLATFORM`` to pin the builder to use the host's native architecture as the build platform. This is necesarry to prevent emulation. 
-
+1. Use the pre-defined build argument ``BUILDPLATFORM`` to pin the builder to use the host's native architecture as the build platform. This is necesarry to prevent emulation.  
 In simpler terms, we need to add ``--platform=$BUILDPLATFORM`` into the ``FROM`` instruction of the build stage.
 
 2. Add the ``ARG TARGETARCH`` instructions for the build stage, making the ``TARGETARCH`` build arguments available to the commands in this stage.
 
 3. Modify the ``dotnet restore``, ``dotnet build`` and ``dotnet publish`` commands so they generate the application binaries for the target architecture (in our case ``arm64``).    
-
 To accomplish this, we're going to use the ``--arch`` attribute along with the ``TARGETARCH`` argument.
 
 ```yml
@@ -158,7 +163,7 @@ ENV ASPNETCORE_URLS=http://+:8080
 # Set Entrypoint
 ENTRYPOINT ["./BookStore.WebApi"]
 ```
-Now, let's attempt to build the container image on my AMD64 machine.
+Now, let's attempt to build the container image targeting an ARM64 processor.
 
 ```script
 $ docker build --platform=linux/arm64 -t bookstore-api:arm64-cc -f src/BookStore.WebApi/Dockerfile .
@@ -168,11 +173,12 @@ Using cross-compilation, we've reduced the build time 130 seconds to 17 seconds,
 
 # **Building the container image using Azure Pipelines (and pushing it into ECR)**
 
-In the previous section, we created the Dockerfiles and built the container image on my local machine. Now, instead of using my computer, let's attempt to build it using an Azure Pipelines hosted agent.
+In the previous section, we have created a couple of Dockerfiles (one that uses emulation to build the container image and another one that uses Cross Compilation) and we have test both of them on my local machine.    
+That's not a very realistic scenario. Now, instead of using my computer, let's attempt to build them using an Azure Pipelines hosted agent.
 
 ## **Using emulation**
 
-Let's start simple. We're using an Ubuntu hosted agent and we're simply running a ``docker build`` command using the ``--platform`` attribute.
+Real straightforward. We're using an Ubuntu hosted agent, the Dockerfile from the previous section and on the pipeline we're running only a ``docker build`` command using the ``--platform`` attribute.
 
 ```yml
 trigger: none
@@ -209,9 +215,9 @@ Dockerfile:8
 ERROR: failed to solve: process "/bin/sh -c dotnet restore -s \"https://api.nuget.org/v3/index.json\"" did not complete successfully: exit code: 1
 ```
 
-Thi is because the Azure Pipelines linux hosting agent doesn't have QEMU installed, QEMU only comes preinstalled with Docker desktop, if you're using docker engine you need to install it.
+Thi is because the Azure Pipelines linux hosting agent doesn't have QEMU installed, QEMU only comes preinstalled with Docker desktop, if you're using Docker Engine you'll need to install it.
 
-To install it, we're going to use the [qemu-user-static](https://github.com/multiarch/qemu-user-static) image. This image everything necessary to run QEMU.
+To install it, we're going to use the [qemu-user-static](https://github.com/multiarch/qemu-user-static) image. This image installs every necessary thing to run QEMU.
 
 Let's try it again, but installing QEMU first.
 
@@ -254,12 +260,414 @@ Dockerfile:8
 ERROR: failed to solve: process "/bin/sh -c dotnet restore -s \"https://api.nuget.org/v3/index.json\"" did not complete successfully: exit code: 139
 ```
 
-As I told you in part 1 of this post, QEMU and .NET doesn't really work well together. I'm not going to spend any more time trying to fix this, because this is an issue with QEMU. I'm going to move directly to Cross Compilation.
+As I told you in part 1 of this blog post, the Docker Engine + QEMU + .NET doesn't really work well together. 
+
+I'm going to abandon the idea of tryin to build a image using Emulation, is not worth it having to deal with the emulator inconsistencies when working with .NET. And anyway using Cross-Compilation is the way to go here, we were just messing with emulation to see if it was a viable option or not. And the answer to that question is that it is not a viable option.
 
 ## **Using cross-compilation**
 
+Same thing as the last section. We're using an Ubuntu hosted agent, the Dockerfile from the previous section and on the pipeline we're running only a ``docker build`` command using the ``--platform`` attribute.
+
+```yml
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: Bash@3
+  inputs:
+    targetType: 'inline'
+    script: |  
+      docker build --platform=linux/arm64 -t bookstore-api:arm64-cc -f src/BookStore.WebApi/Dockerfile .
+```
+
+And it works without any issue. Now let's push it into AWS ECR and in the next section we'll test it using AWS ECS Fargate.
+
+To push it into AWS ECR, let's keep it simple. I'm going to use the Azure DevOps [AWSShellScript](https://docs.aws.amazon.com/vsts/latest/userguide/awsshell.html) to do it. This task runs a shell script using bash with AWS credentials. The script will do the following steps:
+- Retrieve an authentication token and authenticate the Docker client with my ECR registry.
+- Create a new ECR repository.
+- Tag the container image so I can push it into the repository.
+- Push the image to my newly created ECR repository.
+
+```yml
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: Bash@3
+  inputs:
+    targetType: 'inline'
+    script: |  
+      docker build --platform=linux/arm64 -t bookstore-api:arm64-cc -f src/BookStore.WebApi/Dockerfile .
+
+- task: AWSShellScript@1
+  inputs:
+    awsCredentials: 'aws-dev'
+    regionName: 'eu-west-1'
+    scriptType: 'inline'
+    inlineScript: |
+      aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin 156267164149.dkr.ecr.eu-west-1.amazonaws.com
+      aws ecr create-repository --repository-name arm64-bookstore-api
+      docker tag bookstore-api:arm64-cc 156267164149.dkr.ecr.eu-west-1.amazonaws.com/arm64-bookstore-api:cc
+      docker push 156267164149.dkr.ecr.eu-west-1.amazonaws.com/arm64-bookstore-api:cc
+```
+
 # **Creating the AWS infrastructure**
 
-# **Testing the app**
+I'm going to need the following resources:
 
-# **Benchmark comparing the app running on an ARM64 ECS Fargate service versus the same app running on an AMD64 ECS Fargate service**
+- A VPC.
+- An ALB.
+- An ECS Cluster.
+- An ECS Task Definition + An ECS Service.
+
+And to create them, I'll be using [AWS CDK](https://aws.amazon.com/cdk/).
+
+The only thing worth showing in here is how to create an ECS Task Definition that targets an ARM64 processor, and it is as simple as setting the ``CpuArchitecture`` attribute to ``ARM64``, and that's it. 
+
+The rest of the resources don't care if you're deploying an app that targets an ARM64 processor or and AMD one.
+
+```csharp
+private FargateTaskDefinition CreateTaskDefinition()
+{
+  var repository = Repository.FromRepositoryName(this, "arm64-bookstore-repository", "arm64-bookstore-api");
+
+  var task = new FargateTaskDefinition(this,
+      "task-definition-bookstore-api",
+      new FargateTaskDefinitionProps
+      {
+          Cpu = 512,
+          Family = "task-definition-bookstore-api",
+          MemoryLimitMiB = 1024,
+          RuntimePlatform = new RuntimePlatform
+          {
+              CpuArchitecture = CpuArchitecture.ARM64,
+              OperatingSystemFamily = OperatingSystemFamily.LINUX
+          }
+      });
+
+  task.AddContainer("bookstore-api",
+      new ContainerDefinitionOptions
+      {
+          Cpu = 512,
+          MemoryLimitMiB = 1024,
+          Image = ContainerImage.FromEcrRepository(repository, "cc"),
+          Logging = LogDriver.AwsLogs(new AwsLogDriverProps
+          {
+              StreamPrefix = "ecs"
+          }),
+          PortMappings = new IPortMapping[]
+          {
+              new PortMapping
+              {
+                  ContainerPort = 8080
+              }
+          }
+      });
+
+  return task;
+}
+```
+
+# **Benchmark**
+
+After deploying the Bookstore API on AWS Fargate, I want to do a little benchmark so I can compare how the app fares when running on ARM64 versus when it run on an AMD64 processor. To achieve it, I have deployed a second bookstore API but this one targets an AMD64 processor.
+
+Now, let's run a little benchmark. I'm going to use [Artillery](https://www.artillery.io/) as the load generator.
+
+## Test 1: 
+- Duration: 180 seconds.
+- Rate: 50 req/sec.
+- Endpoint: GET ``/api/books``
+
+### **Requests**
+
+- ARM64 BookStore API
+```text
+http.codes.200: ................................................................ 9000
+http.downloaded_bytes: ......................................................... 45000000
+http.request_rate: ............................................................. 50/sec
+http.requests: ................................................................. 9000
+http.response_time:
+  min: ......................................................................... 43
+  max: ......................................................................... 1447
+  mean: ........................................................................ 61.3
+  median: ...................................................................... 56.3
+  p95: ......................................................................... 80.6
+  p99: ......................................................................... 113.3
+http.responses: ................................................................ 9000
+vusers.completed: .............................................................. 9000
+vusers.created: ................................................................ 9000
+vusers.created_by_name.0: ...................................................... 9000
+vusers.failed: ................................................................. 0
+vusers.session_length:
+  min: ......................................................................... 86.3
+  max: ......................................................................... 1771.6
+  mean: ........................................................................ 125.2
+  median: ...................................................................... 113.3
+  p95: ......................................................................... 149.9
+  p99: ......................................................................... 284.3
+```
+- AMD64 BookStore API
+```text
+http.codes.200: ................................................................ 9000
+http.downloaded_bytes: ......................................................... 45000000
+http.request_rate: ............................................................. 50/sec
+http.requests: ................................................................. 9000
+http.response_time:
+  min: ......................................................................... 44
+  max: ......................................................................... 5347
+  mean: ........................................................................ 62.8
+  median: ...................................................................... 56.3
+  p95: ......................................................................... 82.3
+  p99: ......................................................................... 111.1
+http.responses: ................................................................ 9000
+vusers.completed: .............................................................. 9000
+vusers.created: ................................................................ 9000
+vusers.created_by_name.0: ...................................................... 9000
+vusers.failed: ................................................................. 0
+vusers.session_length:
+  min: ......................................................................... 88.1
+  max: ......................................................................... 7209.7
+  mean: ........................................................................ 238.6
+  median: ...................................................................... 113.3
+  p95: ......................................................................... 162.4
+  p99: ......................................................................... 5378.9
+```
+
+### **CPU usage**
+
+<add-img>
+
+### **Memory usage**
+
+<add-img>
+
+
+### **CPU usage**
+
+<add-img>
+
+### **Memory usage**
+
+<add-img>
+
+## Test 2: 
+- Duration: 60 seconds.
+- Rate: 100 req/sec.
+- Endpoint: GET ``/api/categories``
+
+### **Requests**
+
+- ARM64 BookStore API
+```text
+http.codes.200: ................................................................ 6000
+http.downloaded_bytes: ......................................................... 990000
+http.request_rate: ............................................................. 100/sec
+http.requests: ................................................................. 6000
+http.response_time:
+  min: ......................................................................... 43
+  max: ......................................................................... 278
+  mean: ........................................................................ 60.1
+  median: ...................................................................... 57.4
+  p95: ......................................................................... 82.3
+  p99: ......................................................................... 104.6
+http.responses: ................................................................ 6000
+vusers.completed: .............................................................. 6000
+vusers.created: ................................................................ 6000
+vusers.created_by_name.0: ...................................................... 6000
+vusers.failed: ................................................................. 0
+vusers.session_length:
+  min: ......................................................................... 86.9
+  max: ......................................................................... 1271.3
+  mean: ........................................................................ 120.2
+  median: ...................................................................... 113.3
+  p95: ......................................................................... 159.2
+  p99: ......................................................................... 190.6
+```
+- AMD64 BookStore API
+```text
+http.codes.200: ................................................................ 6000
+http.downloaded_bytes: ......................................................... 990000
+http.request_rate: ............................................................. 100/sec
+http.requests: ................................................................. 6000
+http.response_time:
+  min: ......................................................................... 43
+  max: ......................................................................... 278
+  mean: ........................................................................ 61.5
+  median: ...................................................................... 58.6
+  p95: ......................................................................... 87.4
+  p99: ......................................................................... 106.7
+http.responses: ................................................................ 6000
+vusers.completed: .............................................................. 6000
+vusers.created: ................................................................ 6000
+vusers.created_by_name.0: ...................................................... 6000
+vusers.failed: ................................................................. 0
+vusers.session_length:
+  min: ......................................................................... 89.8
+  max: ......................................................................... 1123.3
+  mean: ........................................................................ 122.5
+  median: ...................................................................... 117.9
+  p95: ......................................................................... 159.2
+  p99: ......................................................................... 186.8
+```
+
+### **CPU usage**
+
+<add-img>
+
+### **Memory usage**
+
+<add-img>
+
+## Test 3: 
+- Duration: 120 seconds.
+- Rate: 80 req/sec.
+- Endpoint: GET ``/api/orders``
+
+### **Requests**
+
+- ARM64 BookStore API
+```text
+http.codes.200: ................................................................ 9600
+http.downloaded_bytes: ......................................................... 18124800
+http.request_rate: ............................................................. 80/sec
+http.requests: ................................................................. 9600
+http.response_time:
+  min: ......................................................................... 44
+  max: ......................................................................... 421
+  mean: ........................................................................ 63.8
+  median: ...................................................................... 61
+  p95: ......................................................................... 83.9
+  p99: ......................................................................... 100.5
+http.responses: ................................................................ 9600
+vusers.completed: .............................................................. 9600
+vusers.created: ................................................................ 9600
+vusers.created_by_name.0: ...................................................... 9600
+vusers.failed: ................................................................. 0
+vusers.session_length:
+  min: ......................................................................... 88.6
+  max: ......................................................................... 1133.7
+  mean: ........................................................................ 124.4
+  median: ...................................................................... 122.7
+  p95: ......................................................................... 153
+  p99: ......................................................................... 194.4
+```
+- AMD64 BookStore API
+```text
+http.codes.200: ................................................................ 9600
+http.downloaded_bytes: ......................................................... 18124800
+http.request_rate: ............................................................. 80/sec
+http.requests: ................................................................. 9600
+http.response_time:
+  min: ......................................................................... 44
+  max: ......................................................................... 291
+  mean: ........................................................................ 60.8
+  median: ...................................................................... 58.6
+  p95: ......................................................................... 85.6
+  p99: ......................................................................... 102.5
+http.responses: ................................................................ 9600
+vusers.completed: .............................................................. 9600
+vusers.created: ................................................................ 9600
+vusers.created_by_name.0: ...................................................... 9600
+vusers.failed: ................................................................. 0
+vusers.session_length:
+  min: ......................................................................... 88
+  max: ......................................................................... 381.5
+  mean: ........................................................................ 120.3
+  median: ...................................................................... 115.6
+  p95: ......................................................................... 153
+  p99: ......................................................................... 179.5
+```
+### **CPU usage**
+
+<add-img>
+
+
+To be fair the bookstore API is probably not very well suited for comparing how a .NET 8 app runs on Fargate when targeting an ARM64 processor versus an AMD64 processor.
+
+I have written another .NET 8 Api. It implements a version of the Sieve of Eratosthenes algorithm to find all prime numbers up to a given number.
+The next code snippet shows exactly what the API does.
+
+```csharp
+using Microsoft.AspNetCore.Mvc;
+using System.Collections;
+
+namespace Arm64Testing.WebApi.Controllers
+{
+    [ApiController]
+    [Route("[controller]")]
+    public class PrimeController : ControllerBase
+    {
+
+        [HttpGet]
+        public int Get()
+        {
+            var n = 1000000;
+            return CountPrimes(n);
+        }
+
+        public static int CountPrimes(int n)
+        {
+            int segmentSize = 10000;
+            bool[] isPrime = new bool[segmentSize];
+
+            int count = 0;
+            for (int low = 2; low <= n; low += segmentSize)
+            {
+                int high = Math.Min(low + segmentSize - 1, n);
+                for (int i = 0; i < segmentSize; i++)
+                {
+                    isPrime[i] = true;
+                }
+
+                int sqrtHigh = (int)Math.Sqrt(high);
+                for (int p = 2; p <= sqrtHigh; p++)
+                {
+                    if (IsPrime(p))
+                    {
+                        int start = Math.Max(p * p,
+                            (low + p - 1) / p * p);
+                        for (int j = start; j <= high; j += p)
+                        {
+                            isPrime[j - low] = false;
+                        }
+                    }
+                }
+
+                for (int i = Math.Max(2, low); i <= high; i++)
+                {
+                    if (isPrime[i - low])
+                    {
+                        count++;
+                    }
+                }
+            }
+
+            return count;
+        }
+
+        public static bool IsPrime(int num)
+        {
+            if (num < 2)
+                return false;
+
+            for (int i = 2; i * i <= num; i++)
+            {
+                if (num % i == 0)
+                    return false;
+            }
+
+            return true;
+        }
+    }
+}
+```
+
+This is a more CPU-bound API, so I'm going to deploy this app in 2  Fargate services: the first one will target an ARM64 processor and the second one an AMD64 processor.
+
+Let's run a test with Artillery during 5 minuts and 30req/sec
+
