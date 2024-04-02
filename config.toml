@@ -52,7 +52,15 @@ googleAnalytics = "UA-170300931-1"
     # path = "/img/your-example-logo.svg"
     # alt = "Your example logo alt text"
 
+
+
     [languages.en.menu]
+      
+      [[languages.en.menu.main]]
+        identifier = "news"
+        name = ".NET News"
+        url = "https://www.dotnetramblings.com"
+
       [[languages.en.menu.main]]
         identifier = "about"
         name = "About"
