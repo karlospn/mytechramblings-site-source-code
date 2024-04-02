@@ -2,8 +2,8 @@
 title: "Building and deploying a .NET 8 App on an ARM64 processor using Azure Pipelines and AWS ECS Fargate. Part 2: Demo"
 date: 2024-04-02T09:42:30+01:00
 tags: ["dotnet", "containers", "azure", "aws", "devops", "arm64"]
-description: "In this two-part series, I’m going to show you how to build and deploy a .NET 8 app container image that targets an ARM64 processor. In part 2, we will attempt to perform an end-to-end process. We will build a .NET 8 API, containerize the app targeting an ARM64 processor using Azure Pipelines, and finally deploy it on AWS ECS Fargate.    
-Additionally, we will conduct a quick benchmark to compare the performance of the application running on an ARM64 Fargate container against the same app using an AMD64 Fargate container."
+description: "In this two-part series, I’m going to show you how to build and deploy a .NET 8 app container image that targets an ARM64 processor. In part 2, we will attempt to perform an end-to-end process. This will involve building a .NET 8 API, containerizing the app targeting an ARM64 processor using Azure Pipelines, and deploying it on AWS ECS Fargate.    
+Furthermore, a benchmark will also be conducted to compare the performance of the application running on an ARM64 Fargate container versus an AMD64 Fargate container."
 draft: true
 ---
 
@@ -12,31 +12,32 @@ draft: true
 > - **Part 2**: A practical example of how to build a container image targeting an ARM64 processor using Azure Pipelines and how to deploy it on AWS ECS Fargate.    
 It will also include a quick benchmark to compare the performance of the application running on an ARM64 Fargate container against the same app using an AMD64 Fargate container.
 
-In the first part of this blog post, we discussed how to create a multi-platform image, how multi-platform .NET images work, and which options are available when we want to build a multi-platform image (emulation, cross-compilation, or using a host with the target architecture).
+In the first part of this blog post, we explored the creation of a multi-platform image, the workings of .NET multi-platform images, and the options at our disposal for building a multi-platform image, such as emulation, cross-compilation, or utilizing a host with the target architecture.
 
-Now, it's time to build an end-to-end process. Let's attempt to build a container image targeting ARM64 using a CI runner, deploy the app into an ARM64 machine host, and test that it's working correctly.
+Now, it's time to build an end-to-end process. We'll aim to build a container image targeting ARM64 using a CI runner, deploy the application onto an ARM64 machine host, and verify its proper functioning.
 
-I don't have an ARM64 machine at hand right now, so to build the E2E process, I decided to use the following cloud services:
+Currently, I don't possess an ARM64 machine, so to construct this end-to-end process, I've opted to utilize the following cloud services:
 
-- **AWS ECR** to store the container image.
-- **AWS ECS Fargate** to run the API.
-- **Azure Pipelines** to build and publish the image into the Amazon Registry.
-- **Artillery** to test the API.
+- **AWS ECR** for storing the container image.
+- **AWS ECS Fargate** for running the API.
+- **Azure Pipelines** for building and publishing the image into the AWS ECR.
+- **Artillery** for testing the API.
 
-Why use AWS instead of Azure? Nothing in particular. In my last posts, I was using Azure, so it might be a nice change of scenery to use AWS.
+Why choose AWS over Azure? There's no specific reason. In my recent posts, I've been using Azure, so switching to AWS might provide a refreshing change of pace.
 
 # **Application**
 
+- You can find the app source code in [here](https://github.com/karlospn/opentelemetry-metrics-demo).
+
 The application we’re going to use is a BookStore API built using .NET 8.
 
-The API can perform the following actions:
+This API is capable of executing the following operations:
+- Retrieve, add, modify, and remove book categories.
+- Retrieve, add, modify, and remove books.
+- Retrieve, add, modify, and remove inventory.
+- Retrieve, add, and modify orders.
 
-- Get, add, update and delete book categories.
-- Get, add, update and delete books.
-- Get, add, update and delete inventory.
-- Get, add and update orders.
-
-This application requires a SQL Server database, but to simplify it, we will use **EF with an in-memory database**.
+This application requires a SQL Server database. However, to simplify matters, we'll employ **Entity Framework (EF) with an in-memory database**.
 
 ```csharp
 services.AddDbContext<BookStoreDbContext>(options =>
@@ -45,21 +46,19 @@ services.AddDbContext<BookStoreDbContext>(options =>
 });
 ```
 
-- You can find the source code [here](https://github.com/karlospn/opentelemetry-metrics-demo)
+# **Constructing the Dockerfile**
 
-# **Building the Dockerfile**
-
-Instead of building a single multi-platform Dockerfile, let's make the effort to build two: one that uses emulation and another one with cross-compilation.
+Instead of building a single multi-platform Dockerfile, let's make the effort to construct two: one employing emulation and another utilizing Cross-Compilation.
 
 ## **Using emulation**
 
-To create a multi-platform Dockerfile that uses emulation, we don't need to do any extra step; just a simple run-of-the-mill Dockerfile will suffice.
+To create a Dockerfile that uses emulation, we don't need to do any extra step; just a simple run-of-the-mill Dockerfile will suffice.
 
 Emulation is the easiest option of the three available, because it requires no changes at all to your Dockerfile. The BuildKit automatically detects the secondary architectures that are available and when BuildKit needs to run a binary for a different architecture, it automatically loads it.
 
 The following code snippet shows the Dockerfile with the following features:
-- It is a multi-stage Dockerfile: it uses an Ubuntu 22.04 as a base image for the build stage and an Ubuntu Chiseled image for the runtime stage.
-- The app is published as self-contained, resulting in an application bundle that includes the .NET runtime, libraries, as well as the application itself and its dependencies.
+- It's a multi-stage Dockerfile: it uses Ubuntu 22.04 as a base image for the build stage and an Ubuntu Chiseled image for the runtime stage.
+- The application is published as self-contained, resulting in an application bundle that encompasses the .NET runtime, libraries, as well as the application itself and its dependencies.
 
 ```yml
 FROM mcr.microsoft.com/dotnet/sdk:8.0-jammy AS build-env
@@ -98,10 +97,8 @@ ENV ASPNETCORE_URLS=http://+:8080
 ENTRYPOINT ["./BookStore.WebApi"]
 ```
 
-Now, let's try to build the container image on my AMD64 machine. Remember that we're running the ``dotnet build`` command on an AMD64 host machine and we're targeting an ARM64 processor, which means that it will use the [QEMU](https://www.qemu.org/) emulator for building the resulting container image.
-
-
-Now, let's attempt to build the container image on my AMD64 machine. Remember that we're executing the ``docker build`` command on an AMD64 host machine while targeting an ARM64 processor. This implies that it will utilize the QEMU emulator to construct the resulting container image.
+Now, let's try to build the container image on my AMD64 machine.    
+Remember that we're running the ``dotnet build`` command on an AMD64 host machine while targeting an ARM64 processor. This means that it will employ the [QEMU](https://www.qemu.org/) emulator for building the resulting container image.
 
 ```script
 docker build --platform=linux/arm64 -t bookstore-api:arm64-emulation -f src/BookStore.WebApi/Dockerfile .
@@ -116,7 +113,7 @@ The idea behind Cross-Compilation is to utilize a multi-stage build Dockerfile. 
 Using the Dockerfile from the previous section as a starting point, there are several modifications needed to make it compatible with Cross-Compilation.
 
 1. Use the pre-defined build argument ``BUILDPLATFORM`` to pin the builder to use the host's native architecture as the build platform. This is necesarry to prevent emulation.  
-In simpler terms, we need to add ``--platform=$BUILDPLATFORM`` into the ``FROM`` instruction of the build stage.
+In simpler terms, we need to add the ``--platform=$BUILDPLATFORM`` attribute into the ``FROM`` instruction of the build stage.
 
 2. Add the ``ARG TARGETARCH`` instructions for the build stage, making the ``TARGETARCH`` build arguments available to the commands in this stage.
 
@@ -169,16 +166,16 @@ Now, let's attempt to build the container image targeting an ARM64 processor.
 $ docker build --platform=linux/arm64 -t bookstore-api:arm64-cc -f src/BookStore.WebApi/Dockerfile .
 [+] Building 16.2s (15/15) FINISHED
 ```
-Using cross-compilation, we've reduced the build time 130 seconds to 17 seconds, and the CPU usage from nearly 90% to no more than 20%.
+Using Cross-Compilation, we've reduced the build time from 130 seconds to 17 seconds, and the CPU usage went from nearly 90% to no more than 20%.
 
-# **Building the container image using Azure Pipelines (and pushing it into ECR)**
+# **Constructing the container image using Azure Pipelines (and pushing it into ECR)**
 
-In the previous section, we have created a couple of Dockerfiles (one that uses emulation to build the container image and another one that uses Cross Compilation) and we have test both of them on my local machine.    
-That's not a very realistic scenario. Now, instead of using my computer, let's attempt to build them using an Azure Pipelines hosted agent.
+In the previous section, we created a pair of Dockerfiles (one employing emulation to build the container image and another utilizing Cross-Compilation) and tested both on my local machine.    
+However, this isn't a very realistic scenario. Now, instead of using my personal computer, let's try building them using an Azure Pipelines Hosted Agent.
 
 ## **Using emulation**
 
-Real straightforward. We're using an Ubuntu hosted agent, the Dockerfile from the previous section and on the pipeline we're running only a ``docker build`` command using the ``--platform`` attribute.
+This process is quite straightforward. We're using an Ubuntu hosted agent and the Dockerfile from the previous section. In the pipeline, we're simply executing a ``docker build`` command using the ``--platform `` attribute.
 
 ```yml
 trigger: none
@@ -193,7 +190,6 @@ steps:
     script: |  
       docker build --platform=linux/arm64 -t bookstore-api:arm64-emu -f src/BookStore.WebApi/Dockerfile .
 ```
-
 And it throws an error.
 
 ```text
@@ -215,11 +211,11 @@ Dockerfile:8
 ERROR: failed to solve: process "/bin/sh -c dotnet restore -s \"https://api.nuget.org/v3/index.json\"" did not complete successfully: exit code: 1
 ```
 
-Thi is because the Azure Pipelines linux hosting agent doesn't have QEMU installed, QEMU only comes preinstalled with Docker desktop, if you're using Docker Engine you'll need to install it.
+This is because the Azure Pipelines Linux hosting agent doesn't come with QEMU preinstalled. QEMU is only preinstalled with Docker Desktop. If you're using Docker Engine, you'll need to install it separately.
 
-To install it, we're going to use the [qemu-user-static](https://github.com/multiarch/qemu-user-static) image. This image installs every necessary thing to run QEMU.
+To install it, we'll use the [qemu-user-static](https://github.com/multiarch/qemu-user-static) image. This image installs everything necessary to run QEMU.
 
-Let's try it again, but installing QEMU first.
+Let's attempt the process again, but this time, we'll install QEMU first.
 
 ```yml
 trigger: none
@@ -260,13 +256,14 @@ Dockerfile:8
 ERROR: failed to solve: process "/bin/sh -c dotnet restore -s \"https://api.nuget.org/v3/index.json\"" did not complete successfully: exit code: 139
 ```
 
-As I told you in part 1 of this blog post, the Docker Engine + QEMU + .NET doesn't really work well together. 
+As I mentioned in part 1 of this blog post, the combination of Docker Engine, QEMU, and .NET doesn't work well together.
 
-I'm going to abandon the idea of tryin to build a image using Emulation, is not worth it having to deal with the emulator inconsistencies when working with .NET. And anyway using Cross-Compilation is the way to go here, we were just messing with emulation to see if it was a viable option or not. And the answer to that question is that it is not a viable option.
+I'm going to abandon the idea of trying to build an image using emulation. It's not worth dealing with the emulator inconsistencies when working with .NET.    
+Besides, using cross-compilation is the preferred method here. We were merely experimenting with emulation to determine if it was a viable option or not. And the answer to that question is that it's not a viable option.
 
 ## **Using cross-compilation**
 
-Same thing as the last section. We're using an Ubuntu hosted agent, the Dockerfile from the previous section and on the pipeline we're running only a ``docker build`` command using the ``--platform`` attribute.
+This process is identical to the last section. We're using an Ubuntu hosted agent and the Dockerfile from the previous section. In the pipeline, we're executing a ``docker build`` command using the ``--platform`` attribute.
 
 ```yml
 trigger: none
@@ -282,9 +279,10 @@ steps:
       docker build --platform=linux/arm64 -t bookstore-api:arm64-cc -f src/BookStore.WebApi/Dockerfile .
 ```
 
-And it works without any issue. Now let's push it into AWS ECR and in the next section we'll test it using AWS ECS Fargate.
+This time, the process works flawlessly. Now, let's push it into AWS ECR and in the next section, we'll try to deploy it on AWS ECS Fargate.
 
-To push it into AWS ECR, let's keep it simple. I'm going to use the Azure DevOps [AWSShellScript](https://docs.aws.amazon.com/vsts/latest/userguide/awsshell.html) to do it. This task runs a shell script using bash with AWS credentials. The script will do the following steps:
+To push it into AWS ECR, let's keep things straightforward. I'm going to use the Azure DevOps [AWSShellScript](https://docs.aws.amazon.com/vsts/latest/userguide/awsshell.html) task. This task executes a shell script using bash with AWS credentials. The script will perform the following steps:
+
 - Retrieve an authentication token and authenticate the Docker client with my ECR registry.
 - Create a new ECR repository.
 - Tag the container image so I can push it into the repository.
@@ -319,16 +317,16 @@ steps:
 
 I'm going to need the following resources:
 
-- A VPC.
-- An ALB.
-- An ECS Cluster.
+- A Virtual Private Cloud (VPC).
+- An Application Load Balancer (ALB).
+- An Elastic Container Service (ECS) Cluster.
 - An ECS Task Definition + An ECS Service.
 
-And to create them, I'll be using [AWS CDK](https://aws.amazon.com/cdk/).
+To create these resources, I'll be using [AWS CDK](https://aws.amazon.com/cdk/).
 
-The only thing worth showing in here is how to create an ECS Task Definition that targets an ARM64 processor, and it is as simple as setting the ``CpuArchitecture`` attribute to ``ARM64``, and that's it. 
+The only aspect worth highlighting here is the creation of an ECS Task Definition that targets an ARM64 processor. This can be achieved simply by setting the ``CpuArchitecture`` attribute to ``ARM64``.
 
-The rest of the resources don't care if you're deploying an app that targets an ARM64 processor or and AMD one.
+The rest of the resources are indifferent to whether you're deploying an app that targets an ARM64 processor or an AMD one.
 
 ```csharp
 private FargateTaskDefinition CreateTaskDefinition()
@@ -374,9 +372,11 @@ private FargateTaskDefinition CreateTaskDefinition()
 
 # **Benchmark**
 
-After deploying the Bookstore API on AWS Fargate, I want to do a little benchmark so I can compare how the app fares when running on ARM64 versus when it run on an AMD64 processor. To achieve it, I have deployed a second bookstore API but this one targets an AMD64 processor.
-
 Now, let's run a little benchmark. I'm going to use [Artillery](https://www.artillery.io/) as the load generator.
+
+After deploying the Bookstore API on AWS Fargate, I want to conduct a small benchmark to compare the app's performance when running on an ARM64 processor versus an AMD64 processor. To do this, I have deployed a second Bookstore API, but this one targets an AMD64 processor.
+
+Now, let's conduct a small benchmark. I'm going to use [Artillery](https://www.artillery.io/) as the load generator.
 
 ## Test 1: 
 - Duration: 180 seconds.
@@ -440,7 +440,7 @@ vusers.session_length:
 
 ### **CPU usage**
 
-![arm64-test1-cpu-comparison](/img/arm64-test1-cpu-comparison.png.png)
+![arm64-test1-cpu-comparison](/img/arm64-test1-cpu-comparison.png)
 
 
 ### **Memory usage**
@@ -510,7 +510,7 @@ vusers.session_length:
 
 ### **CPU usage**
 
-![arm64-test2-cpu-comparison](/img/arm64-test2-cpu-comparison.png.png)
+![arm64-test2-cpu-comparison](/img/arm64-test2-cpu-comparison.png)
 
 ### **Memory usage**
 
@@ -577,17 +577,18 @@ vusers.session_length:
 ```
 ### **CPU usage**
 
-![arm64-test3-cpu-comparison](/img/arm64-test3-cpu-comparison.png.png)
+![arm64-test3-cpu-comparison](/img/arm64-test3-cpu-comparison.png)
 
 ### **Memory usage**
 
 ![arm64-test3-mem-comparison](/img/arm64-test3-mem-comparison.png)
 
 
-To be fair the bookstore API is probably not very well suited for comparing how a .NET 8 app runs on Fargate when targeting an ARM64 processor versus an AMD64 processor.
+If you analyze the results of the above tests, you'll find that the differences between running the Bookstore API on an ARM64 or an AMD64 processor are practically indistinguishable.
 
-I have written another .NET 8 Api. It implements a version of the Sieve of Eratosthenes algorithm to find all prime numbers up to a given number.
-The next code snippet shows exactly what the API does.
+To be fair, the Bookstore API is probably not the best choice for comparing how a .NET 8 app runs on Fargate when targeting an ARM64 processor versus an AMD64 processor.
+
+I have written another .NET 8 API. This one implements a version of the Sieve of Eratosthenes algorithm to find all prime numbers up to a given number. This API is more CPU-intensive. The following code snippet will show exactly what the API does.
 
 ```csharp
 using Microsoft.AspNetCore.Mvc;
@@ -664,9 +665,7 @@ namespace Arm64Testing.WebApi.Controllers
 }
 ```
 
-This is a more CPU-bound API, so I'm going to deploy this app in 2 Fargate services: the first one will target an ARM64 processor and the second one an AMD64 processor.
-
-Let's run a test with Artillery during 240 seconds with 3req/sec (more than that it will crash the app, because it takes quite considerable time to calculate the result).
+Let's run a test with Artillery for 240 seconds at a rate of 3 requests per second (if we increase the rate, most of the requests will likely time out due to the significant amount of time required to calculate the results.).
 
 ### **Requests**
 
@@ -724,5 +723,29 @@ vusers.session_length:
 ```
 ### **CPU usage**
 
-![arm64-prime-test-cpu-comparison](/img/arm64-prime-test-cpu-comparison.png.png)
+![arm64-prime-test-cpu-comparison](/img/arm64-prime-test-cpu-comparison.png)
 
+In this case, the ARM64 version performs significantly better.
+
+- The average response time is faster (467.7 vs 573.5).
+- The CPU usage is lower.
+
+
+# **Conclusion**
+
+After running these series of tests, it appears that choosing ARM64 is the better option. In most of the tests, it performs on par with an AMD64 processor, and in a more CPU-intensive test, it performs even better.
+
+Moreover, if we consider the pricing listed on the AWS website, we see the following:
+
+AWS Fargate price when using a Linux AMD64 processor
+- per vCPU per hour: $0.04048
+- per GB per hour: $0.004445
+
+AWS Fargate price when using a Linux ARM64 processor
+- per vCPU per hour: $0.03238
+- per GB per hour: $0.00356
+
+Using an ARM64 processor for hosting your .NET 8 APIs seems to be the way to go. It not only performs the same, if not better, but it is also cheaper.
+
+When building your container images, avoid emulation and stick with Cross Compilation. This way, you can build the images wherever you want, whether it's on any of your local machines, a GitHub Action Runner, an Azure DevOps hosted Agent.    
+The only issue you might encounter is if you try to build for more than one architecture at the same time (using something like ``--platform=linux/amd64,linux/arm64``).
