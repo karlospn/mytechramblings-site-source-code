@@ -1,10 +1,10 @@
 ---
 title: "Building and deploying a .NET 8 App on an ARM64 processor using Azure Pipelines and AWS ECS Fargate. Part 2: Demo"
-date: 2024-04-02T09:42:30+01:00
+date: 2024-04-02T22:19:30+02:00
 tags: ["dotnet", "containers", "azure", "aws", "devops", "arm64"]
 description: "In this two-part series, I’m going to show you how to build and deploy a .NET 8 app container image that targets an ARM64 processor. In part 2, we will attempt to perform an end-to-end process. This will involve building a .NET 8 API, containerizing the app targeting an ARM64 processor using Azure Pipelines, and deploying it on AWS ECS Fargate.    
 Furthermore, a benchmark will also be conducted to compare the performance of the application running on an ARM64 Fargate container versus an AMD64 Fargate container."
-draft: true
+draft: false
 ---
 
 > This is a two-part series post.
@@ -665,7 +665,7 @@ namespace Arm64Testing.WebApi.Controllers
 }
 ```
 
-Let's run a test with Artillery for 240 seconds at a rate of 3 requests per second (if we increase the rate, most of the requests will likely time out due to the significant amount of time required to calculate the results.).
+Let's run a test with Artillery for 240 seconds at a rate of 3 requests per second (if we increase the rate, most of the requests will likely time out due to the significant amount of time required to calculate the results).
 
 ### **Requests**
 
