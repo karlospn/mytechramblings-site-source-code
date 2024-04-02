@@ -664,7 +664,6 @@ namespace Arm64Testing.WebApi.Controllers
     }
 }
 ```
-
 Let's run a test with Artillery for 240 seconds at a rate of 3 requests per second (if we increase the rate, most of the requests will likely time out due to the significant amount of time required to calculate the results).
 
 ### **Requests**
