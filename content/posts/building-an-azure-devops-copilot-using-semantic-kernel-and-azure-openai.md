@@ -18,7 +18,6 @@ But what're exactly going to build in here? A Microsoft Copilot is a suite of AI
 But what exactly are we going to build here? A Microsoft Copilot is a suite of AI-powered tools integrated into various Microsoft products to assist users in their tasks. It aims to enhance user productivity by providing intelligent, context-aware assistance across a wide range of applications and tasks.    
 There are already several of them: Microsoft 365 Copilot, GitHub Copilot, Power Platform Copilot, etc. But you can also build your own custom Copilot, and that's exactly what I plan to do.
 
-
 In plain words, we're going to build a custom Azure DevOps Copilot, which is essentially a chat interface where the AI assistant will be Azure OpenAI GPT-4. This assistant will use the power of Semantic Kernel plugins to perform actions on my Azure DevOps instance, such as managing Team Projects, Git Repositories, Branches, Builds, etc.
 
 But before we start writing code, let's quickly discuss what Semantic Kernel and Semantic Kernel Plugins are.
@@ -95,7 +94,225 @@ There are a few prerequisites we need before start coding.
 
 ## **1. Building the Chat application**
 
+The first step is to set up Semantic Kernel and build a chat interface with GPT-4 so we can ask it questions. Let me show you the complete source code, and then I'll highlight and comment on the most interesting parts.
 
+```csharp
+﻿using CustomCopilot.AzureDevOpsPlugin;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Microsoft.SemanticKernel.Plugins.Core;
+
+namespace CustomCopilot
+{
+    internal class Program
+    {
+        static async Task Main(string[] args)
+        {
+            // Create a kernel with the Azure OpenAI chat completion service
+            var builder = Kernel.CreateBuilder();
+            builder.AddAzureOpenAIChatCompletion(Environment.GetEnvironmentVariable("OAI_MODEL_NAME")!,
+                Environment.GetEnvironmentVariable("OAI_ENDPOINT")!,
+                Environment.GetEnvironmentVariable("OAI_APIKEY")!);
+
+            // Load the plugins
+            #pragma warning disable SKEXP0050 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+            builder.Plugins.AddFromType<TimePlugin>();
+            builder.Plugins.AddFromObject(new AzureDevOpsProjectsPlugin(), nameof(AzureDevOpsProjectsPlugin));
+            builder.Plugins.AddFromObject(new AzureDevOpsRepositoriesPlugin(), nameof(AzureDevOpsRepositoriesPlugin));
+            builder.Plugins.AddFromObject(new AzureDevOpsBranchesPlugin(), nameof(AzureDevOpsBranchesPlugin));
+            builder.Plugins.AddFromObject(new AzureDevOpsCodeSearchPlugin(), nameof(AzureDevOpsCodeSearchPlugin));
+            builder.Plugins.AddFromObject(new AzureDevOpsBuildsPlugin(), nameof(AzureDevOpsBuildsPlugin));
+
+
+            // Build the kernel
+            var kernel = builder.Build();
+
+            // Create chat history
+            ChatHistory history = [];
+            history.AddSystemMessage(@"You are a virtual assistant specifically designed to manage an Azure DevOps instance. Your scope of conversation is strictly limited to this domain. Your responses should be concise, accurate, and directly related to the query at hand.
+In order to provide the most accurate responses, you require precise inputs. 
+If a function calling involves parameters that you do not have sufficient information about it, it is crucial that you do not attempt to guess or infer their values. Instead, your primary action should always be to ask the user to provide more detailed information about these parameters. This is a non-negotiable aspect of your function. Guessing or inferring values is not an acceptable course of action. Your goal is to avoid any potential misunderstandings and to provide the most accurate and helpful response possible.
+Remember, when in doubt, always ask for more information. Never guess the values of a function parameter.
+If a function call fails to produce any valid data, the response must always be: 'I'm sorry, but I wasn't able to retrieve any data.If the problem persists, you may want to contact your Azure DevOps administrator or support for further assistance'. 
+Never fabricate a response if the function calling fails or returns invalid data.");
+
+            // Get chat completion service
+            var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+
+            // Start the conversation
+            while (true)
+            {
+                // Trim chat history
+                if (history.Count > 20)
+                {
+                    history.RemoveRange(0, 4);
+                }
+
+                // Get user input
+                Console.Title = "Azure DevOps Copilot";
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.Write("\nUser > ");
+                history.AddUserMessage(Console.ReadLine()!);
+
+                // Enable auto function calling
+                OpenAIPromptExecutionSettings openAiPromptExecutionSettings = new()
+                {
+                    ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
+                };
+
+
+                // Get the response from the AI
+                var response = chatCompletionService.GetStreamingChatMessageContentsAsync(
+                               history,
+                               executionSettings: openAiPromptExecutionSettings,
+                               kernel: kernel);
+
+
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("\nAssistant > ");
+
+                string combinedResponse = string.Empty;
+                await foreach (var message in response)
+                {
+                    //Write the response to the console
+                    Console.Write(message);
+                    combinedResponse += message;
+                }
+
+                Console.WriteLine();
+
+                // Add the message from the agent to the chat history
+                history.AddAssistantMessage(combinedResponse);
+            }
+        }
+    }
+}
+```
+
+The first step is create and setup Semantic Kernel. To add an Azure OpenAI chat completion service to SK, you will need to use the ``AddAzureOpenAIChatCompletion`` method.
+
+Within the ``AddAzureOpenAIChatCompletion`` method, we're specifing which LLM model we want to use, the Azure OpenAI endpoint, and an Azure OpenAI API Key.
+
+```csharp
+// Create a kernel with the Azure OpenAI chat completion service
+var builder = Kernel.CreateBuilder();
+builder.AddAzureOpenAIChatCompletion(Environment.GetEnvironmentVariable("OAI_MODEL_NAME")!,
+    Environment.GetEnvironmentVariable("OAI_ENDPOINT")!,
+    Environment.GetEnvironmentVariable("OAI_APIKEY")!);
+```
+
+Once we have set up Semantic Kernel (SK) with our Azure OpenAI instance, it's time to add the plugins we want to work with. In the next section, we will see how to implement those plugins; for now, let's simply add them to SK.
+
+From the code snippet below, you can see that I'm not going to create a single Azure DevOps plugin. Instead, I'll be creating multiple plugins, each targeting a specific API surface: projects, repositories, branches, builds, etc.   
+You can put everything into a single plugin if you prefer; it doesn't change anything functionally. However, I find that segregating the plugins into multiple smaller plugins makes them easier to maintain and update.
+
+Apart from adding our custom Azure DevOps plugins, you can see that we're also adding the ``TimePlugin``. The ``TimePlugin`` comes with Semantic Kernel, so you don't need to implement it. This plugin is used to get time and date information. But why do we need it?
+
+Let me show you an example, and you'll understand it quickly. Imagine we want to ask our Azure DevOps Copilot a time-related question. Let's try it out:
+
+![sk-timeplugin](/img/azdo-copilot-time-plugin-2.png)
+
+From the screen above, you can see that our Copilot, thanks to the ``TimePlugin``, is capable of knowing the current date and can successfully respond to our time-related question.
+
+Now, let's make the same example, but this time, let's NOT add the ``TimePlugin`` to Semantic Kernel.
+
+![sk-no-timeplugin](/img/azdo-copilot-time-plugin-1.png)
+
+Without the ``TimePlugin``, our LLM is incapable of knowing the current date, and therefore its response is incorrect.
+
+```csharp
+// Load the plugins
+#pragma warning disable SKEXP0050
+builder.Plugins.AddFromType<TimePlugin>();
+builder.Plugins.AddFromObject(new AzureDevOpsProjectsPlugin(), nameof(AzureDevOpsProjectsPlugin));
+builder.Plugins.AddFromObject(new AzureDevOpsRepositoriesPlugin(), nameof(AzureDevOpsRepositoriesPlugin));
+builder.Plugins.AddFromObject(new AzureDevOpsBranchesPlugin(), nameof(AzureDevOpsBranchesPlugin));
+builder.Plugins.AddFromObject(new AzureDevOpsCodeSearchPlugin(), nameof(AzureDevOpsCodeSearchPlugin));
+builder.Plugins.AddFromObject(new AzureDevOpsBuildsPlugin(), nameof(AzureDevOpsBuildsPlugin));
+```
+
+Once we have setup everything in SK, it's time to build it.
+
+```csharp
+// Build the kernel
+var kernel = builder.Build();
+```
+
+Next step is to construct the system prompt for our LLM (GPT-4o). This is one of the most important parts of the application. It is crucial to properly ground the LLM and prevent it from attempting to guess or infer values when calling our Azure DevOps custom plugin, as it might guess incorrectly. A much better approach is to instruct the LLM to ask the user for the necessary values when in doubt.
+
+If the plugin fails to make the call to the Azure DevOps REST API, it is better to instruct the LLM to show an error message instead of attempting to generate a valid response.
+
+```csharp
+ChatHistory history = [];
+history.AddSystemMessage(@"You are a virtual assistant specifically designed to manage an Azure DevOps instance. Your scope of conversation is strictly limited to this domain. Your responses should be concise, accurate, and directly related to the query at hand.
+In order to provide the most accurate responses, you require precise inputs. 
+If a function calling involves parameters that you do not have sufficient information about it, it is crucial that you do not attempt to guess or infer their values. Instead, your primary action should always be to ask the user to provide more detailed information about these parameters. This is a non-negotiable aspect of your function. Guessing or inferring values is not an acceptable course of action. Your goal is to avoid any potential misunderstandings and to provide the most accurate and helpful response possible.
+Remember, when in doubt, always ask for more information. Never guess the values of a function parameter.
+If a function call fails to produce any valid data, the response must always be: 'I'm sorry, but I wasn't able to retrieve any data.If the problem persists, you may want to contact your Azure DevOps administrator or support for further assistance'. 
+Never fabricate a response if the function calling fails or returns invalid data.");
+```
+
+The final part of this chat application might seem complex, but in reality, we're following the same steps we would take anytime we build a chat with an LLM:
+- Get the user's question.
+- Send the question to GPT-4. SK will automatically call our Azure DevOps plugins if the user's question requires it.
+- Get the response back and display it.
+- Store the response in the chat history.
+
+There are only a couple of things worth mentioning in the code snippet below:
+- The chat history is being trimmed to prevent it from growing out of control. There are more sophisticated techniques to manage the ever-growing chat history. The one I'm using is a bit rudimentary (if there are more than 20 messages in the chat history, remove the oldest 4). Nonetheless, it works.
+- For SK to automatically call our Azure DevOps plugins when the user's question requires it, we need to set the ``ToolCallBehavior`` property to ``ToolCallBehavior.AutoInvokeKernelFunctions``.
+
+
+```csharp
+// Get chat completion service
+var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+
+// Start the conversation
+while (true)
+{
+    // Trim chat history
+    if (history.Count > 20)
+    {
+        history.RemoveRange(0, 4);
+    }
+
+    // Get user input
+    Console.Title = "Azure DevOps Copilot";
+    Console.ForegroundColor = ConsoleColor.White;
+    Console.Write("\nUser > ");
+    history.AddUserMessage(Console.ReadLine()!);
+
+    // Enable auto function calling
+    OpenAIPromptExecutionSettings openAiPromptExecutionSettings = new()
+    {
+        ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
+    };
+
+    // Get the response from the AI
+    var response = chatCompletionService.GetStreamingChatMessageContentsAsync(
+                    history,
+                    executionSettings: openAiPromptExecutionSettings,
+                    kernel: kernel);
+
+
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.Write("\nAssistant > ");
+
+    string combinedResponse = string.Empty;
+    await foreach (var message in response)
+    {
+        //Write the response to the console
+        Console.Write(message);
+        combinedResponse += message;
+    }
+
+    Console.WriteLine();
+
+    // Add the message from the agent to the chat history
+    history.AddAssistantMessage(combinedResponse);
+}
+```
 ## **2. Building the Azure DevOps Semantic Kernel plugins**
 
 
