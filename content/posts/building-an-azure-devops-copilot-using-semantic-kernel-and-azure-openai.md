@@ -50,7 +50,37 @@ They are based on the OpenAI plugin specification and contain both code and prom
 
 In this post, we're going to build a Semantic Kernel (SK) plugin that can interact with the Azure DevOps REST API.   This way, every time we ask a question related to our Azure DevOps instance, Semantic Kernel will use the plugin to interact with Azure DevOps. The result will be sent to GPT-4, and a response will come back.
 
+## **What does a SK plugin look like?**
 
+At a high-level, a plugin is a function that can be exposed to SK. The functions within plugins can then be orchestrated by an AI application to accomplish user request.
+
+The following code is an example of a plugin capable of reading the text of a given document.
+
+```csharp
+[KernelFunction, Description("Read all text from a document")]
+[return: Description("Document content")]
+public async Task<string> ReadTextAsync(
+   [Description("Path to the file to read")] string filePath)
+{
+    using var stream = await this._fileSystemConnector.GetFileContentStreamAsync(filePath).ConfigureAwait(false);
+    return this._documentConnector.ReadText(stream);
+}
+```
+Forget about the implementation of the function, what is interested here is that we're describing everything the function does:
+- The purpose of the function: ``[KernelFunction, Description("Read all text from a document")]``
+- What it returns: ``[return: Description("Document content")]``
+- What are the parameters used for: ``[Description("Path to the file to read")]``
+
+Describing the function and its parameters accurately and precisely is paramount because these description fields are used by Semantic Kernel (SK) when orchestrating functions.   
+
+But how would SK know that it needs to run the ``ReadTextAsync`` function when the user asks a question related to its purpose? There are two ways to handle this challenge:
+
+- Invoke the Function manually.
+- Use the Auto Function Invocation Feature of Semantic Kernel. This is the approach we want to use. We don't want to run the plugins manually; we want SK to choose the appropriate function for us based on the response from GPT-4.
+
+The auto function invocation feature allows SK to automatically determine which function to invoke based on the context of the user's query and the response from GPT-4. This ensures a seamless and efficient interaction with the Azure DevOps REST API through the SK plugin.
+
+That's enough theory, let's dive into some code.
 
 # **Application**
 
