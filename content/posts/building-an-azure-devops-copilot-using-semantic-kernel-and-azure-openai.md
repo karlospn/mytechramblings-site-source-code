@@ -1,24 +1,23 @@
 ---
 title: "Building an Azure DevOps Copilot using .NET 8, Semantic Kernel and Azure OpenAi GPT-4o"
 date: 2024-05-26T18:02:37+02:00
-description: ""
+description: "This post demonstrates how to create an Azure DevOps Copilot that utilizes a small subset of the Azure DevOps REST API. To achieve this, we will be using Semantic Kernel along with .NET 8 and Azure OpenAI."
 tags: ["genai", "azure", "openai", "dotnet", "devops"]
 draft: true
 ---
 
 > **Just show me the code**   
-> As always, if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/building-an-azure-devops-copilot-using-semantic-kernel-and-dotnet)
+> As always, if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/building-an-azure-devops-copilot-using-semantic-kernel-and-dotnet).
 
-First and foremost, let me clarify that **I don't intend to build an entire Azure DevOps Copilot**, as the Azure DevOps REST API is too big and my spare time is quite limited.
+First and foremost, let me clarify that **I don't intend to build a complete Azure DevOps Copilot**, as the Azure DevOps REST API is too big and my spare time is quite limited.
 
 Instead, I plan to create an Azure DevOps Copilot that uses a small subset of the Azure DevOps API. My primary goal here is to demonstrate how simple it can be to build your own custom Copilot using Semantic Kernel Plugins when you have a third party API to interact with it.
 
-But what're exactly going to build in here? A Microsoft Copilot is a suite of AI-powered tools integrated into various Microsoft products to assist users in their tasks. It aims too enhance user productivity by providing intelligent, context-aware assistance across a wide range of applications and tasks.
+But what exactly is a Copilot? A Microsoft Copilot is a suite of AI-powered tools integrated into various Microsoft products to assist users in their tasks. It aims to enhance user productivity by providing intelligent, context-aware assistance across a wide range of applications and tasks.     
 
-But what exactly are we going to build here? A Microsoft Copilot is a suite of AI-powered tools integrated into various Microsoft products to assist users in their tasks. It aims to enhance user productivity by providing intelligent, context-aware assistance across a wide range of applications and tasks.    
-There are already several of them: Microsoft 365 Copilot, GitHub Copilot, Power Platform Copilot, etc. But you can also build your own custom Copilot, and that's exactly what I plan to do.
+There are already several examples, such as Microsoft 365 Copilot, GitHub Copilot, and Power Apps Copilot. However, you can also build your own Copilot, and that's exactly what I plan to demonstrate in this post.
 
-In plain words, we're going to build a custom Azure DevOps Copilot, which is essentially a chat interface where the AI assistant will be Azure OpenAI GPT-4. This assistant will use the power of Semantic Kernel plugins to perform actions on my Azure DevOps instance, such as managing Team Projects, Git Repositories, Branches, Builds, etc.
+In simple terms, we're going to build a chat interface with an AI assistant powered by Azure OpenAI GPT-4o. This assistant will leverage the capabilities of Semantic Kernel plugins to provide answers and perform actions on my Azure DevOps instance, such as managing Team Projects, Git Repositories, Branches, Builds, and more.
 
 But before we start writing code, let's quickly discuss what Semantic Kernel and Semantic Kernel Plugins are.
 
@@ -28,18 +27,19 @@ Semantic Kernel is an open-source SDK designed to facilitate the development of 
 
 It provides a set of tools and libraries that enable developers to build applications capable of understanding, processing, and reasoning about data in a more human-like manner.
 
-Are you familiar with LangChain? Semantic Kernel is an alternative to LangChain. One of the biggest differences is that while LangChain is only available in Python and JavaScript, Semantic Kernel can run in .NET.
+Are you familiar with LangChain? Semantic Kernel is an alternative to LangChain. One of its biggest advantages is that, while LangChain is only available in Python and JavaScript, Semantic Kernel is available in .NET.
 
-The fastest way to learn how to use Semantic Kernel is with this C# and Python Jupyter notebooks. These notebooks demonstrate how to use Semantic Kernel with code snippets that you can run with a push of a button.
+The fastest way to learn how to use Semantic Kernel is with this C# Jupyter notebooks. These notebooks demonstrate how to use Semantic Kernel with code snippets that you can run with a push of a button.
 
 - https://github.com/microsoft/semantic-kernel/blob/main/dotnet/notebooks/README.md
 
 # **Semantic Kernel Plugins**
 
-Imagine you build a chat application that uses Semantic Kernel and GPT-4o. If you try to ask a question related to your specific Azure DevOps instance, what do you think will happen? 
+Imagine you build a chat application that uses Semantic Kernel and GPT. If you try to ask a question related to your specific Azure DevOps instance, what do you think it will respond with? 
 
-It won't be able to answer properly because GPT-4o (or any other LLM) doesn't have any knowledge about your Azure DevOps instance.    
-You can ask it general-purpose questions about Azure DevOps, but if you try to ask it specific questions about your instance, such as "How many Team Projects do I have?", it will either hallucinate and provide incorrect information or be unable to answer at all.
+Nothing. It won't be able to answer properly because GPT-4o (or any other large language model) doesn't have any knowledge about your Azure DevOps instance.
+
+You can ask general-purpose questions about Azure DevOps, but if you try to ask specific questions about your instance, such as _"How many Team Projects do I have?"_, it will either hallucinate and provide incorrect information or be unable to answer at all.
 
 Semantic Kernel Plugins are a way to add functionality and capabilities to your Copilot. With plugins, you can encapsulate capabilities into a single unit of functionality that can then be run by Semantic Kernel.
 
@@ -47,7 +47,8 @@ They are based on the OpenAI plugin specification and contain both code and prom
 
 ![sk-plugins](/img/azdo-copilot-sk-plugins.png)
 
-In this post, we're going to build a Semantic Kernel (SK) plugin that can interact with the Azure DevOps REST API.   This way, every time we ask a question related to our Azure DevOps instance, Semantic Kernel will use the plugin to interact with Azure DevOps. The result will be sent to GPT-4, and a response will come back.
+In this post, we're going to build a Semantic Kernel (SK) plugin that interacts with the Azure DevOps REST API.   
+This way, every time we ask a question related to our Azure DevOps instance, Semantic Kernel will use the plugin to interact with Azure DevOps. The result will be sent to GPT-4o, which will then generate a response.
 
 ## **What does a SK plugin look like?**
 
@@ -65,17 +66,17 @@ public async Task<string> ReadTextAsync(
     return this._documentConnector.ReadText(stream);
 }
 ```
-Forget about the implementation of the function, what is interested here is that we're describing everything the function does:
+Forget for a moment about the implementation of the function. What is interesting here is how we're describing everything the function does:
 - The purpose of the function: ``[KernelFunction, Description("Read all text from a document")]``
 - What it returns: ``[return: Description("Document content")]``
 - What are the parameters used for: ``[Description("Path to the file to read")]``
 
 Describing the function and its parameters accurately and precisely is paramount because these description fields are used by Semantic Kernel (SK) when orchestrating functions.   
 
-But how would SK know that it needs to run the ``ReadTextAsync`` function when the user asks a question related to its purpose? There are two ways to handle this challenge:
+How would SK know that it needs to run the ``ReadTextAsync`` function when the user asks a question related to its purpose? There are two ways to handle this challenge.
 
-- Invoke the Function manually.
-- Use the Auto Function Invocation Feature of Semantic Kernel. This is the approach we want to use. We don't want to run the plugins manually; we want SK to choose the appropriate function for us based on the response from GPT-4.
+- Invoke the function manually.
+- Use the "Auto Function Invocation" feature of Semantic Kernel. This is the approach we want to use. We don't want to run the plugins manually; we want SK to choose the appropriate function for us based on the response from GPT-4.
 
 The auto function invocation feature allows SK to automatically determine which function to invoke based on the context of the user's query and the response from GPT-4. This ensures a seamless and efficient interaction with the Azure DevOps REST API through the SK plugin.
 
@@ -85,16 +86,16 @@ That's enough theory, let's dive into some code.
 
 The application we're going to build is a .NET 8 console app that functions as a basic chat client.
 
-Users will be able to ask questions related to their Azure DevOps instance, and the Copilot will utilize Semantic Kernel with our custom Plugins to fetch data from the Azure DevOps instance and respond accordingly.
+Users will be able to ask questions related to their Azure DevOps instance, and the Copilot will utilize Semantic Kernel with our custom Plugin to fetch data from the Azure DevOps instance and respond accordingly.
 
-There are a few prerequisites we need before start coding.
+There are a **few prerequisites** we need before start coding.
 - An Azure DevOps instance.
-- An Azure OpenAi instance with whatever model you prefer already deployed (I'll be using GPT-4o).
+- An Azure OpenAI instance with whatever model you prefer already deployed (I'll be using GPT-4o).
 
 
 ## **1. Building the Chat application**
 
-The first step is to set up Semantic Kernel and build a chat interface with GPT-4 so we can ask it questions. Let me show you the complete source code, and then I'll highlight and comment on the most interesting parts.
+The first step is to set up Semantic Kernel and build a chat interface with GPT-4o so we can ask it questions. Let me show you the complete source code, and then I'll highlight and comment on the most interesting parts.
 
 ```csharp
 ﻿using CustomCopilot.AzureDevOpsPlugin;
@@ -116,7 +117,7 @@ namespace CustomCopilot
                 Environment.GetEnvironmentVariable("OAI_APIKEY")!);
 
             // Load the plugins
-            #pragma warning disable SKEXP0050 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+            #pragma warning disable SKEXP0050
             builder.Plugins.AddFromType<TimePlugin>();
             builder.Plugins.AddFromObject(new AzureDevOpsProjectsPlugin(), nameof(AzureDevOpsProjectsPlugin));
             builder.Plugins.AddFromObject(new AzureDevOpsRepositoriesPlugin(), nameof(AzureDevOpsRepositoriesPlugin));
@@ -190,8 +191,9 @@ Never fabricate a response if the function calling fails or returns invalid data
 }
 ```
 
-The first step is create and setup Semantic Kernel. To add an Azure OpenAI chat completion service to SK, you will need to use the ``AddAzureOpenAIChatCompletion`` method.
+The first step is create and setup Semantic Kernel.    
 
+To add an Azure OpenAI chat completion service to SK, you will need to use the ``AddAzureOpenAIChatCompletion`` method.   
 Within the ``AddAzureOpenAIChatCompletion`` method, we're specifing which LLM model we want to use, the Azure OpenAI endpoint, and an Azure OpenAI API Key.
 
 ```csharp
@@ -202,7 +204,9 @@ builder.AddAzureOpenAIChatCompletion(Environment.GetEnvironmentVariable("OAI_MOD
     Environment.GetEnvironmentVariable("OAI_APIKEY")!);
 ```
 
-Once we have set up Semantic Kernel (SK) with our Azure OpenAI instance, it's time to add the plugins we want to work with. In the next section, we will see how to implement those plugins; for now, let's simply add them to SK.
+Once we have set up Semantic Kernel (SK) with our Azure OpenAI instance, it's time to add the plugins we want to work with.    
+
+In the next section, we will see how to implement those plugins; for now, let's simply add them to SK.
 
 From the code snippet below, you can see that I'm not going to create a single Azure DevOps plugin. Instead, I'll be creating multiple plugins, each targeting a specific API surface: projects, repositories, branches, builds, etc.   
 You can put everything into a single plugin if you prefer; it doesn't change anything functionally. However, I find that segregating the plugins into multiple smaller plugins makes them easier to maintain and update.
@@ -239,9 +243,11 @@ Once we have setup everything in SK, it's time to build it.
 var kernel = builder.Build();
 ```
 
-Next step is to construct the system prompt for our LLM (GPT-4o). This is one of the most important parts of the application. It is crucial to properly ground the LLM and prevent it from attempting to guess or infer values when calling our Azure DevOps custom plugin, as it might guess incorrectly. A much better approach is to instruct the LLM to ask the user for the necessary values when in doubt.
+Next step is to construct the system prompt for our LLM (GPT-4o).    
 
-If the plugin fails to make the call to the Azure DevOps REST API, it is better to instruct the LLM to show an error message instead of attempting to generate a valid response.
+This is one of the most important parts of the application. It is crucial to properly ground the LLM and prevent it from attempting to guess or infer values when calling our Azure DevOps custom plugin, as it might guess incorrectly. A much better approach is to instruct the LLM to ask the user for the necessary values when in doubt.
+
+Additionally, if the plugin fails to make the call to the Azure DevOps REST API, it is better to instruct the LLM to show an error message instead of attempting to generate a valid response.
 
 ```csharp
 ChatHistory history = [];
@@ -253,7 +259,7 @@ If a function call fails to produce any valid data, the response must always be:
 Never fabricate a response if the function calling fails or returns invalid data.");
 ```
 
-The final part of this chat application might seem complex, but in reality, we're following the same steps we would take anytime we build a chat with an LLM:
+The final part of the chat application might seem complex, but in reality, we're following the same steps we would take anytime we build a chat with an LLM:
 - Get the user's question.
 - Send the question to GPT-4. SK will automatically call our Azure DevOps plugins if the user's question requires it.
 - Get the response back and display it.
@@ -317,10 +323,10 @@ while (true)
 In the previous section, we built the Chat Application. Now, it's time to build the Azure DevOps SK Plugins. 
 
 This might sound like a daunting task, but it's actually quite simple:
-- Build a C# function that calls a specific endpoint of the Azure DevOps REST API and returns the value.
-- Describe the function's purpose using the ``KernelFunction, Description`` decorator.
-- Describe what the function returns using the ``return: Description`` decorator.
-- If the function requires any parameters, describe what those parameters are for using the ``Description`` decorator.
+- Build a C# function that calls the desired endpoint of the Azure DevOps REST API and returns the result.
+- Describe the function's purpose using the ``[KernelFunction, Description("...")]`` decorator.
+- Describe what the function returns using the ``[return: Description("...")]`` decorator.
+- If the function requires any parameters, describe what those parameters are for using the ``[Description("...")]`` decorator.
 
 Describing the function and its parameters accurately is paramount because these description fields are used by Semantic Kernel (SK) when deciding if there is any SK Plugin functions that needs to call.  
 
@@ -388,15 +394,16 @@ public async Task<bool> CreateTeamsProject(
 }
 ```
 As you can see from the code snippet above, there is nothing overly complex (the code could be further improved, but I find that it is easier to understand this way).    
-The function uses an ``HttpClient`` to fetch the existing Team Projects. If the project we want to create already exists, it returns false; otherwise, it makes a second HTTP call to create it and returns 200 Ok.
 
-From this point forward, every functionality we build into our Azure DevOps custom Plugin will follow the same pattern as the one above: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the values.
+The function uses an ``HttpClient`` to fetch the existing Team Projects. If the Team Project we want to create already exists, it returns false; otherwise, it makes a second HTTP call to create it and returns 200 Ok.
+
+From this point forward, every functionality we build into our Azure DevOps custom Plugin will follow the same pattern as the one above: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the result.
 
 Therefore, I won't provide extensive commentary from now on. Instead, I'll simply show the code I have implemented and some live examples, so you can see the Copilot in action.
 
 ### **Base Class**
 
-As I said in the previous section, every functionality we build into our Azure DevOps custom Plugin follows the same pattern as the one above: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the values.
+As I stated in the previous section, every functionality we build into our Azure DevOps custom Plugin follows the same pattern: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the values.
 
 So, I have build a "Base Class" to reduce the duplicated code.
 

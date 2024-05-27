@@ -1,5 +1,5 @@
 ---
-title: "Announcing dotnetramblings.com or how to build a .NET news aggregator site."
+title: "Announcing dotnetramblings.com or how to build a .NET news aggregator site"
 date: 2024-04-05T17:15:12+02:00
 description: "Let's check how I build my new site www.dotnetramblings.com. This site is a .NET news aggregator that updates its content every three hours. The main technologies employed to build it include Hugo, Python and Github Actions." 
 tags: ["dotnet", "github", "cloud", "microsoft", "azure", "python", "devops"]
