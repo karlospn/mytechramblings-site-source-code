@@ -263,7 +263,6 @@ There are only a couple of things worth mentioning in the code snippet below:
 - The chat history is being trimmed to prevent it from growing out of control. There are more sophisticated techniques to manage the ever-growing chat history. The one I'm using is a bit rudimentary (if there are more than 20 messages in the chat history, remove the oldest 4). Nonetheless, it works.
 - For SK to automatically call our Azure DevOps plugins when the user's question requires it, we need to set the ``ToolCallBehavior`` property to ``ToolCallBehavior.AutoInvokeKernelFunctions``.
 
-
 ```csharp
 // Get chat completion service
 var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
@@ -313,8 +312,715 @@ while (true)
     history.AddAssistantMessage(combinedResponse);
 }
 ```
-## **2. Building the Azure DevOps Semantic Kernel plugins**
+## **2. Building the Azure DevOps SK Plugins**
 
+In the previous section, we built the Chat Application. Now, it's time to build the Azure DevOps SK Plugins. 
+
+This might sound like a daunting task, but it's actually quite simple:
+- Build a C# function that calls a specific endpoint of the Azure DevOps REST API and returns the value.
+- Describe the function's purpose using the ``KernelFunction, Description`` decorator.
+- Describe what the function returns using the ``return: Description`` decorator.
+- If the function requires any parameters, describe what those parameters are for using the ``Description`` decorator.
+
+Describing the function and its parameters accurately is paramount because these description fields are used by Semantic Kernel (SK) when deciding if there is any SK Plugin functions that needs to call.  
+
+The next code snippet shows an example of a function responsible for creating a new Azure DevOps Team Project:
+
+```csharp
+[KernelFunction, Description("Creates a new Azure DevOps team project if it doesn't exists")]
+[return: Description("If the Azure DevOps Team Project creation was succesful or not")]
+public async Task<bool> CreateTeamsProject(
+    [Description("Name of the new team project")]
+    string name,
+    [Description("Description of the new team project")]
+    string description)
+{
+    try
+    {
+        using HttpClient client = new HttpClient();
+        client.DefaultRequestHeaders.Accept.Add(
+            new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
+            Convert.ToBase64String(
+                Encoding.ASCII.GetBytes(
+                    string.Format("{0}:{1}", "", Environment.GetEnvironmentVariable("AZURE_DEVOPS_PAT")))));
+
+        HttpResponseMessage response = await client.GetAsync(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/projects?api-version=6.0");
+
+        if (response.IsSuccessStatusCode)
+        {
+            var responseBody = await response.Content.ReadAsStringAsync();
+            dynamic result = JsonConvert.DeserializeObject(responseBody) ?? throw new Exception();
+
+            foreach (var project in result.value)
+            {
+                if (project.name == name)
+                {
+                    return false;
+                }
+            }
+        }
+
+        var projectToCreate = new
+        {
+            name,
+            description,
+            capabilities = new
+            {
+                versioncontrol = new { sourceControlType = "Git" },
+                processTemplate = new { templateTypeId = "6b724908-ef14-45cf-84f8-768b5384da45" } 
+            }
+        };
+
+        response = await client.PostAsync(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/projects?api-version=6.0",
+            new StringContent(JsonConvert.SerializeObject(projectToCreate), Encoding.UTF8, "application/json"));
+
+        return response.IsSuccessStatusCode;
+    }
+    catch (Exception ex)
+    { 
+        Console.WriteLine(ex.Message);
+        return false;
+    }
+}
+```
+As you can see from the code snippet above, there is nothing overly complex (the code could be further improved, but I find that it is easier to understand this way).    
+The function uses an ``HttpClient`` to fetch the existing Team Projects. If the project we want to create already exists, it returns false; otherwise, it makes a second HTTP call to create it and returns 200 Ok.
+
+From this point forward, every functionality we build into our Azure DevOps custom Plugin will follow the same pattern as the one above: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the values.
+
+Therefore, I won't provide extensive commentary from now on. Instead, I'll simply show the code I have implemented and some live examples, so you can see the Copilot in action.
+
+### **Base Class**
+
+As I said in the previous section, every functionality we build into our Azure DevOps custom Plugin follows the same pattern as the one above: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the values.
+
+So, I have build a "Base Class" to reduce the duplicated code.
+
+```csharp
+protected static HttpClient CreateHttpClient()
+{
+    var client = new HttpClient();
+    client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+        "Basic",
+        Convert.ToBase64String(Encoding.ASCII.GetBytes($"{string.Empty}:{Environment.GetEnvironmentVariable("AZURE_DEVOPS_PAT")}"))
+    );
+    return client;
+}
+
+protected async Task<dynamic?> GetApiResponse(string requestUri)
+{
+    using var client = CreateHttpClient();
+    var response = await client.GetAsync(requestUri);
+    if (response.IsSuccessStatusCode)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject(responseBody) ?? throw new Exception();
+    }
+    return null;
+}
+
+protected async Task<dynamic?> PostApiResponse(string requestUri, HttpContent content)
+{
+    using var client = CreateHttpClient();
+
+    var response = await client.PostAsync(requestUri, content);
+
+    if (response.IsSuccessStatusCode)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync();
+        return JsonConvert.DeserializeObject(responseBody) ?? throw new Exception();
+    }
+    return null;
+}
+```
+
+### **Azure DevOps Team Projects Plugin**
+
+- **Create new Team Project**
+
+```csharp
+[KernelFunction, Description("Creates a new Azure DevOps team project if it doesn't exist")]
+[return: Description("If the Azure DevOps Team Project creation was successful or not")]
+public async Task<bool> CreateTeamsProject(
+    [Description("Name of the new team project")] string name,
+    [Description("Description of the new team project")] string description)
+{
+    try
+    {
+        var result = await GetApiResponse($"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/projects?api-version=6.0");
+        if (result != null)
+        {
+            foreach (var project in result.value)
+            {
+                if (project.name == name)
+                {
+                    return false;
+                }
+            }
+        }
+
+        var projectToCreate = new
+        {
+            name,
+            description,
+            capabilities = new
+            {
+                versioncontrol = new { sourceControlType = "Git" },
+                processTemplate = new { templateTypeId = "6b724908-ef14-45cf-84f8-768b5384da45" }
+            }
+        };
+
+        using var client = CreateHttpClient();
+        var response = await client.PostAsync(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/projects?api-version=6.0",
+            new StringContent(JsonConvert.SerializeObject(projectToCreate), Encoding.UTF8, "application/json")
+        );
+
+        return response.IsSuccessStatusCode;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return false;
+    }
+}
+```
+
+- **List Team Projects**
+
+```csharp
+[KernelFunction, Description("Get all existing Azure DevOps team projects")]
+[return: Description("A list of names of existing Azure DevOps Team Projects")]
+public async Task<List<string>> GetTeamsProject()
+{
+    try
+    {
+        var connection = new VssConnection(
+            new Uri(Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")!), new VssBasicCredential(string.Empty, Environment.GetEnvironmentVariable("AZURE_DEVOPS_PAT")));
+        var projectHttpClient = connection.GetClient<ProjectHttpClient>();
+        IPagedList<TeamProjectReference> projects = await projectHttpClient.GetProjects();
+        var projectNames = projects.Select(project => project.Name).ToList();
+        return projectNames;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return [];
+    }
+}
+```
+
+- **Delete Team Projects**
+
+```csharp
+[KernelFunction, Description("Deletes an existing Azure DevOps team project")]
+[return: Description("If the Azure DevOps Team Project deletion was successful or not")]
+public async Task<bool> DeleteProject(
+    [Description("Name of the team project to delete")] string name)
+{
+    try
+    {
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/projects?api-version=6.0");
+
+        if (result != null)
+        {
+            foreach (var project in result.value)
+            {
+                if (project.name == name)
+                {
+                    using var client = CreateHttpClient();
+                    var response = await client.DeleteAsync(
+                        $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/projects/{project.id}?api-version=6.0"
+                    );
+                    return response.IsSuccessStatusCode;
+                }
+            }
+        }
+        return false;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return false;
+    }
+}
+```
+
+- **Demo: Using our Copilot to manage the Team Projects**
+
+![sk-plugin-projects](/img/azdo-copilot-projects.png)
+
+
+### **Azure DevOps Git repositories plugin**
+
+- **List all git repos on a given Team Project**
+
+```csharp
+[KernelFunction, Description("Get all existing git repositories on a given team project")]
+[return: Description("A list of names of existing git repositories on a given Azure DevOps Team Project")]
+public async Task<List<string>> ListGitRepositoriesInProject(
+    [Description("Name of the team project")] string projectName)
+{
+    try
+    {
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories?api-version=6.0");
+
+        if (result != null)
+        {
+            var repositories = new List<string>();
+            foreach (var repo in result.value)
+            {
+                repositories.Add((string)repo.name);
+            }
+            return repositories;
+        }
+        return [];
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return [];
+    }
+}
+```
+- **Create a new git repo**
+
+```csharp
+[KernelFunction, Description("Creates a new Git repository, if it doesn't exists, on a given Azure DevOps team project")]
+[return: Description("If the git repository creation was successful or not")]
+public async Task<bool> CreateGitRepositoryInProject(string projectName, string repositoryName)
+{
+    try
+    {
+        using var client = CreateHttpClient();
+        
+        var projectResponse = await client.GetAsync(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/projects/{projectName}?api-version=6.0");
+
+        if (projectResponse.IsSuccessStatusCode)
+        {
+            var responseBody = await projectResponse.Content.ReadAsStringAsync();
+            var projectDetails = JObject.Parse(responseBody);
+            var projectId = projectDetails["id"]?.ToString();
+
+            var repositoryToCreate = new
+            {
+                name = repositoryName,
+                project = new { id = projectId}
+            };
+
+            var response = await client.PostAsync(
+                $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/git/repositories?api-version=7.1",
+                new StringContent(JsonConvert.SerializeObject(repositoryToCreate), Encoding.UTF8, "application/json")
+            );
+            
+            return response.IsSuccessStatusCode;
+        }
+
+        return false;
+
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return false;
+    }
+}
+```
+- **Delete a git repo**
+
+```csharp
+[KernelFunction, Description("Deletes an existing git repository from a given Azure DevOps team project")]
+[return: Description("If the git repository deletion was successful or not")]
+public async Task<bool> DeleteGitRepositoryInProject(
+    [Description("Name of the team project to delete")] string projectName,
+    [Description("Name of the git repository to delete")] string repositoryName)
+{
+    try
+    {
+        var result = await GetApiResponse($"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories?api-version=6.0");
+        
+        if (result != null)
+        {
+            foreach (var repo in result.value)
+            {
+                if (repo.name == repositoryName)
+                {
+                    using var client = CreateHttpClient();
+                    var response = await client.DeleteAsync(
+                        $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/_apis/git/repositories/{repo.id}?api-version=6.0"
+                    );
+                    return response.IsSuccessStatusCode;
+                }
+            }
+        }
+        return false;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return false;
+    }
+}
+```
+- **List all files of a git repo**
+
+```csharp
+[KernelFunction, Description("Get all files from an existing git repositories on a given team project")]
+[return: Description("A list of all files from an existing git repositories on a given Azure DevOps Team Project")]
+public async Task<List<string>> ListFilesInGitRepository(
+    [Description("Name of the team project")] string projectName,
+    [Description("Name of the git repository")] string repositoryName)
+{
+    try
+    {
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}/items?scopePath=/&recursionLevel=full&api-version=6.0");
+        
+        if (result != null)
+        {
+            var files = new List<string>();
+            foreach (var item in result.value)
+            {
+                files.Add((string)item.path);
+            }
+            return files;
+        }
+        return [];
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return [];
+    }
+}
+```
+
+- **Explain a git repo** 
+
+It fetches the README file from the main branch and passes it to the LLM, so it can explain the purpose of this Git repository.
+
+```csharp
+[KernelFunction, Description("Explain the content of an existing git repositories on a given team project")]
+[return: Description("An explanation of what an existing git repositories on a given Azure DevOps Team Project is for")]
+public async Task<string> GetReadmeContentInGitRepository(
+    [Description("Name of the team project")] string projectName,
+    [Description("Name of the git repository")] string repositoryName)
+{
+    try
+    {
+        var client = CreateHttpClient();
+        var response = await client.GetAsync(
+            $"{
+                Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/sourceProviders/tfsGit/fileContents?commitOrBranch=main&repository={repositoryName}&path=/README.md&api-version=6.0-preview.1");
+
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadAsStringAsync();
+        }
+
+        return string.Empty;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return string.Empty;
+    }
+}
+```
+
+- **Demo: Using our Copilot to manage the Git repositories**
+
+**Demo 1**   
+![sk-plugin-repos-1](/img/azdo-copilot-repos-1.png)
+
+**Demo 2**  
+![sk-plugin-repos-2](/img/azdo-copilot-repos-2.png)
+
+**Demo 3**
+![sk-plugin-repos-3](/img/azdo-copilot-repos-3.png)
+
+
+### **Azure DevOps branches plugin**
+
+- **List branches of a git repo.**
+
+```csharp
+[KernelFunction, Description("Get all branches from a given git repository on a given Azure DevOps team project")]
+[return: Description("A list of all branches from an existing git repositories on a given Azure DevOps Team Project")]
+public async Task<List<string>> ListBranchesInGitRepository(
+    [Description("Name of the team project")] string projectName,
+    [Description("Name of the git repository")] string repositoryName)
+{
+    try
+    {
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}/refs?filter=heads&api-version=6.0");
+
+        if (result != null)
+        {
+            var branches = new List<string>();
+            foreach (var branch in result.value)
+            {
+                branches.Add((string)branch.name);
+            }
+            return branches;
+        }
+        return [];
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return [];
+    }
+}
+```
+
+- **Get a branch info.**
+
+```csharp
+[KernelFunction, Description("Get branch info from a given branch from a given git repository on a given Azure DevOps team project")]
+[return: Description("Branch details")]
+public async Task<string> GetBranchInfoInGitRepository(
+    [Description("Name of the team project")] string projectName,
+    [Description("Name of the git repository")] string repositoryName,
+    [Description("Name of branch")] string branchName)
+{
+    try
+    {
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}/refs?filter=heads/{branchName}&api-version=6.0");
+
+        if (result != null && result?.count > 0)
+        {
+            return JsonConvert.SerializeObject(result!.value[0]);
+        }
+        return string.Empty;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return string.Empty;
+    }
+}
+```
+
+- **Create a new branch on a give git repo.**
+
+```csharp
+[KernelFunction, Description("Creates a new branch from a given git repository on a given Azure DevOps team project")]
+[return: Description("If the branch creation process was successful or not")]
+public async Task<bool> CreateBranchInGitRepository(
+    [Description("Name of the team project")] string projectName,
+    [Description("Name of the git repository")] string repositoryName,
+    [Description("Name of the source branch that will be used to create a new one")] string sourceBranchName,
+    [Description("Name of the new branch that will be created")] string newBranchName)
+{
+    try
+    {
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}/refs?filter=heads/{sourceBranchName}&api-version=6.0");
+
+        if (result != null && result?.count > 0)
+        {
+            string oldObjectId = result!.value[0].objectId;
+            var content = new[]
+            {
+                new
+                {
+                    name = $"refs/heads/{newBranchName}",
+                    oldObjectId = "0000000000000000000000000000000000000000",
+                    newObjectId = oldObjectId
+                }
+            };
+            using var client = CreateHttpClient();
+            var httpContent = new StringContent(JsonConvert.SerializeObject(content), Encoding.UTF8, "application/json");
+            var response = await client.PostAsync($"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}/refs?api-version=6.0", httpContent);
+            return response.IsSuccessStatusCode;
+        }
+        return false;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return false;
+    }
+}
+```
+
+- **Delete a branch.**
+
+```csharp
+[KernelFunction, Description("Deletes a branch from a given git repository on a given Azure DevOps team project")]
+[return: Description("If the branch deletion process was successful or not")]
+public async Task<bool> DeleteBranchInGitRepository(
+    [Description("Name of the team project")] string projectName,
+    [Description("Name of the git repository")] string repositoryName,
+    [Description("Name of the branch that will be deleted")] string branchName)
+{
+    try
+    {
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}/refs?filter=heads/{branchName}&api-version=6.0");
+
+        if (result != null && result?.count > 0)
+        {
+            string oldObjectId = result!.value[0].objectId;
+            var content = new[]
+            {
+                new
+                {
+                    name = $"refs/heads/{branchName}",
+                    oldObjectId = oldObjectId,
+                    newObjectId = "0000000000000000000000000000000000000000"
+                }
+            };
+            using var client = CreateHttpClient();
+            var httpContent = new StringContent(JsonConvert.SerializeObject(content), Encoding.UTF8, "application/json");
+            var request = new HttpRequestMessage
+            {
+                Method = HttpMethod.Post,
+                RequestUri = new Uri($"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}/refs?api-version=6.0"),
+                Content = httpContent
+            };
+            var response = await client.SendAsync(request);
+            return response.IsSuccessStatusCode;
+        }
+        return false;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return false;
+    }
+}
+```
+
+- **Demo: Using our Copilot to manage branches**
+
+![sk-plugin-branches](/img/azdo-copilot-branches.png)
+
+
+### **Azure DevOps Builds plugin**
+
+- **Search for builds from a given git repo**
+
+```csharp
+[KernelFunction, Description("Search for builds of a given repository on a team project")]
+[return: Description("Builds details")]
+public async Task<string> GetBuildsInProject(
+    [Description("Azure DevOps Team Project")] string projectName,
+    [Description("Azure DevOps Git repository")] string repositoryName)
+{
+    try
+    {
+        var repoResult = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/git/repositories/{repositoryName}?api-version=6.0");
+        if (repoResult == null)
+        {
+            Console.WriteLine("Failed to get repository ID");
+            return string.Empty;
+        }
+
+        string repositoryId = repoResult.id;
+        var result = await GetApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_URI")}/{projectName}/_apis/build/builds?repositoryId={repositoryId}&repositoryType=TfsGit&api-version=7.2-preview.7");
+
+        if (result != null && result?.count > 0)
+        {
+            var builds = new List<object>();
+            
+            foreach (var build in result!.value)
+            {
+                builds.Add(new
+                {
+                    build.id,
+                    build.buildNumber,
+                    build.status,
+                    build.result,
+                    build.queueTime,
+                    build.startTime,
+                    build.finishTime,
+                    build.sourceBranch,
+                    build.sourceVersion,
+                    build.url,
+                    requestedFor = build.requestedFor.displayName
+                });
+            }
+            return JsonConvert.SerializeObject(builds);
+        }
+        return string.Empty;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return string.Empty;
+    }
+}
+```
+
+- **Demo: Using our Copilot to query builds**
+
+![sk-plugin-builds](/img/azdo-copilot-builds.png)
+
+
+### **Azure DevOps CodeSearch plugin**
+
+- **Search text in a given team project**
+
+```csharp
+[KernelFunction, Description("Search text in a given team project")]
+[return: Description("List of text coincidences")]
+public async Task<string> GetCodeSearchInProject(
+    [Description("Azure DevOps Team Project")] string projectName,
+    [Description("Text Code that must be searched")] string searchText)
+{
+    try
+    {
+        var payload = new JObject
+        {
+            ["searchText"] = searchText,
+            ["$skip"] = 0,
+            ["$top"] = 50,
+            ["filters"] = new JObject
+            {
+                ["Project"] = new JArray { projectName },
+            }
+        };
+
+        var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+
+        var result = await PostApiResponse(
+            $"{Environment.GetEnvironmentVariable("AZURE_DEVOPS_ORG_ALM_URI")}/{projectName}/_apis/search/codesearchresults?api-version=7.0", content);
+        
+        if (result != null && result?.count > 0)
+        {
+            return JsonConvert.SerializeObject(result);
+        }
+        return string.Empty;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return string.Empty;
+    }
+}
+```
+
+- **Demo: Using our Copilot to search code**
+
+**Demo 1**   
+![sk-plugin-cs-1](/img/azdo-copilot-code-search-1.png)
+
+**Demo 2**   
+![sk-plugin-cs-2](/img/azdo-copilot-code-search-2.png)
 
 # **How to test it**
 
