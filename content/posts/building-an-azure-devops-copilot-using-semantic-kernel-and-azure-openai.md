@@ -82,6 +82,45 @@ The auto function invocation feature allows SK to automatically determine which 
 
 That's enough theory, let's dive into some code.
 
-# **Application**
+# **Building the application**
+
+The application we're going to build is a .NET 8 console app that functions as a basic chat client.
+
+Users will be able to ask questions related to their Azure DevOps instance, and the Copilot will utilize Semantic Kernel with our custom Plugins to fetch data from the Azure DevOps instance and respond accordingly.
+
+There are a few prerequisites we need before start coding.
+- An Azure DevOps instance.
+- An Azure OpenAi instance with whatever model you prefer already deployed (I'll be using GPT-4o).
 
 
+## **1. Building the Chat application**
+
+
+## **2. Building the Azure DevOps Semantic Kernel plugins**
+
+
+# **How to test it**
+
+If you want to test this custom Copilot yourself, you can find the source in my [Github repo](https://github.com/karlospn/building-an-azure-devops-copilot-using-semantic-kernel-and-dotnet).
+
+
+To run it, you need the following environment variables:
+
+- ``AZURE_DEVOPS_PAT``: A personal access token from your Azure DevOps instance. It is easier if it has full access permissions because we are going to make use of multiple endpoints of the REST API.
+- ``AZURE_DEVOPS_ORG_URI``: The URI of your Azure DevOps REST API. The format must be:`` https://dev.azure.com/{your-org}``
+- ``AZURE_DEVOPS_ORG_ALT_URI``: The URI of your VSSPS Azure DevOps REST API. The format must be: ``https://vssps.dev.azure.com/{your-org}``
+- ``AZURE_DEVOPS_ORG_ALM_URI``: The URI of your ALMSEARCH Azure DevOps REST API. The format must be: ``https://almsearch.dev.azure.com/{your-org}``
+- ``OAI_MODEL_NAME``: The LLM name you're going to use. In my case, I'm using ``gpt-4o``. You can use another one of the multiple available models in Azure OpenAI.
+- ``OAI_ENDPOINT``: The endpoint of your Azure OpenAI instance. It always has the same format: ``https://{service-name}.openai.azure.com/``
+- ``OAI_APIKEY``: An Azure OpenAI Api Key.
+
+Here's an example:
+```json
+    "AZURE_DEVOPS_PAT": "j093j4194ada123czxsaspdjapsijasfhpi213",
+    "AZURE_DEVOPS_ORG_URI": "https://dev.azure.com/cpn",
+    "AZURE_DEVOPS_ORG_ALT_URI": "https://vssps.dev.azure.com/cpn",
+    "AZURE_DEVOPS_ORG_ALM_URI": "https://almsearch.dev.azure.com/cpn",
+    "OAI_MODEL_NAME": "gpt-4o",
+    "OAI_ENDPOINT": "https://mytechramblings.openai.azure.com/",
+    "OAI_APIKEY": "123123012h032940h213123asdasd"
+```
