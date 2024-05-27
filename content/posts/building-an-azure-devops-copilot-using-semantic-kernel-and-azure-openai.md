@@ -1,5 +1,5 @@
 ---
-title: "Building an Azure DevOps Copilot using .NET 8, Semantic Kernel and Azure OpenAi GPT-4o"
+title: "Building an Azure DevOps Copilot using .NET 8, Semantic Kernel and Azure OpenAI GPT-4o"
 date: 2024-05-26T18:02:37+02:00
 description: "This post demonstrates how to create an Azure DevOps Copilot that utilizes a small subset of the Azure DevOps REST API. To achieve this, we will be using Semantic Kernel along with .NET 8 and Azure OpenAI."
 tags: ["genai", "azure", "openai", "dotnet", "devops"]
@@ -11,7 +11,8 @@ draft: true
 
 First and foremost, let me clarify that **I don't intend to build a complete Azure DevOps Copilot**, as the Azure DevOps REST API is too big and my spare time is quite limited.
 
-Instead, I plan to create an Azure DevOps Copilot that uses a small subset of the Azure DevOps API. My primary goal here is to demonstrate how simple it can be to build your own custom Copilot using Semantic Kernel Plugins when you have a third party API to interact with it.
+Instead, I plan to create an Azure DevOps Copilot that uses a small subset of the Azure DevOps API.   
+My primary goal here is to demonstrate how simple it can be to build your own custom Copilot using Semantic Kernel Plugins when you have a third party API to interact with it.
 
 But what exactly is a Copilot? A Microsoft Copilot is a suite of AI-powered tools integrated into various Microsoft products to assist users in their tasks. It aims to enhance user productivity by providing intelligent, context-aware assistance across a wide range of applications and tasks.     
 
@@ -29,7 +30,7 @@ It provides a set of tools and libraries that enable developers to build applica
 
 Are you familiar with LangChain? Semantic Kernel is an alternative to LangChain. One of its biggest advantages is that, while LangChain is only available in Python and JavaScript, Semantic Kernel is available in .NET.
 
-The fastest way to learn how to use Semantic Kernel is with this C# Jupyter notebooks. These notebooks demonstrate how to use Semantic Kernel with code snippets that you can run with a push of a button.
+The fastest way to learn how to use Semantic Kernel is with this C# Notebooks. These notebooks demonstrate how to use Semantic Kernel with code snippets that you can run with a push of a button.
 
 - https://github.com/microsoft/semantic-kernel/blob/main/dotnet/notebooks/README.md
 
@@ -52,7 +53,7 @@ This way, every time we ask a question related to our Azure DevOps instance, Sem
 
 ## **What does a SK plugin look like?**
 
-At a high-level, a plugin is a function that can be exposed to SK. The functions within plugins can then be orchestrated by an AI application to accomplish user request.
+At a high-level, a plugin is a function that can be exposed to SK. The functions within plugins can then be orchestrated by an AI application to accomplish user requests.
 
 The following code is an example of a plugin capable of reading the text of a given document.
 
@@ -95,10 +96,10 @@ There are a **few prerequisites** we need before start coding.
 
 ## **1. Building the Chat application**
 
-The first step is to set up Semantic Kernel and build a chat interface with GPT-4o so we can ask it questions. Let me show you the complete source code, and then I'll highlight and comment on the most interesting parts.
+The first step is to set up Semantic Kernel and build a chat interface, allowing us to ask questions to GPT-4o. Let me show you the complete source code, and then I'll highlight and comment on the most interesting parts.
 
 ```csharp
-﻿using CustomCopilot.AzureDevOpsPlugin;
+using CustomCopilot.AzureDevOpsPlugin;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -261,7 +262,7 @@ Never fabricate a response if the function calling fails or returns invalid data
 
 The final part of the chat application might seem complex, but in reality, we're following the same steps we would take anytime we build a chat with an LLM:
 - Get the user's question.
-- Send the question to GPT-4. SK will automatically call our Azure DevOps plugins if the user's question requires it.
+- Send the question to GPT-4o. SK will automatically call our Azure DevOps plugins if the user's question requires it.
 - Get the response back and display it.
 - Store the response in the chat history.
 
@@ -326,11 +327,11 @@ This might sound like a daunting task, but it's actually quite simple:
 - Build a C# function that calls the desired endpoint of the Azure DevOps REST API and returns the result.
 - Describe the function's purpose using the ``[KernelFunction, Description("...")]`` decorator.
 - Describe what the function returns using the ``[return: Description("...")]`` decorator.
-- If the function requires any parameters, describe what those parameters are for using the ``[Description("...")]`` decorator.
+- If the function has any parameters, describe what those parameters are for using the ``[Description("...")]`` decorator.
 
 Describing the function and its parameters accurately is paramount because these description fields are used by Semantic Kernel (SK) when deciding if there is any SK Plugin functions that needs to call.  
 
-The next code snippet shows an example of a function responsible for creating a new Azure DevOps Team Project:
+The next code snippet shows an example of a function responsible for creating a new Azure DevOps Team Project.
 
 ```csharp
 [KernelFunction, Description("Creates a new Azure DevOps team project if it doesn't exists")]
@@ -395,15 +396,17 @@ public async Task<bool> CreateTeamsProject(
 ```
 As you can see from the code snippet above, there is nothing overly complex (the code could be further improved, but I find that it is easier to understand this way).    
 
-The function uses an ``HttpClient`` to fetch the existing Team Projects. If the Team Project we want to create already exists, it returns false; otherwise, it makes a second HTTP call to create it and returns 200 Ok.
+The function uses an ``HttpClient`` to fetch the existing Team Projects in my Azure DevOps instance. If the Team Project we want to create already exists, it returns false; otherwise, it makes a second HTTP call to create it and returns 200 Ok.
 
-From this point forward, every functionality we build into our Azure DevOps custom Plugin will follow the same pattern as the one above: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the result.
+From this point forward, every functionality we build into our Azure DevOps SK Plugin will follow the same pattern as the one above:
+- Describe the function.
+- Make some HTTP calls to the Azure DevOps REST API, and return the result.
 
 Therefore, I won't provide extensive commentary from now on. Instead, I'll simply show the code I have implemented and some live examples, so you can see the Copilot in action.
 
 ### **Base Class**
 
-As I stated in the previous section, every functionality we build into our Azure DevOps custom Plugin follows the same pattern: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the values.
+As I stated in the previous section, every functionality built into our Azure DevOps SK Plugin follows the same pattern: describe the function, make some HTTP calls to the Azure DevOps REST API, and return the values.
 
 So, I have build a "Base Class" to reduce the duplicated code.
 
@@ -446,9 +449,11 @@ protected async Task<dynamic?> PostApiResponse(string requestUri, HttpContent co
 }
 ```
 
-### **Azure DevOps Team Projects Plugin**
+### **Azure DevOps Team Project Plugin**
 
-- **Create new Team Project**
+This plugin is responsible for managing the Team Projects on your Azure DevOps instance.
+
+- **Create a new Team Project**
 
 ```csharp
 [KernelFunction, Description("Creates a new Azure DevOps team project if it doesn't exist")]
@@ -498,7 +503,7 @@ public async Task<bool> CreateTeamsProject(
 }
 ```
 
-- **List Team Projects**
+- **List all Team Projects**
 
 ```csharp
 [KernelFunction, Description("Get all existing Azure DevOps team projects")]
@@ -522,7 +527,7 @@ public async Task<List<string>> GetTeamsProject()
 }
 ```
 
-- **Delete Team Projects**
+- **Delete a Team Project**
 
 ```csharp
 [KernelFunction, Description("Deletes an existing Azure DevOps team project")]
@@ -565,6 +570,9 @@ public async Task<bool> DeleteProject(
 
 
 ### **Azure DevOps Git repositories plugin**
+
+This plugin is responsible for managing the Git repositories on your Azure DevOps instance.    
+It is also capable of explaining the purpose of a given Git repository by using the contents of the README file. Additionally, it can provide a list of all the files contained in a repository.
 
 - **List all git repos on a given Team Project**
 
@@ -757,7 +765,9 @@ public async Task<string> GetReadmeContentInGitRepository(
 
 ### **Azure DevOps branches plugin**
 
-- **List branches of a git repo.**
+This plugin is responsible for managing the branches of a Git repository. It is also capable of providing detailed information about a specific branch.
+
+- **List branches of a git repo**
 
 ```csharp
 [KernelFunction, Description("Get all branches from a given git repository on a given Azure DevOps team project")]
@@ -790,7 +800,7 @@ public async Task<List<string>> ListBranchesInGitRepository(
 }
 ```
 
-- **Get a branch info.**
+- **Get detailed branch info**
 
 ```csharp
 [KernelFunction, Description("Get branch info from a given branch from a given git repository on a given Azure DevOps team project")]
@@ -819,7 +829,7 @@ public async Task<string> GetBranchInfoInGitRepository(
 }
 ```
 
-- **Create a new branch on a give git repo.**
+- **Create a new branch on a given git repo**
 
 ```csharp
 [KernelFunction, Description("Creates a new branch from a given git repository on a given Azure DevOps team project")]
@@ -862,7 +872,7 @@ public async Task<bool> CreateBranchInGitRepository(
 }
 ```
 
-- **Delete a branch.**
+- **Delete a branch**
 
 ```csharp
 [KernelFunction, Description("Deletes a branch from a given git repository on a given Azure DevOps team project")]
@@ -916,6 +926,8 @@ public async Task<bool> DeleteBranchInGitRepository(
 
 
 ### **Azure DevOps Builds plugin**
+
+This plugin is responsible for querying builds.
 
 - **Search for builds from a given git repo**
 
@@ -979,6 +991,8 @@ public async Task<string> GetBuildsInProject(
 
 
 ### **Azure DevOps CodeSearch plugin**
+
+This plugin is responsible for searching code in a given Team Project.
 
 - **Search text in a given team project**
 
