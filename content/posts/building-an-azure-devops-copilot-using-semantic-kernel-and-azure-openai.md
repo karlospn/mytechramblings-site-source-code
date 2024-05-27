@@ -9,10 +9,19 @@ draft: true
 > **Just show me the code**   
 > As always, if you don’t care about the post I have upload the source code on my [Github](https://github.com/karlospn/building-an-azure-devops-copilot-using-semantic-kernel-and-dotnet)
 
-Let me start this post by clarifying that **I don't intend to build a fully functional Azure DevOps Copilot**, as the Azure DevOps REST API is too big and my spare time is quite limited.
+First and foremost, let me clarify that **I don't intend to build an entire Azure DevOps Copilot**, as the Azure DevOps REST API is too big and my spare time is quite limited.
 
-Instead, I plan to create a Copilot that uses a small subset of the Azure DevOps API endpoints. My primary goal is to demonstrate how simple it can be to build your own custom Copilot using Semantic Kernel Plugins.
+Instead, I plan to create an Azure DevOps Copilot that uses a small subset of the Azure DevOps API. My primary goal here is to demonstrate how simple it can be to build your own custom Copilot using Semantic Kernel Plugins when you have a third party API to interact with it.
 
+But what're exactly going to build in here? A Microsoft Copilot is a suite of AI-powered tools integrated into various Microsoft products to assist users in their tasks. It aims too enhance user productivity by providing intelligent, context-aware assistance across a wide range of applications and tasks.
+
+But what exactly are we going to build here? A Microsoft Copilot is a suite of AI-powered tools integrated into various Microsoft products to assist users in their tasks. It aims to enhance user productivity by providing intelligent, context-aware assistance across a wide range of applications and tasks.    
+There are already several of them: Microsoft 365 Copilot, GitHub Copilot, Power Platform Copilot, etc. But you can also build your own custom Copilot, and that's exactly what I plan to do.
+
+
+In plain words, we're going to build a custom Azure DevOps Copilot, which is essentially a chat interface where the AI assistant will be Azure OpenAI GPT-4. This assistant will use the power of Semantic Kernel plugins to perform actions on my Azure DevOps instance, such as managing Team Projects, Git Repositories, Branches, Builds, etc.
+
+But before we start writing code, let's quickly discuss what Semantic Kernel and Semantic Kernel Plugins are.
 
 # **What is Semantic Kernel?**
 
@@ -20,9 +29,27 @@ Semantic Kernel is an open-source SDK designed to facilitate the development of 
 
 It provides a set of tools and libraries that enable developers to build applications capable of understanding, processing, and reasoning about data in a more human-like manner.
 
-Do you know LangChain? Well, Semantic Kernel is a similar alternative.
+Are you familiar with LangChain? Semantic Kernel is an alternative to LangChain. One of the biggest differences is that while LangChain is only available in Python and JavaScript, Semantic Kernel can run in .NET.
+
+The fastest way to learn how to use Semantic Kernel is with this C# and Python Jupyter notebooks. These notebooks demonstrate how to use Semantic Kernel with code snippets that you can run with a push of a button.
+
+- https://github.com/microsoft/semantic-kernel/blob/main/dotnet/notebooks/README.md
 
 # **Semantic Kernel Plugins**
+
+Imagine you build a chat application that uses Semantic Kernel and GPT-4o. If you try to ask a question related to your specific Azure DevOps instance, what do you think will happen? 
+
+It won't be able to answer properly because GPT-4o (or any other LLM) doesn't have any knowledge about your Azure DevOps instance.    
+You can ask it general-purpose questions about Azure DevOps, but if you try to ask it specific questions about your instance, such as "How many Team Projects do I have?", it will either hallucinate and provide incorrect information or be unable to answer at all.
+
+Semantic Kernel Plugins are a way to add functionality and capabilities to your Copilot. With plugins, you can encapsulate capabilities into a single unit of functionality that can then be run by Semantic Kernel.
+
+They are based on the OpenAI plugin specification and contain both code and prompts. You can use plugins to access data, perform operations or augment your Copilot with any external service. 
+
+![sk-plugins](/img/azdo-copilot-sk-plugins.png)
+
+In this post, we're going to build a Semantic Kernel (SK) plugin that can interact with the Azure DevOps REST API.   This way, every time we ask a question related to our Azure DevOps instance, Semantic Kernel will use the plugin to interact with Azure DevOps. The result will be sent to GPT-4, and a response will come back.
+
 
 
 # **Application**
