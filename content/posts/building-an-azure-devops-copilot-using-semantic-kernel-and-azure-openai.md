@@ -1,9 +1,9 @@
 ---
 title: "Building an Azure DevOps Copilot using .NET 8, Semantic Kernel and Azure OpenAI GPT-4o"
-date: 2024-05-26T18:02:37+02:00
+date: 2024-05-28T09:35:37+02:00
 description: "This post demonstrates how to create an Azure DevOps Copilot that utilizes a small subset of the Azure DevOps REST API. To achieve this, we will be using Semantic Kernel along with .NET 8 and Azure OpenAI."
 tags: ["genai", "azure", "openai", "dotnet", "devops"]
-draft: true
+draft: false
 ---
 
 > **Just show me the code**   
