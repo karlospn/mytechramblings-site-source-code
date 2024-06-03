@@ -2,7 +2,7 @@ baseurl = "https://www.mytechramblings.com/"
 languageCode = "en-us"
 theme = "hello-friend"
 paginate = 5
-googleAnalytics = "UA-170300931-1"
+googleAnalytics = "G-FLNJKRG5D1"
 
 
 [params]
