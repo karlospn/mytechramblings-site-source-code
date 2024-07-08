@@ -350,13 +350,15 @@ RUN apt-get update && apt-get -y install build-essential libxml2
 After the couple of mentioned above, the 4 tools (``coverlet``, ``dotCover``, ``dotnet-coverage`` and native .NET collector) successfully created a Code Coverage report. 
 
 
-# **View Code Coverage reports on SonarQube and CodeCov**
+# **View Code Coverage reports on SonarQube**
 
-Having a single place where keeping track of the Code Coverage metric of your application provides several benefits.
+Having a single place where keeping track of the Code Coverage metric of your application provides several benefits, like having a detailed view of your code quality or helping you identify areas of your code that need improvement. 
 
-Like having a detailed view of your code quality, helping you identify areas of your code that need improvement. It can help you spot bugs, code smells, and security vulnerabilities.  By uploading your code coverage metrics, you can easily track which parts of your code are not covered by tests. This can help you improve your test coverage and thus the reliability of your application.
+It can help you spot bugs, code smells, and security vulnerabilities.  
 
-There are quite a few products capable of keeping track of application Code Coverage metric, but I will make focus on probably the 2 most well-known: ``SonarQube`` and ``CodeCov``.
+By uploading your code coverage metrics, you can easily track which parts of your code are not covered by tests. This can help you improve your test coverage and thus the reliability of your application.
+
+There are quite a few products capable of keeping track of application Code Coverage metric, like ``CodeCov``or ``Codacy`` but I will focus on probably the most well-known of all: ``SonarQube``.
 
 ## **SonarQube / SonarCloud**
 
@@ -376,25 +378,127 @@ The process to send Code Coverage to SonarQube is quite simple:
 - Generate the Code Coverage report using one of the tools we discussed in the previous sections
 - Use the SonarScanner tool to upload it to SonarQube.
 
-The SonarScanner for .NET comes in four major variants: .NET Framework, .NET Core, .NET Global Tool, and the Azure Pipelines extension. For a quick test we're going to use the SonarScanner .NET Global tool.
+The SonarScanner for .NET comes in four major variants: .NET Framework, .NET Core, .NET Global Tool, and the Azure Pipelines extension.
 
-To install, just run the following command:
+For a quick test I'm going to spin a SonarQube in a local container and I'm going to use the SonarScanner .NET Global tool.
+
+To install it the SonarScanner global tool, just run the following command:
 - ``dotnet tool install --global dotnet-sonarscanner``
 
-To generate the Code Coverage report, I decided to use ``dotCover`` (but you could use any other).
+To generate the Code Coverage report, I have decided to use ``dotCover`` (but you could use any of the others and it will work exactly the same).
 
 ```text
-dotnet sonarscanner begin /k:"code-coverage-test"
-    /d:sonar.login="<sonar-token>"
-    /d:sonar.cs.dotcover.reportsPaths=coverage.html
+dotnet sonarscanner begin /k:"code-coverage-test" 
+    /d:sonar.host.url="http://localhost:9000"  
+    /d:sonar.token="sqp_f040a45634b38c269223852b47d6500d3650c33d" 
+    /d:sonar.cs.dotcover.reportsPaths=coverage.html 
 
 dotnet dotcover cover-dotnet --output=coverage.html --reporttype=HTML -- test ./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj
 
-dotnet sonarscanner end /d:sonar.login="<sonar-token>"
+dotnet sonarscanner end /d:sonar.login="sqp_f040a45634b38c269223852b47d6500d3650c33d"
 ```
 
+The process to send Code Coverage to SonarQube is pretty simply:
+- Start the SonarScanner setting the ``sonar.cs.dotcover.reportsPaths`` property to where the Code Coverage report will be.
+- Run ``dotCover``.
+- Stop the SonarScanner.
 
-## **CodeCov**
+If you browse your instance of SonarQube, you're going to find  that the Code Coverage has been successfully upload.
+
+![code-coverage-sq-report](/img/code-coverage-sq-report.png)
+
+From there, we can drill down and get more info about it:
+
+![code-coverage-sq-measures.png](/img/code-coverage-sq-measures.png)
 
 
-# **Publish Code Coverage reports on Azure Pipelines and Github Actions**
+# **Publish Code Coverage reports to an Azure Pipelines or an Github Action**
+
+If you're run your code on a CI runner like Azure Pipelines or GitHub Actions, obviously you can use a tool like SonarQube to control the Code Coverage metric.
+
+On the pipeline execute the SonarScanner, generate the Code Coverage report of your app, upload it into SonarQube (or any other SaaS that supports ), and for example break the pipeline if the Code Coverage percentage has decreased.
+
+That's a common scenario on a CI/CD project, but another possibility is to directly upload the Code Coverage into the pipeline summary. Having the report on the pipeline is not has useful has having a SaaS like SonarQube that is able to keep track of the Code Coverage for every branch, but nonetheless it still might be useful information if we want to quickly check what was the Code Coverage value of a specific run of the pipeline.
+
+In this section, I'm going to show you how to upload the Code Coverage report into an ``Azure DevOps Pipeline`` and also into a ``Github Action``.
+
+## **Publish a Code Coverage report into a GitHub Action job**
+
+```yaml
+name: Upload Code Coverage report to github action summary
+  
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+  
+jobs:  
+  build:  
+    runs-on: ubuntu-latest  
+  
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true 
+          fetch-depth: 1   
+
+      - name: Test
+        run: dotnet test --collect:"XPlat Code Coverage" --results-directory coverage
+
+      - name: Code Coverage Summary Report
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: 'coverage/*/coverage.cobertura.xml'
+          badge: true
+          format: 'markdown'
+          output: 'both'
+      
+      - name: Write to Job Summary
+        run: cat code-coverage-results.md >> $GITHUB_STEP_SUMMARY
+```
+
+As you can see, the steps are always the exactly the same. Run ``dotnet test`` with some Code Coverage DataCollector, in this case we're using ``Coverlet``.
+
+And then we're using this great [open-source github action](https://github.com/irongut/CodeCoverageSummary) to generate a nice summary of the Code Coverage report.
+
+And here's how it looks.
+
+![code-coverage-github-action](/img/code-coverage-github-action.png)
+
+Obviously, if you prefer to use  the ReportGenerator tool, as discussed previously in the post, to generate the summary, you can absolutely do it. ReportGenerator even as a report built for Github, it is called ``MarkdownSummaryGithub`` 
+
+```yaml
+name: Upload Code Coverage report to github action summary
+  
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:  
+  build:  
+    runs-on: ubuntu-latest  
+  
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true 
+          fetch-depth: 1   
+
+      - name: Test
+        run: dotnet test --collect:"XPlat Code Coverage" --results-directory coverage
+
+      - name: Code coverage report generator
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool
+          reportgenerator -reports:coverage/*/coverage.cobertura.xml -targetdir:report -reporttypes:'MarkdownSummaryGithub'
+      
+      - name: Write to Job Summary
+        run: cat report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+```
+
+And here's how it looks:
+
+![code-coverage-gh-rg](/img/code-coverage-gh-rg.png)
+
+## **Publish a Code Coverage report into an Azure DevOps Pipeline**
