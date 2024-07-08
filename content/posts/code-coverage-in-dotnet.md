@@ -243,8 +243,158 @@ The next screenshot shows the result:
 
 ### **Generate a report from a Cobertura XML file**
 
-# **How to create a Code Coverage report when building a container image**
+Generating a report from a Cobertura XML file is simpler than trying to create one from a ``.coverage`` file.
+
+Simply run the following ``reportgeenerator`` commmand:
+- ``reportgenerator -reports:test/StrategyPatternWithDIExamples.Tests/TestResults/coverage.cobertura.xml -reportTypes:Html -targetdir:reports/cobertura/``
+
+And you can see in the next screenshot the generated report.
+
+![code-coverage-rg-cobertura-report](/img/code-coverage-rg-cobertura-report.png)
+
+
+# **Create a Code Coverage report when building a container image**
+
+Working with containers and external tools can sometimes can be tricky, so in this section, I want to check if it is possible to create a Code Coverage report inside a container using the multiple tools we have seen in the previous sections.
+
+For this purpose I have created the following Dockerfile, which collects Code Coverage metrics using the 4 tools we've seen in the last section (``coverlet``, ``dotCover``, ``dotnet-coverage`` and the native .NET collector).
+
+```yml
+FROM mcr.microsoft.com/dotnet/sdk:8.0-jammy AS build-env
+WORKDIR /app
+
+# Install dependencies for dotnet-coverage
+RUN apt-get update && apt-get -y install \
+     build-essential libxml2
+
+# Install dotcover and dotnet-coverage
+RUN dotnet tool install --global JetBrains.dotCover.CommandLineTools \
+ && dotnet tool install --global dotnet-coverage
+
+
+# Set the dotnet tools folder in the PATH env variable
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
+# Copy everything
+COPY . ./
+
+# Restore packages
+RUN dotnet restore -s "https://api.nuget.org/v3/index.json" \
+	--arch x64
+
+# Build project
+RUN dotnet build "./src/StrategyPatternWithDIExamples.csproj" \ 
+    --configuration Release \
+	--self-contained true \
+	--arch x64
+
+# Build code coverage report with dotcover
+RUN dotnet-dotCover cover-dotnet \
+  --output=/app/coverage/dotcover/coverage.html \
+  --reporttype=HTML -- test "./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj"
+
+# Build code coverage report with dotnet-coverage
+RUN dotnet-coverage collect "dotnet test ./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj" \
+  -f xml \
+  -o "/app/coverage/dotnetcoverage/coverage.xml"
+
+# Build code coverage report with native collector
+RUN dotnet test "./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj" \
+	--no-restore \
+	--collect:"Code Coverage" \
+	--results-directory /app/coverage/native
+ 
+# Build code coverage report with coverlet
+RUN dotnet test "./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj" \
+	--no-restore \
+	--collect:"XPlat Code Coverage" \
+	--results-directory /app/coverage/coverlet  
+
+# Publish app
+RUN dotnet publish "./src/StrategyPatternWithDIExamples.csproj" \
+	--configuration Release \
+	--output /app/publish \
+	--self-contained true \
+	--arch x64
+
+# Build runtime image
+FROM mcr.microsoft.com/dotnet/runtime-deps:8.0.0-jammy
+
+# Copy artifact
+WORKDIR /app
+COPY --from=build-env /app/publish .
+COPY --from=build-env /app/coverage /app/coverage
+
+# Starts on port 8080
+ENV ASPNETCORE_URLS=http://+:8080
+
+# Set Entrypoint
+ENTRYPOINT ["./StrategyPatternWithDIExamples"]
+```
+
+There are some things worth mentioning from this experiment.  
+
+- The ``dotnet-coverage`` doesn't work right from get-go, if we take a look at the Dockerfile logs, we can see the following message when trying to collect Code Coverage with the ``dotnet-coverage`` tool.
+
+![code-coverage-dotnet-coverage-deps](/img/code-coverage-dotnet-coverage-deps.png)
+
+To fix it, we must install the following dependencies.
+
+```yml
+RUN apt-get update && apt-get -y install build-essential libxml2
+```
+
+- The ``dotCover`` also gave me some problems when running it using the ```dotnet dotcover cover-dotnet`` command. To fix it I switch to the ``dotnet-dotCover cover-dotnet`` command.
+
+
+After the couple of mentioned above, the 4 tools (``coverlet``, ``dotCover``, ``dotnet-coverage`` and native .NET collector) successfully created a Code Coverage report. 
+
 
 # **View Code Coverage reports on SonarQube and CodeCov**
+
+Having a single place where keeping track of the Code Coverage metric of your application provides several benefits.
+
+Like having a detailed view of your code quality, helping you identify areas of your code that need improvement. It can help you spot bugs, code smells, and security vulnerabilities.  By uploading your code coverage metrics, you can easily track which parts of your code are not covered by tests. This can help you improve your test coverage and thus the reliability of your application.
+
+There are quite a few products capable of keeping track of application Code Coverage metric, but I will make focus on probably the 2 most well-known: ``SonarQube`` and ``CodeCov``.
+
+## **SonarQube / SonarCloud**
+
+SonarQube does not generate the coverage report itself. 
+
+Instead, you must set up a third-party tool to produce the report as part of your build process. SonarQube supports the following .NET test coverage tools:
+
+- Visual Studio Code Coverage
+- dotnet-coverage Code Coverage
+- dotCover
+- OpenCover
+- Coverlet
+
+You then need to configure your analysis to tell the SonarScanner where the report is located so that it can pick it up and send it to SonarQube, where it will be displayed on your project dashboard along with the other analysis metrics.
+
+The process to send Code Coverage to SonarQube is quite simple:
+- Generate the Code Coverage report using one of the tools we discussed in the previous sections
+- Use the SonarScanner tool to upload it to SonarQube.
+
+The SonarScanner for .NET comes in four major variants: .NET Framework, .NET Core, .NET Global Tool, and the Azure Pipelines extension. For a quick test we're going to use the SonarScanner .NET Global tool.
+
+To install, just run the following command:
+- ``dotnet tool install --global dotnet-sonarscanner``
+
+To generate the Code Coverage report, I decided to use ``dotCover`` (but you could use any other).
+
+```text
+dotnet sonarscanner begin /k:"code-coverage-test"
+    /d:sonar.login="<sonar-token>"
+    /d:sonar.cs.dotcover.reportsPaths=coverage.html
+
+dotnet dotcover cover-dotnet --output=coverage.html --reporttype=HTML -- test ./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj
+
+dotnet sonarscanner end /d:sonar.login="<sonar-token>"
+```
+
+
+## **CodeCov**
+
 
 # **Publish Code Coverage reports on Azure Pipelines and Github Actions**
