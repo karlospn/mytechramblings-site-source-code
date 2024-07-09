@@ -2,17 +2,17 @@
 title: "Code Coverage in .NET"
 date: 2024-07-09T10:01:57+02:00
 tags: ["dotnet", "devops"]
-description: "This post delves into the current .NET landscape when we aim to collect Code Coverage. We examine the most frequently used tools such as Coverlet, dotCover, and dotnet-coverage, among others. We also discuss how to upload a Code Coverage report to a SaaS product like SonarQube. Lastly, we explain how to publish a Code Coverage report in an Azure Pipeline and a GitHub Action."
+description: "This post delves into the current .NET landscape when we aim to collect Code Coverage. We examine the most frequently used tools such as Coverlet, dotCover, and dotnet-coverage, among others. We discuss how to upload a Code Coverage report to a SaaS product like SonarQube. Lastly, we explain how to publish a Code Coverage report into an Azure Pipeline run or a GitHub Action."
 draft: true
 ---
 
 Nowadays, if we want to collect Code Coverage in our .NET applications, tools like ``Coverlet``, ``Report Generator``, ``dotnet-coverage``, ``dotCover``, ``OpenCover`` or even ``Visual Studio`` will surely sound familiar to you.
 
-There is also a variety of SaaS products where you can upload the Code Coverage reports of your .NET applications to keep track of them and see how they evolve over time. Some of the most well-known are ``SonarQube`` and ``CodeCov``.
+If we want to track how our application's Code Coverage evolves over time, there are excellent SaaS products like ``SonarQube`` or ``CodeCov``. 
 
-If you're collecting Code coverage in a CI runner like ``Azure Pipelines`` or ``GitHub Actions``, you have the option to publish a summary of the Code Coverage directly in the pipeline summary.  This can be useful information if you want to quickly check the Code Coverage value of a specific run of a pipeline.
+For those using CI runners like ``Azure Pipelines`` or ``GitHub Actions``, you can even upload a Code Coverage report into a pipeline summary, which is useful for quickly checking the Code Coverage value of a specific run.
 
-It would be useful to briefly explore all the services mentioned above, as they can provide us with a clearer understanding of the current landscape when our goal is to collect Code Coverage in .NET. And that's going to be the focus of this post. 
+I believe it would be useful to briefly explore all the tools and services mentioned above, as they can provide us with a clearer understanding of the current landscape for collecting Code Coverage in .NET.
 
 But before we delve into that, allow me to briefly explain what Code Coverage is.
 
@@ -109,7 +109,7 @@ Here's how it appears when we open the resulting ``.coverage`` file with Visual 
 
 Another option to collect Code Coverage using the .NET built-in collector, apart from the .NET CLI, is to directly use Visual Studio. 
 
-To collect Code Coverage using Visual Studio, you will also need **Visual Studio Enterprise edition**). 
+To collect Code Coverage using Visual Studio, you will also need **Visual Studio Enterprise edition**. 
 
 Simply select the ``Test > Analyze Code Coverage for All Tests`` option. 
 
@@ -155,7 +155,7 @@ Once the Coverlet package is installed in the Unit Test project, you can start c
 
 The Data Collector will generate a Cobertura XML file. **The XML Cobertura format is frequently used as a standard format for Code Coverage reports.**
 
-If you attempt to run the ``dotnet test --collect:"XPlat Code Coverage"`` command without having the ``Coverlet.Collector`` installed on your Unit Tests projects, no Code Coverage will be collected and you'll receive a warning.
+If you attempt to run the ``dotnet test --collect:"XPlat Code Coverage"`` command without having the ``Coverlet.Collector`` package installed on your Unit Tests projects, no Code Coverage will be collected and you'll receive a warning.
 
 ```shell
 Data collection : Unable to find a datacollector with friendly name 'XPlat Code Coverage'.
@@ -285,7 +285,6 @@ RUN apt-get update && apt-get -y install \
 # Install dotcover and dotnet-coverage
 RUN dotnet tool install --global JetBrains.dotCover.CommandLineTools \
  && dotnet tool install --global dotnet-coverage
-
 
 # Set the dotnet tools folder in the PATH env variable
 ENV PATH="${PATH}:/root/.dotnet/tools"
