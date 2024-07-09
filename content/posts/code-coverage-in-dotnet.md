@@ -1,34 +1,37 @@
 ---
 title: "Code Coverage in .NET"
-date: 2024-07-05T10:01:57+02:00
-tags: ["dotnet"]
+date: 2024-07-09T10:01:57+02:00
+tags: ["dotnet", "devops"]
 description: "This post delves into the current .NET landscape when we aim to collect Code Coverage. We examine the most frequently used tools such as Coverlet, dotCover, and dotnet-coverage, among others. We also discuss how to upload a Code Coverage report to a SaaS product like SonarQube. Lastly, we explain how to publish a Code Coverage report in an Azure Pipeline and a GitHub Action."
 draft: true
 ---
 
-Nowadays, when we want to collect code coverage in .NET, we frequently use tools such as ``Coverlet``, ``Report Generator``, ``dotnet-coverage``, ``dotCover``, ``OpenCover`` or even ``Visual Studio``.
+Nowadays, if we want to collect Code Coverage in our .NET applications, tools like ``Coverlet``, ``Report Generator``, ``dotnet-coverage``, ``dotCover``, ``OpenCover`` or even ``Visual Studio`` will surely sound familiar to you.
 
-There is also a variety of SaaS products where you can submit the code coverage reports of your .NET applications for monitoring. Some of the most well-known are ``SonarQube`` and ``CodeCov``.
+There is also a variety of SaaS products where you can upload the Code Coverage reports of your .NET applications to keep track of them and see how they evolve over time. Some of the most well-known are ``SonarQube`` and ``CodeCov``.
 
-If you're collecting Code coverage in a CI/CD runner like ``Azure DevOps`` or ``GitHub Actions``, you have the option to publish a summary of the Code Coverage directly in the pipeline.
+If you're collecting Code coverage in a CI runner like ``Azure Pipelines`` or ``GitHub Actions``, you have the option to publish a summary of the Code Coverage directly in the pipeline summary.  This can be useful information if you want to quickly check the Code Coverage value of a specific run of a pipeline.
 
-I believe it would be useful to explore the services mentioned above, as they can provide us with a clearer understanding of the current landscape when our goal is to collect code coverage in .NET.
+It would be useful to briefly explore all the services mentioned above, as they can provide us with a clearer understanding of the current landscape when our goal is to collect Code Coverage in .NET. And that's going to be the focus of this post. 
 
-But before we delve into that, allow me to briefly explain what code coverage is.
+But before we delve into that, allow me to briefly explain what Code Coverage is.
 
-# **What is the Code Coverage metric?**
+# **What is Code Coverage?**
 
 Code Coverage is a metric that can help you understand how much of your source code is tested. It's a metric that can help you assess the quality of your test suite.
 
-Code Coverage is primarily performed at the unit testing level. Code coverage tools usually express the metric as a percentage, showing you the percentage of successfully validated lines of code in your test procedures, helping you to understand how thoroughly you’re testing your code. 
+Code Coverage is primarily performed at the unit testing level. Code Coverage tools usually express the metric as a percentage, showing you the percentage of successfully validated lines of code in your test procedures, helping you to understand how thoroughly you’re testing your code. 
 
-The importance of code coverage lies in its ability to identify uncovered code that has not been tested and could contain bugs or potential issues not addressed by the test suite. It's important to note that while code coverage is a valuable metric, achieving 100% coverage does not guarantee a bug-free application. It is just one of many tools and practices in a developer's toolkit for ensuring software and code quality.
+The importance of code coverage lies in its ability to identify uncovered code that has not been tested and could contain bugs or potential issues not addressed by the test suite. 
+
+It's important to note that while code coverage is a valuable metric, achieving 100% coverage does **NOT** guarantee a bug-free application.    
+It is just one of many tools and practices in a developer's toolkit for ensuring software and code quality.
 
 # **Code Coverage Tools**
 
 There are two types of Code Coverage tools:
 
-- **DataCollectors**: These tools monitor test executions and gather information about test runs. They report the collected data in various output formats, such as XML and JSON.
+- **Data Collectors**: These tools monitor test executions and gather information about test runs. They report the collected data in various output formats, such as XML and JSON.
 - **Report generators**: These tools utilize the data collected by the Data Collectors to generate comprehensive reports.
 
 Let's first take a look at the most well-known DataCollectors, and then we'll delve into the Report Generators.
@@ -51,7 +54,7 @@ The Report Generator tool we're going to explore in this post is:
 
 ![code-coverage-native-datacollector](/img/code-coverage-native-datacollector.png)
 
-Collecting Code Coverage in this manner is a common error, as by default, this Data Collector analyzes all solution assemblies loaded during unit tests. This means that the Unit Test projects will be included in the report, thereby skewing the average Code Coverage percentage, since the Code Coverage percentage in the test projects is always 100%.
+Collecting Code Coverage in this manner is a common error, as by default, this Data Collector analyzes all solution assemblies loaded during unit tests. This means that the Unit Test projects will be included in the report, thereby skewing the average Code Coverage percentage.
 
 To generate an accurate Code Coverage report, it's necessary to exclude test projects from the code coverage results and only include application code. You have two options to achieve this:
 
@@ -63,7 +66,8 @@ To generate an accurate Code Coverage report, it's necessary to exclude test pro
 </ItemGroup>
 ```
 
-- **Option 2**: Create a ``.runsettings`` file that excludes the Unit Test projects from Code Coverage and run the``dotnet test`` command using the ``--settings`` attribute. Here's an example:``dotnet test --collect:"Code Coverage" --settings codeCoverage.runsettings``
+- **Option 2**: Create a ``.runsettings`` file that excludes the Unit Test projects from Code Coverage and run the``dotnet test`` command using the ``--settings`` attribute.    
+Here's an example:``dotnet test --collect:"Code Coverage" --settings codeCoverage.runsettings``
 
 The following code snippet shows a ``.runsettings`` file where all the projects named ``*Tests`` are excluded from the Code Coverage report.
 
@@ -80,19 +84,12 @@ The following code snippet shows a ``.runsettings`` file where all the projects 
                 <ModulePath>.*Tests.dll</ModulePath>  
               </Exclude>  
             </ModulePaths>  
-            <!-- Set this to True to collect coverage information for functions marked with the "SecuritySafeCritical" attribute. Instead of writing directly into a memory location from such functions, code coverage inserts a probe that redirects to another function, which in turns writes into memory. -->
             <UseVerifiableInstrumentation>True</UseVerifiableInstrumentation>
-            <!-- When set to True, collects coverage information from child processes that are launched with low-level ACLs, for example, UWP apps. -->
             <AllowLowIntegrityProcesses>True</AllowLowIntegrityProcesses>
-            <!-- When set to True, collects coverage information from child processes that are launched by test or production code. -->
             <CollectFromChildProcesses>True</CollectFromChildProcesses>
-            <!-- When set to True, restarts the IIS process and collects coverage information from it. -->
             <CollectAspDotNet>False</CollectAspDotNet>
-            <!-- When set to True, static native instrumentation will be enabled. -->
             <EnableStaticNativeInstrumentation>True</EnableStaticNativeInstrumentation>
-            <!-- When set to True, dynamic native instrumentation will be enabled. -->
             <EnableDynamicNativeInstrumentation>True</EnableDynamicNativeInstrumentation>
-            <!-- When set to True, instrumented binaries on disk are removed and original files are restored. -->
             <EnableStaticNativeInstrumentationRestore>True</EnableStaticNativeInstrumentationRestore>
           </CodeCoverage>  
         </Configuration>  
@@ -106,20 +103,24 @@ Once the Data Collector has completed its data collection, it generates a report
 
 Here's how it appears when we open the resulting ``.coverage`` file with Visual Studio.
 
-> To open the ``.coverage`` files with Visual Studio, you will need Visual Studio Enterprise Edition.
+> To open the ``.coverage`` files with Visual Studio, you will need **Visual Studio Enterprise Edition.**
 
 ![code-coverage-vs-coverage](/img/code-coverage-vs-coverage.png)
 
-Another option to collect Code Coverage using the .NET built-in collector, apart from the .NET CLI, is to directly use Visual Studio. To collect Code Coverage using Visual Studio, you will also need **Visual Studio Enterprise edition**). Simply select the ``Test > Analyze Code Coverage for All Tests`` option. 
+Another option to collect Code Coverage using the .NET built-in collector, apart from the .NET CLI, is to directly use Visual Studio. 
+
+To collect Code Coverage using Visual Studio, you will also need **Visual Studio Enterprise edition**). 
+
+Simply select the ``Test > Analyze Code Coverage for All Tests`` option. 
 
 ![code-coverage-vs-test](/img/code-coverage-vs-test.png)
 
 
 # **Coverlet**
 
-Coverlet is an alternative to the built-in data collector we discussed earlier. It generates test results in the form of Cobertura XML files, which can then be used to create HTML reports.
+Coverlet is an alternative to the built-in Data Collector we discussed earlier. It generates test results in the form of Cobertura XML files, which can then be used to create HTML reports.
 
-In fact, it is the most widely used and well-known Code Coverage data collector. Evidence of this is that the official .NET xUnit test project template comes with ``Coverlet`` already integrated.
+In fact, it is the most widely used and well-known Code Coverage Data Collector. Evidence of this is that the official .NET xUnit test project template comes with ``Coverlet`` already integrated.
 
 Give it a try. Create a new xUnit project using the .NET CLI command: ``dotnet new xunit``, and then inspect the resulting ``.csproj``. You'll see that the [Coverlet NuGet package](https://www.nuget.org/packages/coverlet.collector) is already installed in the project.
 
@@ -150,8 +151,9 @@ Give it a try. Create a new xUnit project using the .NET CLI command: ``dotnet n
 
 </Project>
 ```
-Once the Coverlet package is installed in the Unit Test project, you can collect Code Coverage using the ``dotnet test --collect:"XPlat Code Coverage"`` command.  
-The Data Collector will generate a Cobertura XML file. **The Cobertura format is frequently used as a standard format for Code Coverage reports.**
+Once the Coverlet package is installed in the Unit Test project, you can start collecting Code Coverage using the ``dotnet test --collect:"XPlat Code Coverage"`` command.  
+
+The Data Collector will generate a Cobertura XML file. **The XML Cobertura format is frequently used as a standard format for Code Coverage reports.**
 
 If you attempt to run the ``dotnet test --collect:"XPlat Code Coverage"`` command without having the ``Coverlet.Collector`` installed on your Unit Tests projects, no Code Coverage will be collected and you'll receive a warning.
 
@@ -172,20 +174,22 @@ Moreover, it's even possible to specify the coverage output in multiple formats.
 
 # **dotCover**
 
-dotCover is a .NET Code Coverage tool (among other features) developed by Jetbrains. It integrates with Visual Studio if you have a JetBrains license, but it is also available as a free [.NET CLI global tool](https://www.nuget.org/packages/JetBrains.dotCover.CommandLineTools).
+dotCover is a .NET Code Coverage tool (among other features) developed by Jetbrains. It integrates with Visual Studio (if you have a JetBrains license), but it is also available as a free [.NET CLI global tool](https://www.nuget.org/packages/JetBrains.dotCover.CommandLineTools).
 
 You can install it using the following .NET CLI command:
 - ``dotnet tool install --global JetBrains.dotCover.CommandLineTools``
 
 One advantage of ``dotCover`` over the previously discussed Data Collectors is its ability to generate a human-readable report right away.    
-With ``Coverlet`` or the .NET native collector, you initially get a Code Coverage report in Cobertura XML format, JSON, or Coverage file, and you need a secondary tool to make it human-readable (Visual Studio, report generator tool, etc).
+With Coverlet or the .NET native collector, you initially get a Code Coverage report in Cobertura XML format, JSON or Coverage file, and you need a secondary tool to make it human-readable (Visual Studio, report generator tool, etc).
 
 To collect Code Coverage with dotCover, run the following command:
 - ``dotnet dotcover cover-dotnet --output=coverage.html --reporttype=HTML -- test ./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj``
 
 ![code-coverage-dotcover-run](/img/code-coverage-dotcover-run.png)
 
-With the ``reporttype`` option, we set the Code Coverage report to HTML. So, once the command has finished, a comprehensive HTML coverage report will be created for us. ``dotCover`` is capable of creating the coverage report in other formats apart from HTML, such as JSON, XML, DetailedXML, NDependXML, SummaryXML, FileCoverageXML, and FileCoverageJson.
+With the ``reporttype`` option, we set the Code Coverage report to HTML. So, once the command has finished, a comprehensive HTML coverage report will be created for us. 
+
+``dotCover`` is capable of creating the coverage report in other formats apart from HTML, such as JSON, XML, DetailedXML, NDependXML, SummaryXML, FileCoverageXML, and FileCoverageJson.
 
 The following screenshot shows an example of the generated Code Coverage HTML report.
 
@@ -205,7 +209,8 @@ To collect Code Coverage from your tests, simply run the command:
 The ``-o`` option sets the Code Coverage report output file and the ``-f`` option sets the output file format. Supported formats include ``coverage``, ``xml``, and ``cobertura``.
 
 
-Another useful feature of this tool is its ability to convert from one coverage report format to another. For example, you can convert a ``.coverage`` file to a ``cobertura`` XML file simply by running the command:
+Another useful feature of this tool is its ability to convert from one coverage report format to another.    
+For example, you can convert a ``.coverage`` file to a ``cobertura`` XML file simply by running the command:
 ``dotnet-coverage merge -f cobertura -o cobertura.xml 61935778-bdd8-4758-959c-94fdd6a8a376.coverage``
 
 This can be handy if you have some Code Coverage reports collected using Visual Studio and want to convert them into a more standard format.
@@ -213,7 +218,7 @@ This can be handy if you have some Code Coverage reports collected using Visual 
 
 # **OpenCover**
 
-[OpenCover](https://github.com/OpenCover/opencover) is another Code Coverage tool for the .NET Framework. 
+[OpenCover](https://github.com/OpenCover/opencover) is yet another Code Coverage tool for the .NET Framework. 
 
 However, development for this tool has ceased, and it is no longer maintained. Therefore, I will skip its analysis, as it is advisable to use one of the other tools we have discussed in this post.
 
@@ -237,14 +242,15 @@ If we try to generate a report from a ``.coverage`` file using ``ReportGenerator
 
 ![code-coverage-rg-coverage](/img/code-coverage-rg-coverage.png)
 
-We need to convert the ``.coverage`` file to another format first. If you follow the [help link](https://github.com/danielpalme/ReportGenerator/wiki/Visual-Studio-Coverage-Tools#codecoverageexe)) shown in the error, it suggest converting it using the ``vstest.console.exe`` application, which comes with Visual Studio.  However, this process can be cumbersome.
+We need to convert the ``.coverage`` file to another format first. If you follow the [help link](https://github.com/danielpalme/ReportGenerator/wiki/Visual-Studio-Coverage-Tools#codecoverageexe) shown in the error, it suggest converting it using the ``vstest.console.exe`` application, which comes with Visual Studio.    
+However, this process is not very user-friendly. You'll need to locate the executable in your Visual Studio installation folder, and it only works on Windows, making it a less-than-ideal solution.
 
 A much easier way to convert it is to use the ``merge`` command from the ``dotnet-coverage`` tool, like this:
 - ``dotnet-coverage merge -f xml -o coverage.xml test/StrategyPatternWithDIExamples.Tests/TestResults/da55597e-25e5-4272-a01f-4ce1ef0f84da/108ca3fa-2cc0-4550-a50e-00d9090ab200.coverage``
 
 Now, we can generate the report without any problems using ``ReportGenerator``. 
 
-![code-coverage-rg-coverage-xml](/img/code-coverage-rg-coverage-xml)
+![code-coverage-rg-coverage-xml](/img/code-coverage-rg-coverage-xml.png)
 
 The next snapshot shows the result.
 
@@ -264,9 +270,9 @@ You can see the generated report in the next screenshot.
 
 # **Create a Code Coverage report when building a container image**
 
-In this section, I want to explore whether it is possible to create a Code Coverage report inside a container using the various tools we have discussed in the previous sections. 
+In this section, I want to explore whether it is feasible to create a Code Coverage report inside a container using the various Data Collector we have discussed in the previous sections. 
 
-For this purpose, I have created the following Dockerfile, which collects Code Coverage metrics using the four tools we covered in the last section (``coverlet``, ``dotCover``, ``dotnet-coverage`` and the native .NET collector).
+For this purpose, I have created the following Dockerfile, which collects Code Coverage metrics using the four Data Collector at the same time (``coverlet``, ``dotCover``, ``dotnet-coverage`` and the native .NET collector).
 
 ```yml
 FROM mcr.microsoft.com/dotnet/sdk:8.0-jammy AS build-env
@@ -297,23 +303,23 @@ RUN dotnet build "./src/StrategyPatternWithDIExamples.csproj" \
 	--self-contained true \
 	--arch x64
 
-# Build code coverage report with dotcover
+# Create code coverage report with dotcover
 RUN dotnet-dotCover cover-dotnet \
   --output=/app/coverage/dotcover/coverage.html \
   --reporttype=HTML -- test "./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj"
 
-# Build code coverage report with dotnet-coverage
+# Create code coverage report with dotnet-coverage
 RUN dotnet-coverage collect "dotnet test ./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj" \
   -f xml \
   -o "/app/coverage/dotnetcoverage/coverage.xml"
 
-# Build code coverage report with native collector
+# Create  code coverage report with native collector
 RUN dotnet test "./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj" \
 	--no-restore \
 	--collect:"Code Coverage" \
 	--results-directory /app/coverage/native
  
-# Build code coverage report with coverlet
+# Create code coverage report with coverlet
 RUN dotnet test "./test/StrategyPatternWithDIExamples.Tests/StrategyPatternWithDIExamples.Tests.csproj" \
 	--no-restore \
 	--collect:"XPlat Code Coverage" \
@@ -343,7 +349,7 @@ ENTRYPOINT ["./StrategyPatternWithDIExamples"]
 
 There are some important points to mention from this experiment:
 
-- The ``dotnet-coverage`` tool doesn't work right out of the box.  If we look at the Dockerfile logs, we can see the following message when trying to collect Code Coverage with the ``dotnet-coverage tool``.
+- The ``dotnet-coverage`` tool doesn't work right out of the box.  If we look at the Dockerfile logs, we can see the following message when trying to collect Code Coverage with the ``dotnet-coverage`` tool.
 
 ![code-coverage-dotnet-coverage-deps](/img/code-coverage-dotnet-coverage-deps.png)
 
@@ -353,18 +359,18 @@ There are some important points to mention from this experiment:
 RUN apt-get update && apt-get -y install build-essential libxml2
 ```
 
-- The ``dotCover`` also gave me some problems when running it using the ```dotnet dotcover cover-dotnet`` command. To fix this, I switch to the ``dotnet-dotCover cover-dotnet`` command.
+- The ``dotCover`` also gave me some problems when running it using the ``dotnet dotcover cover-dotnet`` command. To fix this, I switch to the ``dotnet-dotCover cover-dotnet`` command.
 
-After addressing the issues mentioned above, all four tools (``coverlet``, ``dotCover``, ``dotnet-coverage`` and native .NET collector)  successfully created a Code Coverage report inside a container image."
+After addressing the issues mentioned above, all four Data Collector (``coverlet``, ``dotCover``, ``dotnet-coverage`` and native .NET collector)  successfully created a Code Coverage report inside the container image."
 
 
 # **View Code Coverage reports on SonarQube**
 
 Having a centralized place to track the Code Coverage metric of your application provides several benefits, such as offering a detailed view of your code quality and helping you identify areas of your code that need improvement.
 
-By uploading your Code Coverage metrics, you can easily track which parts of your code are not covered by tests. This can help you improve your test coverage and, consequently, the reliability of your application.
+By uploading your Code Coverage metric, you can easily track which parts of your code are not covered by tests. This can help you improve your test coverage and, consequently, the reliability of your application.
 
-There are quite a few products capable of tracking application Code Coverage metrics, such as ``CodeCov`` and ``Codacy``. However, I will focus on probably the most well-known of all: ``SonarQube``.
+There are quite a few products capable of tracking your .NET application Code Coverage metric, such as ``CodeCov`` and ``Codacy``. However, I will focus on probably the most well-known of all: ``SonarQube``.
 
 SonarQube does not generate the Code Coverage report itself. Instead, you must set up a third-party tool (SonarScanner) to produce the report as part of your build process. SonarQube supports the following Data Collectors:
 
@@ -400,7 +406,7 @@ dotnet dotcover cover-dotnet --output=coverage.html --reporttype=HTML -- test ./
 dotnet sonarscanner end /d:sonar.login="sqp_f040a45634b38c269223852b47d6500d3650c33d"
 ```
 
-The process to send Code Coverage to SonarQube is pretty simply:
+The process to send Code Coverage to SonarQube is pretty simple:
 - Start the SonarScanner, setting the ``sonar.cs.dotcover.reportsPaths`` property to where the Code Coverage report will be.
 - Run ``dotCover``.
 - Stop the SonarScanner.
@@ -417,12 +423,12 @@ From there, we can drill down and get more detailed information about the Code C
 # **Publish Code Coverage reports to an Azure Pipelines or an Github Action**
 
 If you're running your code on a CI runner like ``Azure Pipelines`` or ``GitHub Actions``, you can use a tool like SonarQube to control the Code Coverage metric.   
-On the pipeline, you can execute the SonarScanner, generate the Code Coverage report of your app, upload it into SonarQube (or any other SaaS that supports it), and, for example, break the pipeline if the Code Coverage percentage has decreased.
+On your CI/CD pipeline, you can execute the SonarScanner, generate the Code Coverage report of your app, upload it into SonarQube (or any other SaaS that supports it), and, for example, break the pipeline if the Code Coverage percentage has decreased.
 
 That's a common scenario in a CI/CD project, but another possibility is to directly upload the Code Coverage report into the pipeline summary.    
 While having the report on the pipeline is not as useful as having a SaaS like SonarQube that can keep track of the Code Coverage for every branch, it can still be useful information if you want to quickly check the Code Coverage value of a specific run of the pipeline.
 
-In this section, I'm going to show you how to upload the Code Coverage report into an ``Azure DevOps Pipeline`` and also into a ``GitHub Action``.
+In this section, I'm going to show you how to upload the Code Coverage report into an ``Azure Pipeline`` and also into a ``GitHub Action``.
 
 
 ## **Publish a Code Coverage report into a GitHub Action job**
@@ -460,15 +466,15 @@ jobs:
         run: cat code-coverage-results.md >> $GITHUB_STEP_SUMMARY
 ```
 
-As you can see, the steps to collect Code Coverage are always exactly the same. First, run ``dotnet test`` with a Code Coverage Dat aCollector; in this case, we're using ``Coverlet``.
+As you can see, the steps to collect Code Coverage are always exactly the same. First, run ``dotnet test`` with a Data Collector; in this case, we're using ``Coverlet``.
 
-Then, we use another tool to generate a human-readable report. In this case, we're using this [open-source github action](https://github.com/irongut/CodeCoverageSummary) to generate the summary of the Code Coverage report.
+Then, use another tool to generate a human-readable report. In this case, we're using this [open-source github action](https://github.com/irongut/CodeCoverageSummary) to generate a summary of the Code Coverage report.
 
 Here's how it looks.
 
 ![code-coverage-github-action](/img/code-coverage-github-action.png)
 
-Obviously, if you prefer to use the ``ReportGenerator`` tool, as discussed previously in the post, to generate the summary, you can absolutely do so. ``ReportGenerator`` even has a report built for Github called ``MarkdownSummaryGithub`` 
+Obviously, if you prefer to use the ``ReportGenerator`` tool, as discussed previously in the post, to generate the summary, you can absolutely do so. ``ReportGenerator`` even has a type of report built for Github called ``MarkdownSummaryGithub`` 
 
 ```yaml
 name: Upload Code Coverage report to github action summary
