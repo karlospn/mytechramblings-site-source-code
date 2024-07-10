@@ -1,9 +1,9 @@
 ---
 title: "Code Coverage in .NET"
-date: 2024-07-09T10:01:57+02:00
-tags: ["dotnet", "devops"]
+date: 2024-07-10T10:00:57+02:00
+tags: ["dotnet", "devops", "sonarqube"]
 description: "This post delves into the current .NET landscape when we aim to collect Code Coverage. We examine the most frequently used tools such as Coverlet, dotCover, and dotnet-coverage, among others. We discuss how to upload a Code Coverage report to a SaaS product like SonarQube. Lastly, we explain how to publish a Code Coverage report into an Azure Pipeline run or a GitHub Action."
-draft: true
+draft: false
 ---
 
 Nowadays, if we want to collect Code Coverage in our .NET applications, tools like ``Coverlet``, ``Report Generator``, ``dotnet-coverage``, ``dotCover``, ``OpenCover`` or even ``Visual Studio`` will surely sound familiar to you.
@@ -48,7 +48,7 @@ The Report Generator tool we're going to explore in this post is:
 - **ReportGenerator**
 
 
-# **.NET built-in Code Coverage tool**
+# **.NET built-in Data Collector**
 
 .NET includes a built-in Code Coverage data collector.  To use it, you can use the .NET CLI and run ``dotnet test --collect:"Code Coverage"`` command. 
 
